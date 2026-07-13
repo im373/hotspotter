@@ -1,4 +1,21 @@
 
+### NOTICE (Current Fork):
+
+This repository is a fork of the original abandoned HotSpotter repository.
+It is currently being migrated from the legacy Python 2 / PyQt4 stack to a
+modern Python 3 runtime.
+
+Current fork targets:
+
+* Python 3.11
+* PyQt5
+* NumPy 2
+* pyflann-ibeis
+
+The historical notes below are retained for reference, but some dependency and
+setup details are outdated for this fork.
+
+
 ### NOTICE (2014-2-27):
 
 HOTSPOTTER IS A LEGACY REPOSITORY FOR THE LATEST AND GREATEST CHECK OUT IBEIS
