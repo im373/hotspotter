@@ -422,8 +422,8 @@ class HotSpotter(DynStruct):
         # Check to make sure db_dir is specified correctly
         if db_dir is None:
             db_dir = params.args.dbdir
-        if db_dir is None or not exists(db_dir):
-            raise ValueError('[hs] db_dir=%r does not exist!' % (db_dir))
+        if not db_dir or not exists(db_dir):
+            raise ValueError(f'[hs] db_dir={db_dir} does not exist!')
         hs_dirs, hs_tables, db_version = ld2.load_csv_tables(db_dir)
         hs.tables = hs_tables
         hs.dirs = hs_dirs

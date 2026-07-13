@@ -1,12 +1,13 @@
 # HotSpotter port notes:
 # Converted frontend signals/widgets to PyQt5 namespace imports.
 # Centralized table display tweaks such as chip/name column widths.
+# Moved menu action creation/wiring out of generated MainSkel.
+# Loaded menu action source strings from hsgui.menu_strings for Qt translation.
 
 
 from hscom import __common__
 (print, print_, print_on, print_off,
  rrr, profile, printDBG) = __common__.init(__name__, '[front]', DEBUG=False)
-# Python
 import sys
 # Qt
 from PyQt5 import QtCore
@@ -16,6 +17,7 @@ from PyQt5 import QtWidgets
 # HotSpotter
 from ._frontend.MainSkel import Ui_mainSkel
 from . import guitools
+from . import menu_strings
 from .guitools import slot_
 from .guitools import frontblocking as blocking
 from hscom import tools
@@ -23,6 +25,15 @@ from hscom import tools
 
 def _translate(context, text):
     return QtWidgets.QApplication.translate(context, text)
+
+
+def translate_menu_text(key):
+    return _translate(menu_strings.MENU_CONTEXT, menu_strings.text(key))
+
+
+def translate_menu_tooltip(key):
+    tooltip = menu_strings.tooltip(key)
+    return None if tooltip is None else _translate(menu_strings.MENU_CONTEXT, tooltip)
 
 #=================
 # Globals
@@ -35,6 +46,79 @@ TABLE_COLUMN_WIDTH_FACTORS = {
     'cxs': {'Name': 2.0},
     'nxs': {'Name': 2.0},
 }
+
+
+def action_spec(name, i18n_key, slot_fn=None, shortcut=None, enabled=True):
+    return {
+        'name': name,
+        'i18n_key': i18n_key,
+        'slot_fn': slot_fn,
+        'shortcut': shortcut,
+        'enabled': enabled,
+    }
+
+
+def menu_action_specs(front):
+    back = front.back
+    return {
+        'menuFile': [
+            action_spec('actionNew_Database', 'new_database', back.new_database, 'Ctrl+N'),
+            action_spec('actionOpen_Database', 'open_database', back.open_database, 'Ctrl+O'),
+            None,
+            action_spec('actionSave_Database', 'save_database', back.save_database, 'Ctrl+S'),
+            None,
+            action_spec('actionImport_Img_file', 'import_img_file', back.import_images_from_file, 'Ctrl+I'),
+            action_spec('actionImport_Img_dir', 'import_img_dir', back.import_images_from_dir),
+            None,
+            action_spec('actionQuit', 'quit', back.quit),
+        ],
+        'menuActions': [
+            action_spec('actionAdd_Chip', 'add_chip', back.add_chip, 'A'),
+            action_spec('actionNew_Chip_Property', 'new_chip_property', back.new_prop),
+            None,
+            action_spec('actionQuery', 'query', back.query, 'Q'),
+            None,
+            action_spec('actionReselect_ROI', 'reselect_roi', back.reselect_roi, 'R'),
+            action_spec('actionReselect_Ori', 'reselect_ori', back.reselect_ori, 'O'),
+            None,
+            action_spec('actionNext', 'next', back.select_next, 'N'),
+            action_spec('actionNext_Unannotated', 'next_unannotated', back.select_next_unannotated, 'Shift+N'),
+            None,
+            action_spec('actionDelete_Chip', 'delete_chip', back.delete_chip, 'Ctrl+Del'),
+            action_spec('actionDelete_Image', 'delete_image', back.delete_image, 'Ctrl+Shift+Del'),
+        ],
+        'menuBatch': [
+            action_spec('actionPrecomputeChipsFeatures', 'precompute_chips_features', back.precompute_feats, 'Ctrl+Return'),
+            action_spec('actionPrecompute_Queries', 'precompute_queries', back.precompute_queries),
+            None,
+            action_spec('actionScale_all_ROIS', 'scale_all_rois', None, enabled=False),
+            None,
+            action_spec('actionConvert_all_images_into_chips', 'convert_all_images_into_chips', None, enabled=False),
+        ],
+        'menuOptions': [
+            action_spec('actionLayout_Figures', 'layout_figures', back.layout_figures, 'Ctrl+L'),
+            None,
+            action_spec('actionPreferences', 'preferences', back.edit_preferences, 'Ctrl+P'),
+        ],
+        'menuHelp': [
+            action_spec('actionAbout', 'about', lambda: guitools.msgbox('About', 'hotspotter'),  enabled=False),
+            action_spec('actionView_Docs', 'view_docs', back.view_docs),
+            None,
+            action_spec('actionView_DBDir', 'view_dbdir', back.view_database_dir),
+            action_spec('actionView_Computed_Dir', 'view_computed_dir', back.view_computed_dir),
+            action_spec('actionView_Global_Dir', 'view_global_dir',  back.view_global_dir),
+            None,
+            action_spec('actionWriteLogs', 'write_logs', None, enabled=False),
+            None,
+            action_spec('actionDelete_Precomputed_Results', 'delete_precomputed_results', back.delete_queryresults_dir),
+            action_spec('actionDelete_computed_directory', 'delete_computed_directory', back.delete_cache),
+            action_spec('actionDelete_global_preferences', 'delete_global_preferences', back.delete_global_prefs),
+            None,
+            action_spec('actionDev_Mode_IPython', 'dev_mode_ipython', back.dev_mode, 'Ctrl+Alt+Shift+D'),
+            action_spec('actionDeveloper_Reload', 'developer_reload', back.dev_reload, 'Ctrl+Shift+R'),
+            action_spec('actionDetect_Duplicate_Images', 'detect_duplicate_images', back.detect_dupimg),
+        ],
+    }
 
 
 #=================
@@ -208,76 +292,6 @@ def init_ui(front):
     return ui
 
 
-def connect_file_signals(front):
-    ui = front.ui
-    back = front.back
-    ui.actionNew_Database.triggered.connect(back.new_database)
-    ui.actionOpen_Database.triggered.connect(back.open_database)
-    ui.actionSave_Database.triggered.connect(back.save_database)
-    ui.actionImport_Img_file.triggered.connect(back.import_images_from_file)
-    ui.actionImport_Img_dir.triggered.connect(back.import_images_from_dir)
-    ui.actionQuit.triggered.connect(back.quit)
-
-
-def connect_action_signals(front):
-    ui = front.ui
-    back = front.back
-    ui.actionAdd_Chip.triggered.connect(back.add_chip)
-    ui.actionNew_Chip_Property.triggered.connect(back.new_prop)
-    ui.actionQuery.triggered.connect(back.query)
-    ui.actionReselect_Ori.triggered.connect(back.reselect_ori)
-    ui.actionReselect_ROI.triggered.connect(back.reselect_roi)
-    ui.actionDelete_Chip.triggered.connect(back.delete_chip)
-    ui.actionDelete_Image.triggered.connect(back.delete_image)
-    ui.actionNext.triggered.connect(back.select_next)
-
-
-def connect_option_signals(front):
-    ui = front.ui
-    back = front.back
-    ui.actionLayout_Figures.triggered.connect(back.layout_figures)
-    ui.actionPreferences.triggered.connect(back.edit_preferences)
-    #ui.actionTogPts.triggered.connect(back.toggle_points)
-
-
-def connect_help_signals(front):
-    ui = front.ui
-    back = front.back
-    msg_event = lambda title, msg: lambda: guitools.msgbox(title, msg)
-    ui.actionView_Docs.triggered.connect(back.view_docs)
-    ui.actionView_DBDir.triggered.connect(back.view_database_dir)
-    ui.actionView_Computed_Dir.triggered.connect(back.view_computed_dir)
-    ui.actionView_Global_Dir.triggered.connect(back.view_global_dir)
-
-    ui.actionAbout.triggered.connect(msg_event('About', 'hotspotter'))
-    ui.actionDelete_computed_directory.triggered.connect(back.delete_cache)
-    ui.actionDelete_global_preferences.triggered.connect(back.delete_global_prefs)
-    ui.actionDelete_Precomputed_Results.triggered.connect(back.delete_queryresults_dir)
-    ui.actionDev_Mode_IPython.triggered.connect(back.dev_mode)
-    ui.actionDeveloper_Reload.triggered.connect(back.dev_reload)
-    #Taken care of by add_action ui.actionDetect_Duplicate_Images.triggered.connect(back.detect_dupimg)
-    #ui.actionWriteLogs.triggered.connect(back.write_logs)
-
-
-def connect_batch_signals(front):
-    ui = front.ui
-    back = front.back
-    #ui.actionBatch_Change_Name.triggered.connect(back.batch_rename)
-    ui.actionPrecomputeChipsFeatures.triggered.connect(back.precompute_feats)
-    ui.actionPrecompute_Queries.triggered.connect(back.precompute_queries)
-    #ui.actionScale_all_ROIS.triggered.connect(back.expand_rois)
-    #ui.actionConvert_all_images_into_chips.triggered.connect(back.convert_images2chips)
-    #ui.actionAddMetaProp.triggered.connect(back.add_chip_property)
-    #ui.actionAutoassign.triggered.connect(back.autoassign)
-
-
-def connect_experimental_signals(front):
-    ui = front.ui
-    back = front.back
-    ui.actionMatching_Experiment.triggered.connect(back.actionRankErrorExpt)
-    ui.actionName_Consistency_Experiment.triggered.connect(back.autoassign)
-
-
 #def popup(front, pos):
     #for i in front.ui.gxs_TBL.selectionModel().selection().indexes():
         #front.print(repr((i.row(), i.column())))
@@ -288,7 +302,8 @@ def connect_experimental_signals(front):
     #action = menu.exec_(front.ui.gxs_TBL.mapToGlobal(pos))
     #front.print('action = %r ' % action)
 
-def new_menu_action(front, menu_name, name, text=None, shortcut=None, slot_fn=None):
+def new_menu_action(front, menu_name, name, text=None, shortcut=None,
+                    tooltip=None, slot_fn=None, enabled=True):
     # Dynamically add new menu actions programatically
     action_name = name
     action_text = text
@@ -300,24 +315,40 @@ def new_menu_action(front, menu_name, name, text=None, shortcut=None, slot_fn=No
     setattr(ui, action_name, action)
     action.setShortcutContext(QtCore.Qt.ApplicationShortcut)
     action.setObjectName(_fromUtf8(action_name))
+    action.setEnabled(enabled)
     menu = getattr(ui, menu_name)
     menu.addAction(action)
     if action_text is None:
         action_text = action_name
-    # TODO: Have ui.retranslate call this
-    def retranslate_fn():
-        printDBG('retranslating %s' % name)
-        action.setText(_translate("mainSkel", action_text))
-        if action_shortcut is not None:
-            action.setShortcut(_translate("mainSkel", action_shortcut))
-    def connect_fn():
+    action.setText(action_text)
+    if action_shortcut is not None:
+        action.setShortcut(action_shortcut)
+    if tooltip is not None:
+        action.setToolTip(tooltip)
+    if slot_fn is not None:
         printDBG('connecting %s' % name)
         action.triggered.connect(slot_fn)
-    connect_fn.__name__ = name + '_' + connect_fn.__name__
-    retranslate_fn.__name__ = name + '_' + retranslate_fn.__name__
-    front.connect_fns.append(connect_fn)
-    front.retranslatable_fns.append(retranslate_fn)
-    retranslate_fn()
+    return action
+
+
+def add_menu_separator(front, menu_name):
+    menu = getattr(front.ui, menu_name)
+    menu.addSeparator()
+
+
+def create_menu_actions(front):
+    for menu_name, specs in menu_action_specs(front).items():
+        for spec in specs:
+            if spec is None:
+                add_menu_separator(front, menu_name)
+                continue
+            i18n_key = spec['i18n_key']
+            new_menu_action(front, menu_name, spec['name'],
+                            text=translate_menu_text(i18n_key),
+                            shortcut=spec.get('shortcut'),
+                            tooltip=translate_menu_tooltip(i18n_key),
+                            slot_fn=spec.get('slot_fn'),
+                            enabled=spec.get('enabled', True))
 
 
 def set_tabwidget_text(front, tblname, text):
@@ -355,11 +386,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
         front.gui_logging_handler = None
         front.back = back
         front.ui = init_ui(front)
-        # Programatially Defined Actions
-        front.retranslatable_fns = []
-        front.connect_fns = []
-        new_menu_action(front, 'menuHelp', 'actionDetect_Duplicate_Images',
-                        text='Detect Duplicate Images', slot_fn=back.detect_dupimg)
+        create_menu_actions(front)
         # Progress bar is not hooked up yet
         front.ui.progressBar.setVisible(False)
         front.connect_signals()
@@ -403,16 +430,6 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
         front.changeGxSignal.connect(back.change_image_property)
         front.querySignal.connect(back.query)
 
-        # Menubar signals
-        connect_file_signals(front)
-        connect_action_signals(front)
-        connect_option_signals(front)
-        connect_batch_signals(front)
-        #connect_experimental_signals(front)
-        connect_help_signals(front)
-        for func in front.connect_fns:
-            func()
-        #
         # Gui Components
         # Tables Widgets
         ui.cxs_TBL.itemClicked.connect(front.chip_tbl_clicked)
@@ -443,19 +460,28 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
                 ui.__dict__[uikey].setEnabled(flag)
 
         # The following options are always enabled
-        ui.actionOpen_Database.setEnabled(True)
-        ui.actionNew_Database.setEnabled(True)
-        ui.actionQuit.setEnabled(True)
-        ui.actionAbout.setEnabled(True)
-        ui.actionView_Docs.setEnabled(True)
-        ui.actionDelete_global_preferences.setEnabled(True)
+        always_enabled = [
+            'actionOpen_Database',
+            'actionNew_Database',
+            'actionQuit',
+            'actionAbout',
+            'actionView_Docs',
+            'actionDelete_global_preferences',
+        ]
+        for action_name in always_enabled:
+            if hasattr(ui, action_name):
+                getattr(ui, action_name).setEnabled(True)
 
         # The following options are no implemented. Disable them
-        ui.actionConvert_all_images_into_chips.setEnabled(False)
-        ui.actionBatch_Change_Name.setEnabled(False)
-        ui.actionScale_all_ROIS.setEnabled(False)
-        ui.actionWriteLogs.setEnabled(False)
-        ui.actionAbout.setEnabled(False)
+        disabled_actions = [
+            'actionConvert_all_images_into_chips',
+            'actionScale_all_ROIS',
+            'actionWriteLogs',
+            'actionAbout',
+        ]
+        for action_name in disabled_actions:
+            if hasattr(ui, action_name):
+                getattr(ui, action_name).setEnabled(False)
         #ui.actionView_Docs.setEnabled(False)
 
     @slot_(str, list, list, list, list)

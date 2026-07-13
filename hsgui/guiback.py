@@ -1,6 +1,8 @@
 # HotSpotter port notes:
 # Updated backend GUI workflows for PyQt5 signal/slot behavior.
 # Kept image/chip/query actions compatible with Python 3 data types.
+# Split image-only Select Next from Select Next Unannotated behavior.
+# Reused backend selection helpers and HotSpotterAPI chip counts for navigation.
 
 
 from hscom import __common__
@@ -32,66 +34,27 @@ viz.register_FNUMS(FNUMS)
 # Helper functions (should probably be moved into HotSpotter API)
 
 
-def select_next_unannotated(back):
-    # FIXME THIS FUNCTION IS STUPID MESSY (and probably broken)
-    msg = 'err'
-    selection_exists = back.selection is None
-    if selection_exists or back.selection['type_'] == 'gx':
-        valid_gxs = back.hs.get_valid_gxs()
-        has_chips = lambda gx: len(back.hs.gx2_cxs(gx)) > 0
-        hascxs_list = list(map(has_chips, iter(valid_gxs)))
-        try:
-            gx = valid_gxs[hascxs_list.index(False)]
-            back.select_gx(gx)
-            return
-        except ValueError:
-            msg = 'All images have detections. Excellent! '
-
-    was_err = msg is not None
-    cx_is_selected = selection_exists and back.selection['type_'] == 'cx'
-    if selection_exists or (was_err and cx_is_selected):
-        valid_cxs = back.hs.get_valid_cxs()
-        has_name = lambda cx: back.hs.cx2_name(cx) != '____'
-        is_named = list(map(has_name, iter(valid_cxs)))
-        try:
-            cx = valid_cxs[is_named.index(False)]
-            cid = back.hs.tables.cx2_cid[cx]
-            back.select_cid(cid)
-            return
-        except ValueError:
-            msg = 'All chips are named. Awesome! '
-    return msg
+def _close_chip_figure_if_open():
+    fnum = FNUMS['chip']
+    if df2.plt.fignum_exists(fnum):
+        fig = df2.plt.figure(fnum)
+        df2.close_figure(fig)
 
 
-def select_next_in_order(back):
-    if back.selection is None:
-        # No selection
-        #return back.select_next_unannotated()
-        back.selection = {'type_': 'gx', 'index': -1}
-    if back.selection['type_'] == 'gx':
-        # Select next image
-        gx = back.selection['index']
-        gx2_gname = back.hs.tables.gx2_gname
-        next_gx = gx + 1
-        while next_gx < len(gx2_gname):
-            if gx2_gname[next_gx] != '':
-                back.select_gx(next_gx)
-                break
-            next_gx += 1
-        return
-    elif back.selection['type_'] == 'cx':
-        # Select next chip
-        cx = back.selection['index']
-        cx2_cid = back.hs.tables.cx2_cid
-        next_cx = cx + 1
-        while next_cx < len(cx2_cid):
-            cid = cx2_cid[next_cx]
-            if cid != 0:
-                back.select_cid(cid)
-                break
-            next_cx += 1
-        return
-    return 'end of the list'
+def select_next_image(back, next_unannotated=False):
+    current_gx = back.get_selected_gx()
+    current_gx = -1 if current_gx is None else int(current_gx)
+    for gx in iter(back.hs.get_valid_gxs()):
+        gx = int(gx)
+        is_next = gx > current_gx
+        is_unannotated = back.hs.gx2_nChips(gx) == 0
+        if is_next and (not next_unannotated or is_unannotated):
+            _close_chip_figure_if_open()
+            back.select_gx(gx, show_chip_splash=False)
+            return None
+    if next_unannotated:
+        return 'All following images already have chips.'
+    return 'end of the image list'
 
 
 # Creation function
@@ -504,6 +467,7 @@ class MainWindowBackend(QtCore.QObject):
     def select_gx(back, gx, cx=None, show=True, **kwargs):
         # Table Click -> Image Table
         nodraw = kwargs.pop('nodraw', False)
+        show_chip_splash = kwargs.pop('show_chip_splash', True)
         autoselect_chips = False
         if autoselect_chips and cx is None:
             cxs = back.hs.gx2_cxs(gx)
@@ -513,7 +477,8 @@ class MainWindowBackend(QtCore.QObject):
         back.selection = {'type_': 'gx', 'index': gx, 'sub': cx}
         if show:
             if cx is None:
-                back.show_splash(2, 'Chip', dodraw=False)
+                if show_chip_splash:
+                    back.show_splash(FNUMS['chip'], 'Chip', dodraw=False)
             else:
                 back.show_chip(cx, dodraw=False, nodraw=True, **kwargs)
             back.show_image(gx, sel_cxs, dodraw=False, nodraw=True, **kwargs)
@@ -644,6 +609,8 @@ class MainWindowBackend(QtCore.QObject):
                 msg = 'Select (or create) a database directory.'
                 db_dir = guitools.select_directory(msg)
             print('[*back] user selects database: ' + db_dir)
+            if not db_dir:
+                return
             # Try and load db
             if args is not None:
                 args.dbdir = db_dir
@@ -859,13 +826,16 @@ class MainWindowBackend(QtCore.QObject):
     @profile
     def select_next(back):
         # Action -> Next
-        select_mode = 'in_order'  # 'unannotated'
-        if select_mode == 'in_order':
-            msg = select_next_in_order(back)
-        elif select_mode == 'unannotated':
-            msg = select_next_unannotated(back)
-        else:
-            raise Exception('uknown=%r' % select_mode)
+        msg = select_next_image(back)
+        if msg is not None:
+            back.user_info(msg)
+
+    @slot_()
+    @blocking
+    @profile
+    def select_next_unannotated(back):
+        # Action -> Next Unannotated
+        msg = select_next_image(back, next_unannotated=True)
         if msg is not None:
             back.user_info(msg)
 
