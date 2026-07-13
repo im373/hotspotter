@@ -1,3 +1,5 @@
+# Not in main application flow.
+# This helper/test/setup module is outside the normal HotSpotter runtime.
 '''
 There is an issue with cv2.warpAffine on macs.
 This is a test to further investigate the issue.

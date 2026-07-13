@@ -1,3 +1,7 @@
+# HotSpotter port notes:
+# Modernized core HotSpotter logic for Python 3 and NumPy 2 compatibility.
+# Adjusted chip, feature, query, and table handling for current dependencies.
+
 
 from hscom import __common__
 (print, print_, print_on, print_off, rrr, profile,
@@ -172,7 +176,7 @@ def make_chip_graph(qcx2_res):
     # Make a graph between the chips
     nodes = list(qcx2_res.keys())
     #attr_edges = [(res.qcx, cx, {'score': score})
-                    #for res in qcx2_res.itervalues()
+                    #for res in qcx2_res.values()
                     #for cx, score in enumerate(res.cx2_score) if score > 0]
     weighted_edges = [(res.qcx, cx, score)
                       for res in qcx2_res.values()

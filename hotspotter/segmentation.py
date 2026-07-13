@@ -1,3 +1,7 @@
+# HotSpotter port notes:
+# Modernized core HotSpotter logic for Python 3 and NumPy 2 compatibility.
+# Adjusted chip, feature, query, and table handling for current dependencies.
+
 #from __init__ import *
 
 from hscom import __common__
@@ -155,10 +159,10 @@ def grabcut(rgb_chip):
     chip_mask = np.where(is_forground, 255, 0).astype('uint8')
     # Crop
     chip_mask = clean_mask(chip_mask)
-    chip_mask = np.array(chip_mask, np.float) / 255.0
+    chip_mask = np.array(chip_mask, dtype=float) / 255.0
     # Mask value component of HSV space
     chip_hsv = cv2.cvtColor(rgb_chip, cv2.COLOR_RGB2HSV)
-    chip_hsv = np.array(chip_hsv, dtype=np.float) / 255.0
+    chip_hsv = np.array(chip_hsv, dtype=float) / 255.0
     chip_hsv[:, :, 2] *= chip_mask
     chip_hsv = np.array(np.round(chip_hsv * 255.0), dtype=np.uint8)
     seg_chip = cv2.cvtColor(chip_hsv, cv2.COLOR_HSV2RGB)
@@ -197,10 +201,10 @@ def segment(img_fpath, roi_, new_size=None):
     chip      = img_resz[y1:y2, x1:x2]
     chip_mask = img_mask[y1:y2, x1:x2]
     chip_mask = clean_mask(chip_mask)
-    chip_mask = np.array(chip_mask, np.float) / 255.0
+    chip_mask = np.array(chip_mask, dtype=float) / 255.0
     # Mask the value of HSV
     chip_hsv = cv2.cvtColor(chip, cv2.COLOR_RGB2HSV)
-    chip_hsv = np.array(chip_hsv, dtype=np.float) / 255.0
+    chip_hsv = np.array(chip_hsv, dtype=float) / 255.0
     chip_hsv[:, :, 2] *= chip_mask
     chip_hsv = np.array(np.round(chip_hsv * 255.0), dtype=np.uint8)
     seg_chip = cv2.cvtColor(chip_hsv, cv2.COLOR_HSV2RGB)

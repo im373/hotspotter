@@ -1,3 +1,5 @@
+# Not in main application flow.
+# This helper/test/setup module is outside the normal HotSpotter runtime.
 """
 if __name__ == '__main__':
     print('test parallel')

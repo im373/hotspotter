@@ -2,6 +2,9 @@
 \'
 *~
 .DS_Store
+.agent/
+.agents/
+.codex/
 .hidden
 .hotspotter
 HotSpotterApp.pkg
@@ -10,6 +13,7 @@ build
 desktop.ini
 dist
 hesaffexe
+_scripts/
 hotspotter/*.c
 hotspotter/*.html
 hscom/*.c

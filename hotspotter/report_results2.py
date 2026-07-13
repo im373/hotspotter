@@ -1,11 +1,15 @@
-#!/usr/env python
+# HotSpotter port notes:
+# Modernized core HotSpotter logic for Python 3 and NumPy 2 compatibility.
+# Adjusted chip, feature, query, and table handling for current dependencies.
+
+#!/usr/bin/env python3
 
 from hscom import __common__
 (print, print_, print_on, print_off, rrr, profile, printDBG) =\
     __common__.init(__name__, '[rr2]', DEBUG=False)
 # Matplotlib
 import matplotlib
-matplotlib.use('Qt4Agg')
+matplotlib.use('Qt5Agg')
 # Python
 import os
 import sys
@@ -395,7 +399,7 @@ def build_rankres_str(allres):
         else:  # report either or
             in_train_flag = flag_cxs_fn(test_samp_with_gt, train_samp)
             if intrain is False:
-                in_train_flag = True - in_train_flag
+                in_train_flag = ~in_train_flag
             test_cxs_ =  test_samp_with_gt[in_train_flag]
         # number of test samples with ground truth
         num_with_gt = len(test_cxs_)
@@ -946,7 +950,7 @@ def print_result_summaries_list(topnum=5):
     for result_fname in iter(result_file_list):
         if fnmatch.fnmatch(result_fname, 'rankres_str*.csv'):
             print(result_fname)
-            with open(join(hs.dirs.result_dir, result_fname), 'r') as file:
+            with open(join(hs.dirs.result_dir, result_fname), 'r', encoding='utf-8-sig', errors='surrogateescape') as file:
 
                 metaline = file.readline()
                 toprint = metaline
@@ -960,9 +964,9 @@ def print_result_summaries_list(topnum=5):
                 file.readline()  # header
                 res_data_lines = [file.readline() for _ in range(num_data)]
                 res_data_str = np.array([line.split(',') for line in res_data_lines])
-                tt_scores = np.array(res_data_str[:, 5], dtype=np.float)
-                bt_scores = np.array(res_data_str[:, 6], dtype=np.float)
-                tf_scores = np.array(res_data_str[:, 7], dtype=np.float)
+                tt_scores = np.array(res_data_str[:, 5], dtype=float)
+                bt_scores = np.array(res_data_str[:, 6], dtype=float)
+                tf_scores = np.array(res_data_str[:, 7], dtype=float)
 
                 tt_score_sum = sum([score for score in tt_scores if score > 0])
                 bt_score_sum = sum([score for score in bt_scores if score > 0])
@@ -983,7 +987,7 @@ def print_result_summaries_list(topnum=5):
     for result_fname in iter(result_file_list):
         if fnmatch.fnmatch(result_fname, 'oxsty_map_csv*.csv'):
             print(result_fname)
-            with open(join(hs.dirs.result_dir, result_fname), 'r') as file:
+            with open(join(hs.dirs.result_dir, result_fname), 'r', encoding='utf-8-sig', errors='surrogateescape') as file:
                 metaline = file.readline()
                 scoreline = file.readline()
                 toprint = metaline + scoreline

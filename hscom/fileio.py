@@ -1,3 +1,7 @@
+# HotSpotter port notes:
+# Updated shared compatibility helpers for Python 3, NumPy 2, and Windows paths.
+# Kept logging, preferences, file I/O, and argument handling aligned with modern runtimes.
+
 
 from . import __common__
 (print, print_, print_on, print_off,
@@ -51,7 +55,7 @@ def save_pkl(fpath, data):
 # --- Loading ---
 def load_npz_memmap(fpath):
     with open(fpath, 'rb') as file:
-        npz = np.load(file, mmap_mode='r')
+        npz = np.load(file, mmap_mode='r', allow_pickle=True)
         data = npz['arr_0']
         npz.close()
     return data
@@ -59,7 +63,7 @@ def load_npz_memmap(fpath):
 
 def load_npz(fpath):
     with open(fpath, 'rb') as file:
-        npz = np.load(file, mmap_mode=None)
+        npz = np.load(file, mmap_mode=None, allow_pickle=True)
         data = npz['arr_0']
         npz.close()
     return data
@@ -380,7 +384,7 @@ def print_image_checks(img_fpath):
         _tup = (img_fpath, filesize_str(img_fpath))
         print('[io] Image %r (%s) exists. Is it corrupted?' % _tup)
     else:
-        print('[io] Image %r does not exists ' (img_fpath,))
+        print('[io] Image %r does not exist' % (img_fpath,))
     return hasimg
 
 
@@ -402,8 +406,21 @@ def read_exif_list(fpath_list, **kwargs):
 @profile
 def imread(img_fpath, mode=None):
     try:
+        img_fpath = os.fspath(img_fpath)
         # opencv always reads in BGR mode (fastest load time)
-        imgBGR = cv2.imread(img_fpath, flags=cv2.CV_LOAD_IMAGE_COLOR)
+        load_color = getattr(cv2, 'IMREAD_COLOR', None)
+        if load_color is None:
+            load_color = cv2.IMREAD_COLOR if hasattr(cv2, 'IMREAD_COLOR') else cv2.CV_LOAD_IMAGE_COLOR
+        imgBGR = cv2.imread(img_fpath, flags=load_color)
+        if imgBGR is None:
+            # OpenCV can fail on Windows Unicode paths; retry through imdecode.
+            try:
+                imgBGR = cv2.imdecode(np.fromfile(img_fpath, dtype=np.uint8),
+                                      load_color)
+            except Exception:
+                imgBGR = None
+        if imgBGR is None:
+            raise IOError('cv2 failed to read image: %r' % (img_fpath,))
         if mode is not None and mode != 'BRG':
             # RGB is a good standard and makes physical sense
             if mode == 'RGB':

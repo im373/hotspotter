@@ -1,10 +1,18 @@
-'This module should handle all things elliptical'
-from __future__ import print_function, division
+# HotSpotter port notes:
+# Updated external feature wrappers for Python 3 and current pyhesaff behavior.
+# Normalized image/keypoint data passed between wrappers and dependencies.
+
+"""
+Optional adaptive-scale support for Hessian-Affine keypoints.
+
+This module expands detected elliptical keypoints across candidate scales,
+samples image-gradient magnitude along each ellipse boundary, and keeps scales
+whose boundary response is locally maximal. It is used by
+hstpl.extern_feat.pyhesaff when feat_cfg.use_adaptive_scale is enabled.
+"""
 # Python
-from itertools import izip
 # Scientific
 from numpy import array, zeros, ones
-from numpy.core.umath_tests import matrix_multiply
 from scipy.signal import argrelextrema
 import cv2
 import numpy as np
@@ -25,9 +33,13 @@ def test_data():
 
 @profile
 def adaptive_scale(img_fpath, kpts, nScales=4, low=-.5, high=.5, nSamples=16):
-    imgBGR = cv2.imread(img_fpath, flags=cv2.CV_LOAD_IMAGE_COLOR)
+    imgBGR = cv2.imread(img_fpath, flags=cv2.IMREAD_COLOR)
+    if imgBGR is None:
+        raise IOError('Unable to load image for adaptive scale: %r' % (img_fpath,))
 
     nKp = len(kpts)
+    if nKp == 0:
+        return kpts
     dtype_ = kpts.dtype
 
     # Work with float65
@@ -64,7 +76,7 @@ def check_kpts_in_bounds(kpts_, width, height):
     minx = np.array([pts[0].min() for pts in bbox_pts]) > 0
     maxy = np.array([pts[1].max() for pts in bbox_pts]) < height
     miny = np.array([pts[1].min() for pts in bbox_pts]) > 0
-    isvalid = np.array(maxx * minx * maxy * miny, dtype=np.bool)
+    isvalid = np.array(maxx * minx * maxy * miny, dtype=bool)
     return isvalid
 
 
@@ -133,8 +145,10 @@ def expand_kpts(kpts, scales):
 
 def expand_subscales(kpts, subscale_list):
     subscale_kpts_list = [kp * np.array((1, 1, scale, scale, scale))
-                          for kp, subscales in izip(kpts, subscale_list)
+                          for kp, subscales in zip(kpts, subscale_list)
                           for scale in subscales]
+    if len(subscale_kpts_list) == 0:
+        return np.empty((0, kpts.shape[1]), dtype=kpts.dtype)
     subscale_kpts = np.vstack(subscale_kpts_list)
     return subscale_kpts
 
@@ -156,9 +170,9 @@ def find_maxima_with_neighbors(scalar_list):
     x = np.arange(nBins)
     maxima_list = find_maxima(y_list)
     maxima_left_list, maxima_right_list = extrema_neighbors(maxima_list, nBins)
-    data_list = [np.vstack([exl, exm, exr]) for exl, exm, exr in izip(maxima_left_list, maxima_list, maxima_right_list)]
+    data_list = [np.vstack([exl, exm, exr]) for exl, exm, exr in zip(maxima_left_list, maxima_list, maxima_right_list)]
     x_data_list = [[] if data.size == 0 else x[data] for data in iter(data_list)]
-    y_data_list = [[] if data.size == 0 else y[data] for y, data in izip(y_list, data_list)]
+    y_data_list = [[] if data.size == 0 else y[data] for y, data in zip(y_list, data_list)]
     return x_data_list, y_data_list
 
 
@@ -171,8 +185,8 @@ def interpolate_maxima(scalar_list):
 
 def interpolate_peaks2(x_data_list, y_data_list):
     coeff_list = []
-    for x_data, y_data in izip(x_data_list, y_data_list):
-        for x, y in izip(x_data.T, y_data.T):
+    for x_data, y_data in zip(x_data_list, y_data_list):
+        for x, y in zip(x_data.T, y_data.T):
             coeff = np.polyfit(x, y, 2)
             coeff_list.append(coeff)
 
@@ -181,7 +195,7 @@ def interpolate_peaks2(x_data_list, y_data_list):
 def interpolate_peaks(x_data_list, y_data_list):
     #http://stackoverflow.com/questions/717762/how-to-calculate-the-vertex-of-a-parabola-given-three-point
     peak_list = []
-    for x_data, y_data in izip(x_data_list, y_data_list):
+    for x_data, y_data in zip(x_data_list, y_data_list):
         if len(y_data) == 0:
             peak_list.append([])
             continue
@@ -228,7 +242,7 @@ def sample_uniform(kpts, nSamples=128):
     assert distsT.shape == (nSamples, nKp)
 
     # This loops over the pt samples and performs the operation for every keypoint
-    for count in xrange(nSamples):
+    for count in range(nSamples):
         segment_len = distsT[count]
         # Find where your starting location is
         offset_list.append(total_dist - dist_walked)
@@ -251,7 +265,7 @@ def sample_uniform(kpts, nSamples=128):
     #offset_iter2 = offset_list
 
     #cut_locs = [[
-        #np.linspace(off1, off2, n, endpoint=True) for (off1, off2, n) in izip(offset1, offset2, num)]
+        #np.linspace(off1, off2, n, endpoint=True) for (off1, off2, n) in zip(offset1, offset2, num)]
         #for (offset1, offset2, num) in offset_iter2
     #]
     # store the percent location at each line segment where
@@ -259,14 +273,14 @@ def sample_uniform(kpts, nSamples=128):
     # HERE IS NEXT
     cut_list = []
     # This loops over the pt samples and performs the operation for every keypoint
-    for num, dist, offset in izip(num_steps_list, distsT, offset_list):
+    for num, dist, offset in zip(num_steps_list, distsT, offset_list):
         #if num == 0
             #cut_list.append([])
             #continue
         # This was a bitch to keep track of
         offset1 = (step_size - offset) / dist
         offset2 = ((num * step_size) - offset) / dist
-        cut_locs = [np.linspace(off1, off2, n, endpoint=True) for (off1, off2, n) in izip(offset1, offset2, num)]
+        cut_locs = [np.linspace(off1, off2, n, endpoint=True) for (off1, off2, n) in zip(offset1, offset2, num)]
         # post check for divide by 0
         cut_locs = [array([0 if np.isinf(c) else c for c in cut]) for cut in cut_locs]
         cut_list.append(cut_locs)
@@ -287,7 +301,7 @@ def sample_uniform(kpts, nSamples=128):
                       for loc in iter(locs)])
 
     new_locations = array([polygon_points(polygon_pts, cuts) for polygon_pts,
-                           cuts in izip(polygon1_list, cut_list)])
+                           cuts in zip(polygon1_list, cut_list)])
     # =================
     # =================
     # METHOD 2
@@ -297,8 +311,8 @@ def sample_uniform(kpts, nSamples=128):
     #def icycle_shift1(iterable):
         #return islice(icycle(poly_pts), 1, len(poly_pts) + 1)
 
-    #cutptsIter_list = [izip(iter(poly_pts), icycle_shift1(poly_pts), cuts)
-                       #for poly_pts, cuts in izip(polygon1_list, cut_list)]
+    #cutptsIter_list = [zip(iter(poly_pts), icycle_shift1(poly_pts), cuts)
+                       #for poly_pts, cuts in zip(polygon1_list, cut_list)]
     #new_locations = [[[((1 - cut) * pt1) + ((cut) * pt2) for cut in cuts]
                       #for (pt1, pt2, cuts) in cutPtsIter]
                      #for cutPtsIter in cutptsIter_list]
@@ -307,7 +321,7 @@ def sample_uniform(kpts, nSamples=128):
     # assert new_locations.shape == (nKp, nSamples, 3)
     # Warp new_locations to the unit circle
     #new_unit = V.dot(new_locations.T).T
-    new_unit = array([v.dot(newloc.T).T for v, newloc in izip(V, new_locations)])
+    new_unit = array([v.dot(newloc.T).T for v, newloc in zip(V, new_locations)])
     # normalize new_unit
     new_mag = np.sqrt((new_unit ** 2).sum(-1))
     new_unorm_unit = new_unit / np.dstack([new_mag] * 3)
@@ -325,7 +339,7 @@ def sample_uniform(kpts, nSamples=128):
     # The uneven circle points were sampled in such a way that when they are
     # transformeed they will be approximately uniform along the boundary of the
     # ellipse.
-    uniform_ell_hpts = [v.dot(pts.T).T for (v, pts) in izip(invV, uneven_cicrle_pts)]
+    uniform_ell_hpts = [v.dot(pts.T).T for (v, pts) in zip(invV, uneven_cicrle_pts)]
     # Remove the homogenous coordinate and we're done
     ell_border_pts_list = [pts[:, 0:2] for pts in uniform_ell_hpts]
     return ell_border_pts_list
@@ -385,8 +399,6 @@ def subpixel_values(img, pts):
     Ic = img[y0, x1]
     Id = img[y1, x1]
 
-    cv2.warpAffine(dst
-
     # Perform the bilinear interpolation
     subpxl_vals = (wa * Ia) + (wb * Ib) + (wc * Ic) + (wd * Id)
     return subpxl_vals
@@ -434,8 +446,9 @@ def kpts_matrix(kpts):
     #V = faster_inverse(invV)
     # transform into conic matrix Z
     # Z = (V.T).dot(V)
-    Vt = array(map(np.transpose, V))
-    Z = matrix_multiply(Vt, V)
+    V = np.asarray(V)
+    Vt = array([v.T for v in V])
+    Z = np.matmul(Vt, V)
     assert Z.shape == (nKp, 3, 3)
     return invV, V, Z
 

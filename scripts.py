@@ -1,3 +1,5 @@
+# Not in main application flow.
+# This helper/test/setup module is outside the normal HotSpotter runtime.
 from __future__ import print_function, division
 from hscom import __common__
 (print, print_, print_on, print_off,

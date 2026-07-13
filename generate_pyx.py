@@ -1,3 +1,5 @@
+# Not in main application flow.
+# This helper/test/setup module is outside the normal HotSpotter runtime.
 #!/usr/env python
 # Preprocesseror script to put cython annotation into pyx files
 from __future__ import division, print_function

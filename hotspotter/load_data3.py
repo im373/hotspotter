@@ -1,3 +1,7 @@
+# HotSpotter port notes:
+# Modernized core HotSpotter logic for Python 3 and NumPy 2 compatibility.
+# Adjusted chip, feature, query, and table handling for current dependencies.
+
 '''
 Module: load_data
     Loads the paths and table information from which all other data is computed.
@@ -228,9 +232,8 @@ def parse_csv_tables():
 
 def parse_csv_table_data(csv_fname, csv_columns, add_fn):
     # Open CSV file
-    with open(csv_fname, 'r') as csv_file:
-        # For each line
-        for line_num, csv_line in enumerate(csv_file):
+    csv_text = helpers.read_text(csv_fname)
+    for line_num, csv_line in enumerate(csv_text.splitlines(True)):
             # Remove leading and trailing whitespace
             csv_line = csv_line.strip('\n\r\t ')
             # Skip blank and commented lines

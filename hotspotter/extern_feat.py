@@ -5,6 +5,7 @@ from hscom import __common__
 # Standard
 import os
 import sys
+import importlib
 from os.path import dirname, realpath, join
 # Scientific
 import numpy as np
@@ -15,9 +16,8 @@ if '--newhesaff' in sys.argv:
 
 
 def reload_module():
-    import imp
     import sys
-    imp.reload(sys.modules[__name__])
+    importlib.reload(sys.modules[__name__])
 
 EXE_EXT = {'win32': '.exe', 'darwin': '.mac', 'linux2': '.ln', 'linux': '.ln'}[sys.platform]
 

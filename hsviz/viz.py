@@ -1,12 +1,12 @@
-from __future__ import division, print_function
+# HotSpotter port notes:
+# Updated visualization code for modern matplotlib and Python 3 behavior.
+# Normalized keypoint/SIFT drawing paths for current numpy array shapes.
+
 from hscom import __common__
 (print, print_, print_on, print_off, rrr, profile, printDBG) = \
     __common__.init(__name__, '[viz]', DEBUG=False)
 import matplotlib
-if 0:
-    matplotlib.use('Qt4Agg')
-else:
-    matplotlib.use('Qt5Agg')
+matplotlib.use('Qt5Agg')
 #import re
 import warnings
 # Scientific
@@ -17,6 +17,7 @@ from . import extract_patch
 from hscom import params
 from hscom import fileio as io
 from hscom import helpers as util
+from hsdev import dev_consistency
 from hotspotter import QueryResult as qr
 
 #from interaction import interact_keypoints, interact_chipres, interact_chip # NOQA
@@ -41,6 +42,8 @@ def register_FNUMS(FNUMS_):
 
 
 def get_square_row_cols(nSubplots, max_cols=5):
+    if nSubplots <= 0:
+        return 1, 1
     nCols = int(min(nSubplots, max_cols))
     #nCols = int(min(np.ceil(np.sqrt(ncxs)), 5))
     nRows = int(np.ceil(nSubplots / nCols))
@@ -79,6 +82,12 @@ def show_name(hs, nx, nx2_cxs=None, fnum=0, sel_cxs=[], subtitle='',
     else:
         cxs = np.where(cx2_nx == nx)[0]
     print('[viz] show_name %r' % hs.cidstr(cxs))
+    if len(cxs) == 0:
+        print('[viz] show_name nx=%r has no chips' % nx)
+        df2.figure(fnum=fnum, **kwargs)
+        df2.gca().set_axis_off()
+        df2.set_figtitle('Name View nx=%r name=%r (empty)' % (nx, name))
+        return
     nRows, nCols = get_square_row_cols(len(cxs))
     print('[viz*] r=%r, c=%r' % (nRows, nCols))
     #gs2 = gridspec.GridSpec(nRows, nCols)
@@ -198,7 +207,7 @@ def _annotate_qcx_match_results(hs, res, qcx, kpts, cx2_color):
 
     if cx2_color is not None:
         # Show which keypoints match chosen chips with color
-        for cx, color in cx2_color.iteritems():
+        for cx, color in cx2_color.items():
             try:
                 qfxs = res.cx2_fm[cx][:, 0]
                 kpts_ = np.empty((0, 5)) if len(qfxs) == 0 else kpts[qfxs]
@@ -434,9 +443,11 @@ def show_chipres(hs, res, cx, fnum=None, pnum=None, sel_fm=[], in_image=False, *
         print('!!!!!!!!!!!!!!!')
         print('[viz] %s: %s' % (type(ex), ex))
         print('[viz] vsstr = %s' % hs.vs_str(qcx, cx))
-        qr.dbg_check_query_result(hs, res)
+        dev_consistency.dbg_check_query_result(hs, res)
         print('consider qr.remove_corrupted_queries(hs, res, dryrun=False)')
-        util.qflag()
+        # Only drop into IPython when we're already in an interactive session.
+        if util.inIPython():
+            util.qflag()
         raise
     x1, y1, w1, h1 = xywh1
     x2, y2, w2, h2 = xywh2
@@ -835,7 +846,7 @@ def draw_feat_row(rchip, fx, kp, sift, fnum, nRows, nCols, px, prevsift=None,
         #dist_list = ['L1', 'L2', 'hist_isect', 'emd']
         dist_list = ['L2', 'hist_isect']
         distmap = algos.compute_distances(sift, prevsift, dist_list)
-        dist_str = ', '.join(['(%s, %.2E)' % (key, val) for key, val in distmap.iteritems()])
+        dist_str = ', '.join(['(%s, %.2E)' % (key, val) for key, val in distmap.items()])
         df2.set_xlabel(dist_str)
     return px + nCols
 
@@ -883,7 +894,7 @@ def show_nearest_descriptors(hs, qcx, qfx, fnum=None):
 
         extracted_list = []
         extracted_list.append(get_extract_tuple(qcx, qfx, -1))
-        for k in xrange(K + Knorm):
+        for k in range(K + Knorm):
             tup = get_extract_tuple(qfx2_cx[0, k], qfx2_fx[0, k], k)
             extracted_list.append(tup)
         #print('[viz] K + Knorm = %r' % (K + Knorm))

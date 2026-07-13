@@ -1,3 +1,7 @@
+# HotSpotter port notes:
+# Converted frontend signals/widgets to PyQt5 namespace imports.
+# Centralized table display tweaks such as chip/name column widths.
+
 
 from hscom import __common__
 (print, print_, print_on, print_off,
@@ -5,23 +9,9 @@ from hscom import __common__
 # Python
 import sys
 # Qt
-if 0:
-    from PyQt4 import QtGui, QtCore
-    from PyQt4.Qt import (QAbstractItemView, pyqtSignal, Qt)
-    from PyQt5.QtGui import QMainWindow
-    from PyQt5.QtGui import QTableWidgetItem
-    QtWidgets = QtGui
-else:
-    from matplotlib.backends import backend_qt5 as backend_qt
-    from PyQt5 import QtCore
-    from PyQt5 import QtGui
-    from PyQt5.QtCore import *
-    from PyQt5.QtGui import *
-    from PyQt5.QtWidgets import *
-    from PyQt5.QtWidgets import QMainWindow
-    from PyQt5.QtWidgets import QTableWidgetItem
-    from PyQt5 import QtWidgets
-    QtWidgets.QApplication.UnicodeUTF8 = -1
+from PyQt5 import QtCore
+from PyQt5 import QtGui
+from PyQt5 import QtWidgets
 
 # HotSpotter
 from ._frontend.MainSkel import Ui_mainSkel
@@ -30,12 +20,21 @@ from .guitools import slot_
 from .guitools import frontblocking as blocking
 from hscom import tools
 
+
+def _translate(context, text):
+    return QtWidgets.QApplication.translate(context, text)
+
 #=================
 # Globals
 #=================
 
 IS_INIT = False
 NOSTEAL_OVERRIDE = False  # Hard disable switch for stream stealer
+
+TABLE_COLUMN_WIDTH_FACTORS = {
+    'cxs': {'Name': 2.0},
+    'nxs': {'Name': 2.0},
+}
 
 
 #=================
@@ -63,6 +62,18 @@ def clicked(func):
 
 def csv_sanatize(str_):
     return str(str_).replace(',', ';;')
+
+
+def apply_table_column_widths(tblname, tbl, col_fancyheaders):
+    """Apply per-table display width preferences after headers are created."""
+    width_factors = TABLE_COLUMN_WIDTH_FACTORS.get(tblname, {})
+    if not width_factors:
+        return
+    default_width = tbl.horizontalHeader().defaultSectionSize()
+    for header, factor in width_factors.items():
+        if header in col_fancyheaders:
+            col = col_fancyheaders.index(header)
+            tbl.horizontalHeader().resizeSection(col, int(default_width * factor))
 
 
 #=================
@@ -296,9 +307,9 @@ def new_menu_action(front, menu_name, name, text=None, shortcut=None, slot_fn=No
     # TODO: Have ui.retranslate call this
     def retranslate_fn():
         printDBG('retranslating %s' % name)
-        action.setText(QtWidgets.QApplication.translate("mainSkel", action_text, None, QtWidgets.QApplication.UnicodeUTF8))
+        action.setText(_translate("mainSkel", action_text))
         if action_shortcut is not None:
-            action.setShortcut(QtWidgets.QApplication.translate("mainSkel", action_shortcut, None, QtWidgets.QApplication.UnicodeUTF8))
+            action.setShortcut(_translate("mainSkel", action_shortcut))
     def connect_fn():
         printDBG('connecting %s' % name)
         action.triggered.connect(slot_fn)
@@ -320,22 +331,21 @@ def set_tabwidget_text(front, tblname, text):
     ui = front.ui
     tab_widget = tablename2_tabwidget[tblname]
     tab_index = ui.tablesTabWidget.indexOf(tab_widget)
-    tab_text = QtWidgets.QApplication.translate("mainSkel", text, None,
-                                            QtWidgets.QApplication.UnicodeUTF8)
+    tab_text = _translate("mainSkel", text)
     ui.tablesTabWidget.setTabText(tab_index, tab_text)
 
 
-class MainWindowFrontend(QMainWindow):
-    printSignal     = pyqtSignal(str)
-    quitSignal      = pyqtSignal()
-    selectGxSignal  = pyqtSignal(int)
-    selectCidSignal = pyqtSignal(int)
-    selectResSignal = pyqtSignal(int)
-    selectNameSignal = pyqtSignal(str)
-    changeCidSignal = pyqtSignal(int, str, str)
-    aliasNameSignal = pyqtSignal(int, str, str)
-    changeGxSignal  = pyqtSignal(int, str, bool)
-    querySignal = pyqtSignal()
+class MainWindowFrontend(QtWidgets.QMainWindow):
+    printSignal     = QtCore.pyqtSignal(str)
+    quitSignal      = QtCore.pyqtSignal()
+    selectGxSignal  = QtCore.pyqtSignal(int)
+    selectCidSignal = QtCore.pyqtSignal(int)
+    selectResSignal = QtCore.pyqtSignal(int)
+    selectNameSignal = QtCore.pyqtSignal(str)
+    changeCidSignal = QtCore.pyqtSignal(int, str, str)
+    aliasNameSignal = QtCore.pyqtSignal(int, str, str)
+    changeGxSignal  = QtCore.pyqtSignal(int, str, bool)
+    querySignal = QtCore.pyqtSignal()
 
     def __init__(front, back):
         super(MainWindowFrontend, front).__init__()
@@ -415,9 +425,9 @@ class MainWindowFrontend(QMainWindow):
         ui.nxs_TBL.itemChanged.connect(front.name_tbl_changed)
         # Tab Widget
         ui.tablesTabWidget.currentChanged.connect(front.change_view)
-        ui.cxs_TBL.sortByColumn(0, Qt.AscendingOrder)
-        ui.res_TBL.sortByColumn(0, Qt.AscendingOrder)
-        ui.gxs_TBL.sortByColumn(0, Qt.AscendingOrder)
+        ui.cxs_TBL.sortByColumn(0, QtCore.Qt.AscendingOrder)
+        ui.res_TBL.sortByColumn(0, QtCore.Qt.AscendingOrder)
+        ui.gxs_TBL.sortByColumn(0, QtCore.Qt.AscendingOrder)
 
     def print(front, msg):
         print('[*front*] ' + msg)
@@ -450,8 +460,7 @@ class MainWindowFrontend(QMainWindow):
 
     @slot_(str, list, list, list, list)
     @blocking
-    def populate_tbl(front, tblname, col_fancyheaders, col_editable,
-                     row_list, datatup_list):
+    def populate_tbl(front, tblname, col_fancyheaders, col_editable, row_list, datatup_list):
         #front.printDBG('populate_tbl(%s)' % table_name)
         tblname = str(tblname)
         fancytab_dict = {
@@ -475,12 +484,12 @@ class MainWindowFrontend(QMainWindow):
             #msg = '\n'.join(['Invalid tblname = %s_TBL' % tblname,
                              #'valid names:\n  ' + '\n  '.join(tblname_list)])
             #raise Exception(msg)
-        front._populate_table(tbl, col_fancyheaders, col_editable, row_list, datatup_list)
+        front._populate_table(tblname, tbl, col_fancyheaders, col_editable, row_list, datatup_list)
         # Set the tab text to show the number of items listed
         text = fancytab_dict[tblname] + ' : %d' % len(row_list)
         set_tabwidget_text(front, tblname, text)
 
-    def _populate_table(front, tbl, col_fancyheaders, col_editable, row_list, datatup_list):
+    def _populate_table(front, tblname, tbl, col_fancyheaders, col_editable, row_list, datatup_list):
         # TODO: for chip table: delete metedata column
         # RCOS TODO:
         # I have a small right-click context menu working
@@ -491,7 +500,7 @@ class MainWindowFrontend(QMainWindow):
         # Instead they should use the more efficient and powerful
         # QAbstractItemModel / QAbstractTreeModel
         def set_header_context_menu(hheader):
-            hheader.setContextMenuPolicy(Qt.CustomContextMenu)
+            hheader.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
             opt2_callback = [
                 ('header', lambda: print('finishme')),
                 ('cancel', lambda: print('cancel')), ]
@@ -499,7 +508,7 @@ class MainWindowFrontend(QMainWindow):
             hheader.customContextMenuRequested.connect(popup_slot)
 
         def set_table_context_menu(tbl):
-            tbl.setContextMenuPolicy(Qt.CustomContextMenu)
+            tbl.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
             opt2_callback = [
                 ('Query', front.querySignal.emit), ]
             popup_slot = guitools.popup_menu(tbl, opt2_callback)
@@ -511,15 +520,16 @@ class MainWindowFrontend(QMainWindow):
 
         sort_col = hheader.sortIndicatorSection()
         sort_ord = hheader.sortIndicatorOrder()
-        tbl.sortByColumn(0, Qt.AscendingOrder)  # Basic Sorting
+        tbl.sortByColumn(0, QtCore.Qt.AscendingOrder)  # Basic Sorting
         tblWasBlocked = tbl.blockSignals(True)
         tbl.clear()
         tbl.setColumnCount(len(col_fancyheaders))
         tbl.setRowCount(len(row_list))
         tbl.verticalHeader().hide()
         tbl.setHorizontalHeaderLabels(col_fancyheaders)
-        tbl.setSelectionMode(QAbstractItemView.SingleSelection)
-        tbl.setSelectionBehavior(QAbstractItemView.SelectRows)
+        apply_table_column_widths(tblname, tbl, col_fancyheaders)
+        tbl.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        tbl.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         tbl.setSortingEnabled(False)
         #dbg_col2_dtype = {}
         #def DEBUG_COL_DTYPE(col, dtype):
@@ -532,21 +542,21 @@ class MainWindowFrontend(QMainWindow):
         for row in iter(row_list):
             data_tup = datatup_list[row]
             for col, data in enumerate(data_tup):
-                item = QTableWidgetItem()
+                item = QtWidgets.QTableWidgetItem()
                 # RCOS TODO: Pass in datatype here.
                 # BOOLEAN DATA
                 if tools.is_bool(data) or data == 'True' or data == 'False':
-                    check_state = Qt.Checked if bool(data) else Qt.Unchecked
+                    check_state = QtCore.Qt.Checked if bool(data) else QtCore.Qt.Unchecked
                     item.setCheckState(check_state)
                     #DEBUG_COL_DTYPE(col, 'bool')
                     #item.setData(Qt.DisplayRole, bool(data))
                 # INTEGER DATA
                 elif tools.is_int(data):
-                    item.setData(Qt.DisplayRole, int(data))
+                    item.setData(QtCore.Qt.DisplayRole, int(data))
                     #DEBUG_COL_DTYPE(col, 'int')
                 # FLOAT DATA
                 elif tools.is_float(data):
-                    item.setData(Qt.DisplayRole, float(data))
+                    item.setData(QtCore.Qt.DisplayRole, float(data))
                     #DEBUG_COL_DTYPE(col, 'float')
                 # STRING DATA
                 else:
@@ -554,11 +564,11 @@ class MainWindowFrontend(QMainWindow):
                     #DEBUG_COL_DTYPE(col, 'string')
                 # Mark as editable or not
                 if col_editable[col]:
-                    item.setFlags(item.flags() | Qt.ItemIsEditable)
-                    item.setBackground(QtWidgets.QColor(250, 240, 240))
+                    item.setFlags(item.flags() | QtCore.Qt.ItemIsEditable)
+                    item.setBackground(QtGui.QColor(250, 240, 240))
                 else:
-                    item.setFlags(item.flags() ^ Qt.ItemIsEditable)
-                item.setTextAlignment(Qt.AlignHCenter)
+                    item.setFlags(item.flags() ^ QtCore.Qt.ItemIsEditable)
+                item.setTextAlignment(QtCore.Qt.AlignHCenter)
                 tbl.setItem(row, col, item)
 
         #print(dbg_col2_dtype)
@@ -568,7 +578,7 @@ class MainWindowFrontend(QMainWindow):
         tbl.blockSignals(tblWasBlocked)
 
     def isItemEditable(self, item):
-        return int(Qt.ItemIsEditable & item.flags()) == int(Qt.ItemIsEditable)
+        return int(QtCore.Qt.ItemIsEditable & item.flags()) == int(QtCore.Qt.ItemIsEditable)
 
     #=======================
     # General Table Getters
@@ -631,16 +641,16 @@ class MainWindowFrontend(QMainWindow):
     # Table Changed Functions
     #=======================
 
-    @slot_(QTableWidgetItem)
+    @slot_(QtWidgets.QTableWidgetItem)
     def img_tbl_changed(front, item):
         front.print('img_tbl_changed()')
         row, col = (item.row(), item.column())
         sel_gx = front.get_imgtbl_gx(row)
         header_lbl = front.get_imgtbl_header(col)
-        new_val = item.checkState() == Qt.Checked
+        new_val = item.checkState() == QtCore.Qt.Checked
         front.changeGxSignal.emit(sel_gx, header_lbl, new_val)
 
-    @slot_(QTableWidgetItem)
+    @slot_(QtWidgets.QTableWidgetItem)
     def chip_tbl_changed(front, item):
         front.print('chip_tbl_changed()')
         row, col = (item.row(), item.column())
@@ -649,7 +659,7 @@ class MainWindowFrontend(QMainWindow):
         header_lbl = front.get_chiptbl_header(col)  # Get changed column
         front.changeCidSignal.emit(sel_cid, header_lbl, new_val)
 
-    @slot_(QTableWidgetItem)
+    @slot_(QtWidgets.QTableWidgetItem)
     def res_tbl_changed(front, item):
         front.print('res_tbl_changed()')
         row, col = (item.row(), item.column())
@@ -658,7 +668,7 @@ class MainWindowFrontend(QMainWindow):
         header_lbl = front.get_restbl_header(col)  # Get changed column
         front.changeCidSignal.emit(sel_cid, header_lbl, new_val)
 
-    @slot_(QTableWidgetItem)
+    @slot_(QtWidgets.QTableWidgetItem)
     def name_tbl_changed(front, item):
         front.print('name_tbl_changed()')
         row, col = (item.row(), item.column())
@@ -670,7 +680,7 @@ class MainWindowFrontend(QMainWindow):
     #=======================
     # Table Clicked Functions
     #=======================
-    @slot_(QTableWidgetItem)
+    @slot_(QtWidgets.QTableWidgetItem)
     @clicked
     def img_tbl_clicked(front, item):
         row = item.row()
@@ -678,7 +688,7 @@ class MainWindowFrontend(QMainWindow):
         sel_gx = front.get_imgtbl_gx(row)
         front.selectGxSignal.emit(sel_gx)
 
-    @slot_(QTableWidgetItem)
+    @slot_(QtWidgets.QTableWidgetItem)
     @clicked
     def chip_tbl_clicked(front, item):
         row, col = (item.row(), item.column())
@@ -686,7 +696,7 @@ class MainWindowFrontend(QMainWindow):
         sel_cid = front.get_chiptbl_cid(row)
         front.selectCidSignal.emit(sel_cid)
 
-    @slot_(QTableWidgetItem)
+    @slot_(QtWidgets.QTableWidgetItem)
     @clicked
     def res_tbl_clicked(front, item):
         row, col = (item.row(), item.column())
@@ -694,7 +704,7 @@ class MainWindowFrontend(QMainWindow):
         sel_cid = front.get_restbl_cid(row)
         front.selectResSignal.emit(sel_cid)
 
-    @slot_(QTableWidgetItem)
+    @slot_(QtWidgets.QTableWidgetItem)
     @clicked
     def name_tbl_clicked(front, item):
         row, col = (item.row(), item.column())

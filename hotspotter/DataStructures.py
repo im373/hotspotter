@@ -1,3 +1,7 @@
+# HotSpotter port notes:
+# Modernized core HotSpotter logic for Python 3 and NumPy 2 compatibility.
+# Adjusted chip, feature, query, and table handling for current dependencies.
+
 
 from hscom import __common__
 (print, print_, print_on, print_off, rrr,
@@ -99,7 +103,7 @@ class NNIndex(object):
             # sanatize cx_list
             cx_list = [cx for cx, nFeat in zip(iter(cx_list), nFeat_iter3) if nFeat > 0]
             if isinstance(cx2_desc, list):
-                ax2_desc = np.vstack((cx2_desc[cx] for cx in cx_list))
+                ax2_desc = np.vstack([cx2_desc[cx] for cx in cx_list])
             elif isinstance(cx2_desc, np.ndarray):
                 ax2_desc = np.vstack(cx2_desc[cx_list])
         except MemoryError as ex:

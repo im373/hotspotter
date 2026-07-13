@@ -1,3 +1,7 @@
+# HotSpotter port notes:
+# Modernized core HotSpotter logic for Python 3 and NumPy 2 compatibility.
+# Adjusted chip, feature, query, and table handling for current dependencies.
+
 
 from hscom import __common__
 (print, print_, print_on, print_off,
@@ -91,7 +95,7 @@ class QueryResult(DynStruct):
         qcx_good = res.qcx
         try:
             with open(fpath, 'rb') as file_:
-                npz = np.load(file_)
+                npz = np.load(file_, allow_pickle=True)
                 for _key in npz.files:
                     res.__dict__[_key] = npz[_key]
                 npz.close()

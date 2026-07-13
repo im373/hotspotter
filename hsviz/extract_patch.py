@@ -1,10 +1,14 @@
+# HotSpotter port notes:
+# Updated visualization code for modern matplotlib and Python 3 behavior.
+# Normalized keypoint/SIFT drawing paths for current numpy array shapes.
+
 #exec(open('__init__.py').read())
-from __future__ import division, print_function
 from hscom import __common__
 (print, print_, print_on, print_off,
  rrr, profile) = __common__.init(__name__, '[extract]')
 # Science
 import cv2
+import importlib
 import numpy as np
 from numpy import sqrt
 # Hotspotter
@@ -12,10 +16,9 @@ from . import draw_func2 as df2
 
 
 def rrr():
-    import imp
     import sys
     print('[extract] Reloading: ' + __name__)
-    imp.reload(sys.modules[__name__])
+    importlib.reload(sys.modules[__name__])
 
 
 def svd(M):
@@ -27,6 +30,17 @@ def svd(M):
 
 def draw_warped_keypoint_patch(rchip, kp, **kwargs):
     return draw_keypoint_patch(rchip, kp, warped=True, **kwargs)
+
+
+def _kp5(kp):
+    """
+    Normalize a keypoint row to the legacy 5-value affine form:
+    (x, y, a, c, d).
+    """
+    kp = np.asarray(kp).reshape(-1)
+    if kp.size < 5:
+        raise ValueError('Keypoint must have at least 5 values: %r' % (kp,))
+    return kp[:5]
 
 
 def draw_keypoint_patch(rchip, kp, sift=None, warped=False, **kwargs):
@@ -75,7 +89,7 @@ def get_scale(ss):
 
 def get_warped_patch(rchip, kp):
     'Returns warped patch around a keypoint'
-    (x, y, a, c, d) = kp
+    (x, y, a, c, d) = _kp5(kp)
     sfx, sfy = kp2_sf(kp)
     s = 41  # sf
     ss = sqrt(s) * 3
@@ -140,7 +154,8 @@ def in_depth_ellipse2x2(rchip, kp):
     print('Input from Perdoch\'s detector: ')
 
     # We are given the keypoint in invA format
-    (x, y, ia11, ia21, ia22), ia12 = kp, 0
+    x, y, ia11, ia21, ia22 = _kp5(kp)
+    ia12 = 0
     invV = np.array([[ia11, ia12],
                      [ia21, ia22]])
     V = np.linalg.inv(invV)
@@ -331,7 +346,8 @@ def get_kp_border(rchip, kp):
     # INPUT
     #-----------------------
     # We are given the keypoint in invA format
-    (x, y, ia11, ia21, ia22), ia12 = kp, 0
+    x, y, ia11, ia21, ia22 = _kp5(kp)
+    ia12 = 0
 
     # invA2x2 is a transformation from points on a unit circle to the ellipse
     invA2x2 = np.array([[ia11, ia12],
@@ -500,7 +516,7 @@ def get_kp_border(rchip, kp):
 
 def get_patch(rchip, kp):
     'Returns cropped unwarped patch around a keypoint'
-    (x, y, a, c, d) = kp
+    (x, y, a, c, d) = _kp5(kp)
     sfx, sfy = kp2_sf(kp)
     ratio = max(sfx, sfy) / min(sfx, sfy)
     radx = sfx * ratio
@@ -554,7 +570,7 @@ def quantize_to_pixel_with_offset(z, radius, low, high):
 
 def kp2_sf(kp):
     'computes scale factor of keypoint'
-    (x, y, a, c, d) = kp
+    (x, y, a, c, d) = _kp5(kp)
     A = np.array(((a, 0), (c, d)))
     U, S, V = svd(A)
     # sf = np.sqrt(1 / (a * d))

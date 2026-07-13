@@ -1,3 +1,7 @@
+# HotSpotter port notes:
+# Updated shared compatibility helpers for Python 3, NumPy 2, and Windows paths.
+# Kept logging, preferences, file I/O, and argument handling aligned with modern runtimes.
+
 
 import builtins
 from os.path import exists, join
@@ -6,6 +10,7 @@ import logging.config
 import os
 import sys
 import multiprocessing
+import importlib
 
 
 __MODULE_LIST__ = []
@@ -150,11 +155,10 @@ def init(module_name, module_prefix='[???]', DEBUG=None, initmpl=False):
     def rrr():
         'Dynamic module reloading'
         global __DEBUG__
-        import imp
         prev = __DEBUG__
         __DEBUG__ = False
         builtins.print(module_prefix + ' reloading ' + module_name)
-        imp.reload(module)
+        importlib.reload(module)
         __DEBUG__ = prev
 
     # Define log_print
@@ -213,13 +217,22 @@ def init(module_name, module_prefix='[???]', DEBUG=None, initmpl=False):
     # Initialize matplotlib if requested
     if initmpl:
         import matplotlib
+        import logging
         backend = matplotlib.get_backend()
+        # Keep Matplotlib font discovery chatter out of normal runs.
+        logging.getLogger('matplotlib').setLevel(logging.WARNING)
+        logging.getLogger('matplotlib.font_manager').setLevel(logging.WARNING)
+        if hasattr(matplotlib, 'set_loglevel'):
+            try:
+                matplotlib.set_loglevel('warning')
+            except Exception:
+                pass
         if __IN_MAIN_PROCESS__:
             if not __QUIET__:
                 print('[common] ' + module_prefix + ' current backend is: %r' % backend)
-                print('[common] ' + module_prefix + ' matplotlib.use(Qt4Agg)')
-            if backend != 'Qt4Agg':
-                matplotlib.use('Qt4Agg', warn=True, force=True)
+                print('[common] ' + module_prefix + ' matplotlib.use(Qt5Agg)')
+            if backend != 'Qt5Agg':
+                matplotlib.use('Qt5Agg', force=True)
                 backend = matplotlib.get_backend()
                 print(module_prefix + ' current backend is: %r' % backend)
             if '--notoolbar' in sys.argv or '--devmode' in sys.argv:

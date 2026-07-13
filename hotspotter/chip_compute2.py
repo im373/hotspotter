@@ -1,3 +1,7 @@
+# HotSpotter port notes:
+# Modernized core HotSpotter logic for Python 3 and NumPy 2 compatibility.
+# Adjusted chip, feature, query, and table handling for current dependencies.
+
 
 from hscom import __common__
 (print, print_,
@@ -270,7 +274,7 @@ def grabcut_fn(chipBGR):
 
 def region_norm_fn(chip):
     chip  = ensure_gray(chip)
-    chip_ = np.array(chip, dtype=np.float)
+    chip_ = np.array(chip, dtype=float)
     chipw, chiph = chip_.shape
     half_w = chipw * .1
     half_h = chiph * .1
@@ -455,21 +459,24 @@ def load_chips(hs, cx_list=None, force_compute=False, **kwargs):
         cwd = os.getcwd()
         os.chdir(hs.dirs.chip_dir)
         cfname_list = [_cfname_fmt  % cid for cid in iter(cid_list)]
-        rsize_list = [(None, None) if path is None else Image.open(path).size
-                      for path in iter(cfname_list)]
+        rsize_list = []
+        last_path = None
+        for path in iter(cfname_list):
+            last_path = path
+            rsize_list.append((None, None) if path is None else Image.open(path).size)
         os.chdir(cwd)
     except IOError as ex:
         import gc
         gc.collect()
         print('[cc2] ex=%r' % ex)
-        print('path=%r' % path)
-        if util.checkpath(path, verbose=True):
+        print('path=%r' % last_path)
+        if last_path is not None and util.checkpath(last_path, verbose=True):
             import time
             time.sleep(1)  # delays for 1 seconds
             print('[cc2] file exists but cause IOError?')
             print('[cc2] probably corrupted. Removing it')
             try:
-                util.remove_file(path)
+                util.remove_file(last_path)
             except OSError:
                 print('Something bad happened')
                 raise

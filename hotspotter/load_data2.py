@@ -1,3 +1,7 @@
+# HotSpotter port notes:
+# Modernized core HotSpotter logic for Python 3 and NumPy 2 compatibility.
+# Adjusted chip, feature, query, and table handling for current dependencies.
+
 '''
 Module: load_data
     Loads the paths and table information from which all other data is computed.
@@ -201,8 +205,7 @@ def load_csv_tables(db_dir, allow_new_dir=True):
         if name_table is None:
             raise IOError('name_table will be given in chip table.')
         print('[ld2] Loading name table: %r' % name_table)
-        name_lines = open(name_table, 'r')
-        for line_num, csv_line in enumerate(name_lines):
+        for line_num, csv_line in enumerate(helpers.read_text(name_table).splitlines(True)):
             csv_line = csv_line.strip('\n\r\t ')
             if len(csv_line) == 0 or csv_line.find('#') == 0:
                 continue
@@ -210,7 +213,6 @@ def load_csv_tables(db_dir, allow_new_dir=True):
             nid = int(csv_fields[0])
             name = csv_fields[1]
             add_name(name, nid)
-        name_lines.close()
         if VERBOSE_LOAD_DATA:
             print('[ld2] * Loaded %r names (excluding unknown names)' % (len(nx2_name) - 2))
             print('[ld2] * Done loading name table')
@@ -248,7 +250,7 @@ def load_csv_tables(db_dir, allow_new_dir=True):
             raise IOError('image_table will be given in chip table')
         if VERBOSE_LOAD_DATA:
             print('[ld2] * Loading image table: %r' % image_table)
-        gid_lines = open(image_table, 'r').readlines()
+        gid_lines = helpers.read_text(image_table).splitlines(True)
         for line_num, csv_line in enumerate(gid_lines):
             csv_line = csv_line.strip('\n\r\t ')
             if len(csv_line) == 0 or csv_line.find('#') == 0:
@@ -307,7 +309,7 @@ def load_csv_tables(db_dir, allow_new_dir=True):
         # ------------------
         print('[ld2] Loading chip table: %r' % chip_table)
         # Load Chip Table Header
-        cid_lines = open(chip_table, 'r').readlines()
+        cid_lines = helpers.read_text(chip_table).splitlines(True)
         num_data   = -1
         # Parse Chip Table Header
         for line_num, csv_line in enumerate(cid_lines):

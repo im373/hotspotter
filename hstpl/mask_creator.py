@@ -1,3 +1,7 @@
+# HotSpotter port notes:
+# Updated third-party integration helpers for Python 3 runtime behavior.
+# Kept path, Qt, and dependency interactions compatible with current packages.
+
 """
 Interactive tool to draw mask on an image or image-like array.
 
@@ -6,10 +10,7 @@ Jan 9 2014: taken from: https://gist.github.com/tonysyu/3090704
 """
 
 import matplotlib
-if 0:
-    matplotlib.use('Qt4Agg')
-else:
-    matplotlib.use('Qt5Agg')
+matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
 #from matplotlib import nxutils  # Depricated

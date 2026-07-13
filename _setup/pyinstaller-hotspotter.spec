@@ -1,3 +1,5 @@
+# Not in main application flow.
+# This helper/test/setup module is outside the normal HotSpotter runtime.
 # -*- mode: python -*-
 # sudo python pyinstaller.py -F -w /hotspotter/main.py -i /hotspotter/_setup/hsicon.icns -n HotSpotter
 #http://www.pyinstaller.org/export/develop/project/doc/Manual.html

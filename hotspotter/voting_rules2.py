@@ -1,3 +1,7 @@
+# HotSpotter port notes:
+# Modernized core HotSpotter logic for Python 3 and NumPy 2 compatibility.
+# Adjusted chip, feature, query, and table handling for current dependencies.
+
 
 from hscom import __common__
 (print, print_, print_on, print_off,
@@ -151,7 +155,7 @@ def _chipmatch2_utilities(hs, qcx, chipmatch, K):
     # Stack the feature matches
     (cx2_fm, cx2_fs, cx2_fk) = chipmatch
     cxs = np.hstack([[cx] * len(cx2_fm[cx]) for cx in range(len(cx2_fm))])
-    cxs = np.array(cxs, np.int)
+    cxs = np.array(cxs, dtype=int)
     fms = np.vstack(cx2_fm)
     # Get the individual feature match lists
     qfxs = fms[:, 0]
@@ -321,7 +325,7 @@ def positional_scoring_rule(qfx2_utilities, rule, isWeighted):
         score_vec[0] = 1
     if rule == 'topk':
         score_vec = np.ones(K)
-    score_vec = np.array(score_vec, dtype=np.int)
+    score_vec = np.array(score_vec, dtype=int)
     #print('----')
     #title = 'Rule=%s Weighted=%r ' % (rule, not qfx2_weight is None)
     #print('[vote] ' + title)

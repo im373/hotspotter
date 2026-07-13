@@ -1,3 +1,7 @@
+# HotSpotter port notes:
+# Updated this module as part of the Python 3 modernization.
+# Preserved legacy behavior while fixing modern dependency compatibility.
+
 
 
 standard_imports = '''
@@ -5,9 +9,9 @@ standard_imports = '''
 from collections import OrderedDict, defaultdict
 from os.path import (dirname, realpath, join, exists, normpath, splitext,
                      expanduser, relpath)
-from itertools import izip, chain, imap
+from itertools import chain
 from itertools import product as iprod
-import imp
+import importlib
 import itertools
 import logging
 import multiprocessing
@@ -28,10 +32,12 @@ from PIL.ExifTags import TAGS
 import cv2
 from scipy.cluster.hierarchy import fclusterdata
 # Qt
-import PyQt4
-from PyQt4 import QtCore, QtGui
-from PyQt4.Qt import (QAbstractItemModel, QModelIndex, QVariant, QWidget,
-                      Qt, QObject, pyqtSlot, QKeyEvent)
+try:
+    from PyQt5 import QtCore, QtGui
+    from PyQt5.QtCore import (QAbstractItemModel, QModelIndex, QVariant,
+                              Qt, QObject, pyqtSlot)
+    from PyQt5.QtGui import QKeyEvent
+    from PyQt5.QtWidgets import QWidget
 '''
 
 

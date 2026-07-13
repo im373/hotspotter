@@ -1,3 +1,7 @@
+# HotSpotter port notes:
+# Updated shared compatibility helpers for Python 3, NumPy 2, and Windows paths.
+# Kept logging, preferences, file I/O, and argument handling aligned with modern runtimes.
+
 
 from . import __common__
 (print, print_, print_on, print_off,
@@ -12,17 +16,17 @@ import numpy as np
 # Very odd that I have to put in dtypes in two different ways.
 VALID_INT_TYPES = (int,
                    int,
-                   np.typeDict['int64'],
-                   np.typeDict['int32'],
-                   np.typeDict['uint8'],
+                   np.int64,
+                   np.int32,
+                   np.uint8,
                    np.dtype('int32'),
                    np.dtype('uint8'),
                    np.dtype('int64'),)
 
 VALID_FLOAT_TYPES = (float,
-                     np.typeDict['float64'],
-                     np.typeDict['float32'],
-                     np.typeDict['float16'],
+                     np.float64,
+                     np.float32,
+                     np.float16,
                      np.dtype('float64'),
                      np.dtype('float32'),
                      np.dtype('float16'),)
@@ -63,7 +67,7 @@ def safe_listget(list_, index, func=lambda x: x, default='?'):
 def class_iter_input(func):
     '''
     class_iter_input is a decorator which expects to be used on class methods.
-    It lets the user pass either a vector or a scalar to a function, as long as
+    It lets the user pass either a vector or a scalar to a function, provided
     the function treats everything like a vector. Input and output is sanatized
     to the user expected format on return.
     '''

@@ -1,3 +1,5 @@
+# Not in main application flow.
+# This helper/test/setup module is outside the normal HotSpotter runtime.
 #!/usr/bin/env python
 #exec(open('__init__.py').read())
 #exec(open('_research/dev.py').read())

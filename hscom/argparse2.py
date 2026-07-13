@@ -1,3 +1,7 @@
+# HotSpotter port notes:
+# Updated shared compatibility helpers for Python 3, NumPy 2, and Windows paths.
+# Kept logging, preferences, file I/O, and argument handling aligned with modern runtimes.
+
 
 import multiprocessing
 import argparse
@@ -246,12 +250,16 @@ def fix_args_shortnames(args):
 
 def fix_args_with_cache(args):
     'Returns the database directory based on cache'
+    from os.path import exists
     from . import fileio as io
     global ARGS_
     if args.dbdir is None and not args.nocache_db:
         # Read from cache
         args.dbdir = io.global_cache_read('db_dir')
         if args.dbdir in ['.', '', ' ']:
+            args.dbdir = None
+        elif not exists(args.dbdir):
+            print('[main] cached db_dir does not exist: %r' % (args.dbdir,))
             args.dbdir = None
         print('[main] trying to read db_dir from cache: %r' % args.dbdir)
     # --db has priority over --dbdir

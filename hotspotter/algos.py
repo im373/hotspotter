@@ -1,3 +1,7 @@
+# HotSpotter port notes:
+# Switched nearest-neighbor support to pyflann-ibeis / pyflann import style.
+# Adjusted cache and numpy interactions for Python 3 compatibility.
+
 'hotspotter.algos contains algorithm poltpori'
 
 from hscom import __common__
@@ -12,7 +16,11 @@ import textwrap
 # Matplotlib
 #import matplotlib.pyplot as plt
 # Scientific
-import pyflann
+try:
+    import pyflann_ibeis as pyflann
+except Exception as ex:  # pragma: no cover - optional dependency on startup path
+    pyflann = None
+    _FLANN_IMPORT_ERROR = ex
 #import sklearn.decomposition
 #import sklearn.preprocessing
 #import sklearn
@@ -25,6 +33,14 @@ from hscom import helpers as util
 
 
 DIST_LIST = ['L1', 'L2']
+
+
+def _require_flann():
+    if pyflann is None:
+        raise ImportError(
+            'FLANN backend is unavailable or broken in this environment: %r'
+            % (_FLANN_IMPORT_ERROR,)
+        )
 
 
 def compute_distances(hist1, hist2, dist_list=DIST_LIST):
@@ -63,7 +79,7 @@ def emd(hist1, hist2):
     import numpy as np
     hist1 = np.random.rand(128)
     hist2 = np.random.rand(128)
-    require: lpsolve55-5.5.0.9.win32-py2.7.exe
+    require: lpsolve55 installer
     https://github.com/andreasjansson/python-emd
     http://stackoverflow.com/questions/15706339/how-to-compute-emd-for-2-numpy-arrays-i-e-histogram-using-opencv
     http://www.cs.huji.ac.il/~ofirpele/FastEMD/code/
@@ -163,6 +179,7 @@ def sparse_multiply_rows(csr_mat, vec):
 
 
 def tune_flann(data, **kwargs):
+    _require_flann()
     flann = pyflann.FLANN()
     #num_data = len(data)
     flann_atkwargs = dict(algorithm='autotuned',
@@ -223,7 +240,7 @@ def __tune():
                         #"hamming_popcnt"   : 11,
                         #"l2_simple"        : 12,}
 
-# MAKE SURE YOU EDIT index.py in pyflann
+# MAKE SURE YOU EDIT index.py in the FLANN backend
 
 #flann_algos = {
     #'linear'        : 0,
@@ -272,7 +289,7 @@ def __tune():
                    #"kullback_leibler" : 8,
                    #"kl"               : 8 }
 
-#pyflann.set_distance_type('hellinger', order=0)
+# pyflann.set_distance_type('hellinger', order=0)
 
 def whiten(data):
     #'wrapper around sklearn'
@@ -373,6 +390,7 @@ def force_quit_akmeans(signal, frame):
 
 
 def ann_flann_once(dpts, qpts, num_neighbors, flann_params):
+    _require_flann()
     flann = pyflann.FLANN()
     flann.build_index(dpts, **flann_params)
     checks = flann_params.get('checks', 1024)
@@ -552,6 +570,7 @@ def precompute_akmeans(data, num_clusters, max_iters=100,
 def precompute_flann(data, cache_dir=None, uid='', flann_params=None,
                      force_recompute=False):
     ''' Tries to load a cached flann index before doing anything'''
+    _require_flann()
     print('[algos] precompute_flann(%r): ' % uid)
     cache_dir = '.' if cache_dir is None else cache_dir
     # Generate a unique filename for data and flann parameters

@@ -1,3 +1,5 @@
+# Not in main application flow.
+# This helper/test/setup module is outside the normal HotSpotter runtime.
 '''
 from os.path import expanduser, exists, split
 if __name__ == '__main__':

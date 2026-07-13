@@ -1,3 +1,7 @@
+# HotSpotter port notes:
+# Modernized core HotSpotter logic for Python 3 and NumPy 2 compatibility.
+# Adjusted chip, feature, query, and table handling for current dependencies.
+
 
 from hscom import __common__
 (print, print_,
@@ -65,11 +69,11 @@ def convert_if_needed(db_dir):
 
 # Port of Philbin07 code to python
 def compute_ap(groundtruth_query, ranked_list):
-    good_set = set(open(groundtruth_query + '_good.txt').readlines())
-    ok_set   = set(open(groundtruth_query + '_ok.txt').readlines())
-    junk_set = set(open(groundtruth_query + '_junk.txt').readlines())
+    good_set = set(helpers.read_text(groundtruth_query + '_good.txt').splitlines(True))
+    ok_set   = set(helpers.read_text(groundtruth_query + '_ok.txt').splitlines(True))
+    junk_set = set(helpers.read_text(groundtruth_query + '_junk.txt').splitlines(True))
     pos_set  = set.union(good_set, ok_set)
-    ap = compute_ap(pos_set, junk_set, ranked_list)
+    ap = compute_ap2(pos_set, junk_set, ranked_list)
     return ap
 
 
@@ -115,27 +119,26 @@ def __oxgtfile2_oxsty_gttup(gt_fname):
 def __read_oxsty_gtfile(gt_fpath, name, quality, img_dpath, corrupted_gname_set):
     oxsty_chip_info_list = []
     # read the individual ground truth file
-    with open(gt_fpath, 'r') as file:
-        line_list = file.read().splitlines()
-        for line in line_list:
-            if line == '':
-                continue
-            fields = line.split(' ')
-            gname = fields[0].replace('oxc1_', '') + '.jpg'
-            # >:( Because PARIS just cant keep paths consistent
-            if gname.find('paris_') >= 0:
-                paris_hack = gname[6:gname.rfind('_')]
-                gname = join(paris_hack, gname)
-            if gname in corrupted_gname_set:
-                continue
-            if len(fields) > 1:  # if has roi
-                roi =  list(map(int, list(map(round, list(map(float, fields[1:]))))))
-            else:
-                gpath = join(img_dpath, gname)
-                (w, h) = Image.open(gpath).size
-                roi = [0, 0, w, h]
-            oxsty_chip_info = (gname, roi)
-            oxsty_chip_info_list.append(oxsty_chip_info)
+    line_list = helpers.read_text(gt_fpath).splitlines()
+    for line in line_list:
+        if line == '':
+            continue
+        fields = line.split(' ')
+        gname = fields[0].replace('oxc1_', '') + '.jpg'
+        # >:( Because PARIS just cant keep paths consistent
+        if gname.find('paris_') >= 0:
+            paris_hack = gname[6:gname.rfind('_')]
+            gname = join(paris_hack, gname)
+        if gname in corrupted_gname_set:
+            continue
+        if len(fields) > 1:  # if has roi
+            roi =  list(map(int, list(map(round, list(map(float, fields[1:]))))))
+        else:
+            gpath = join(img_dpath, gname)
+            (w, h) = Image.open(gpath).size
+            roi = [0, 0, w, h]
+        oxsty_chip_info = (gname, roi)
+        oxsty_chip_info_list.append(oxsty_chip_info)
     return oxsty_chip_info_list
 
 
@@ -147,8 +150,7 @@ def convert_from_oxford_style(db_dir):
     corrupted_file_fpath = join(oxford_gt_dpath, 'corrupted_files.txt')
     corrupted_gname_set = set([])
     if helpers.checkpath(corrupted_file_fpath):
-        with open(corrupted_file_fpath) as f:
-            corrupted_gname_list = f.read().splitlines()
+        corrupted_gname_list = helpers.read_text(corrupted_file_fpath).splitlines()
         corrupted_gname_set = set(corrupted_gname_list)
 
     # Recursively get relative path of all files in img_dpath
@@ -408,9 +410,7 @@ def read_csv_file(csv_fpath):
         csv_line_ = csv_line.strip('\n\r\t ')
         csv_fields = [_.strip(' ') for _ in csv_line_.strip('\n\r ').split(', ')]
         return csv_fields
-    csv_file = open(csv_fpath, 'r')
-    csv_lines = csv_file.readlines()
-    csv_file.close()
+    csv_lines = helpers.read_text(csv_fpath).splitlines(True)
     csv_iter = iter(csv_lines)
     # Read first line (header)
     csv_line = next(csv_iter)

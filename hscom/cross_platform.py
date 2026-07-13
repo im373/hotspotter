@@ -1,3 +1,7 @@
+# HotSpotter port notes:
+# Updated shared compatibility helpers for Python 3, NumPy 2, and Windows paths.
+# Kept logging, preferences, file I/O, and argument handling aligned with modern runtimes.
+
 '''
 This module tries to ensure that the system paths are correctly setup for
 hotspotter to run.
@@ -12,8 +16,8 @@ import os
 import subprocess
 
 # Macports python directories
-ports_pyframework = '/opt/local/Library/Frameworks/Python.framework/Versions/2.7/'
-ports_site_packages = join(ports_pyframework, 'lib/python2.7/site-packages/')
+ports_pyframework = '/opt/local/Library/Frameworks/Python.framework/Versions/3.11/'
+ports_site_packages = join(ports_pyframework, 'lib/python3.11/site-packages/')
 
 
 def ensure_pythonpath():

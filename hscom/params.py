@@ -1,3 +1,7 @@
+# HotSpotter port notes:
+# Updated shared compatibility helpers for Python 3, NumPy 2, and Windows paths.
+# Kept logging, preferences, file I/O, and argument handling aligned with modern runtimes.
+
 '''Parameters module: DEPRICATE THIS
     stores a bunch of global variables used by the other modules
     It also reads from sys.argv'''
@@ -39,10 +43,11 @@ WORKDIR_CACHEID = 'work_directory_cache_id'
 # TODO: workdir doesnt belong in params
 def get_workdir(allow_gui=True):
     work_dir = io.global_cache_read(WORKDIR_CACHEID, default='.')
-    if work_dir is not '.' and exists(work_dir):
+    if work_dir != '.' and exists(work_dir):
         return work_dir
     if allow_gui:
         work_dir = set_workdir()
+        return work_dir
     return None
 
 
@@ -103,10 +108,10 @@ dbalias_dict['JAG'] = dbalias_dict['JAG_KELLY']
 #dbalias_dict['DEFAULT'] = dbalias_dict['NAUTS']
 dbalias_dict['DEFAULT'] = None
 # Add values from the database dict as global vars
-#for key, val in dbalias_dict.iteritems():
+#for key, val in dbalias_dict.items():
     #exec('%s = %r' % (key, val))
 #def inverse_dev_databases():
-    #return {val: key for (key, val) in dbalias_dict.iteritems()}
+    #return {val: key for (key, val) in dbalias_dict.items()}
 
 
 def db_to_dbdir(db):
@@ -195,7 +200,7 @@ RESAVE_QUERY   = False
 
 WHITEN_FEATS   = False
 
-#BOW_NUM_WORDS      = long(5e4)  # Vocab size for bag of words
+#BOW_NUM_WORDS      = int(5e4)  # Vocab size for bag of words
 #BOW_NDESC_PER_WORD = 14
 
 
@@ -206,7 +211,7 @@ WHITEN_FEATS   = False
     #params.SCALE_THRESH_HIGH = 8
     #params.SCALE_THRESH_LOW  = 0.5
     #params.CHIP_SQRT_AREA = None
-    #params.BOW_NUM_WORDS  = long(1e6)
+    #params.BOW_NUM_WORDS  = int(1e6)
 
 
 #def GZ_defaults():

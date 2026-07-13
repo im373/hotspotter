@@ -1,3 +1,7 @@
+# HotSpotter port notes:
+# Updated shared compatibility helpers for Python 3, NumPy 2, and Windows paths.
+# Kept logging, preferences, file I/O, and argument handling aligned with modern runtimes.
+
 
 from . import __common__
 (print, print_, print_on, print_off,
@@ -12,19 +16,8 @@ import warnings
 # Science
 import numpy as np
 # Qt
-if 0:
-    from PyQt4 import QtCore, QtGui
-    from PyQt4.Qt import (QAbstractItemModel, QModelIndex, QVariant, QWidget,
-                          QString, Qt, QObject, pyqtSlot)
-else:
-    from PyQt5 import QtCore
-    from PyQt5 import QtGui
-    from PyQt5.QtCore import *
-    from PyQt5.QtGui import *
-    from PyQt5.QtWidgets import *
-    # from PyQt5 import QtCore, QtGui
-    # from PyQt5.Qt import (QAbstractItemModel, QModelIndex, QVariant, QWidget,
-    #                       QString, Qt, QObject, pyqtSlot)
+from PyQt5 import QtCore
+from PyQt5 import QtWidgets
 
 # HotSpotter
 from .Printable import DynStruct
@@ -43,19 +36,42 @@ def printDBG(msg):
 # ---
 # Functions
 # ---
-try:
-    _fromUtf8 = QtCore.QString.fromUtf8
-except AttributeError:
-    def _fromUtf8(s):
-        return s
-try:
-    _encoding = QtGui.QApplication.UnicodeUTF8
+def _fromUtf8(s):
+    return s
 
-    def _translate(context, text, disambig):
-        return QtGui.QApplication.translate(context, text, disambig, _encoding)
-except AttributeError:
-    def _translate(context, text, disambig):
-        return QtGui.QApplication.translate(context, text, disambig)
+def _translate(context, text, disambig):
+    return QtWidgets.QApplication.translate(context, text, disambig)
+
+
+def _qt_to_python(value):
+    """Normalize legacy Qt editor values and modern PyQt5 Python values."""
+    if hasattr(value, 'toString'):
+        return str(value.toString())
+    return value
+
+
+def _qt_to_string(value):
+    return str(_qt_to_python(value))
+
+
+def _qt_to_bool(value):
+    if hasattr(value, 'toBool'):
+        return bool(value.toBool())
+    if isinstance(value, str):
+        return value.lower() in ['1', 'true', 'yes', 'on']
+    return bool(value)
+
+
+def _qt_to_int(value):
+    if hasattr(value, 'toInt'):
+        return int(value.toInt()[0])
+    return int(value)
+
+
+def _qt_to_float(value):
+    if hasattr(value, 'toFloat'):
+        return float(value.toFloat()[0])
+    return float(value)
 
 
 # Decorator to help catch errors that QT wont report
@@ -288,13 +304,11 @@ class Pref(PrefNode):
         print('[prefs!] !!! ERROR !!!')
         raise AttributeError('attribute: %s.%s not found' % (self._intern.name, name))
 
-    def iteritems(self):
+    def items(self):
         for (key, val) in list(self.__dict__.items()):
             if key in self._printable_exclude:
                 continue
             yield (key, val)
-
-    items = iteritems
 
     #----------------
     # Disk caching
@@ -320,7 +334,7 @@ class Pref(PrefNode):
                 return self._tree.parent.save()
             printDBG('[save] I cannot be saved. I have no parents.')
             return False
-        with open(self._intern.fpath, 'w') as f:
+        with open(self._intern.fpath, 'wb') as f:
             print('[pref] Saving to ' + self._intern.fpath)
             pref_dict = self.to_dict()
             pickle.dump(pref_dict, f)
@@ -333,7 +347,7 @@ class Pref(PrefNode):
             msg = '[pref] fpath=%r does not exist' % (self._intern.fpath)
             printDBG(msg)
             return msg
-        with open(self._intern.fpath, 'r') as f:
+        with open(self._intern.fpath, 'rb') as f:
             try:
                 printDBG('load: %r' % self._intern.fpath)
                 pref_dict = pickle.load(f)
@@ -443,10 +457,10 @@ class Pref(PrefNode):
         return self._intern.value != PrefNode
 
     def qt_set_leaf_data(self, qvar):
-        'Sets backend data using QVariants'
+        'Sets backend data using Qt editor values'
         print('[pref] qt_set_leaf_data: qvar=%r' % qvar)
         print('[pref] qt_set_leaf_data: qvar=%s' % str(qvar))
-        print('[pref] qt_set_leaf_data: qvar=%s' % str(qvar.toString()))
+        print('[pref] qt_set_leaf_data: qvar=%s' % _qt_to_string(qvar))
 
         print('[pref] qt_set_leaf_data: _intern.name=%r' % self._intern.name)
         print('[pref] qt_set_leaf_data: _intern.type_=%r' % self._intern.type())
@@ -467,22 +481,22 @@ class Pref(PrefNode):
                             return ret
                         except Exception:
                             continue
-                new_val = cast_order(str(qvar.toString()))
+                new_val = cast_order(_qt_to_string(qvar))
             if isinstance(self._intern.value, bool):
-                new_val = bool(qvar.toBool())
+                new_val = _qt_to_bool(qvar)
             elif isinstance(self._intern.value, int):
-                new_val = int(qvar.toInt()[0])
+                new_val = _qt_to_int(qvar)
             elif isinstance(self._intern.value, float):
-                new_val = float(qvar.toFloat()[0])
+                new_val = _qt_to_float(qvar)
             elif isinstance(self._intern.value, str):
-                new_val = str(qvar.toString())
+                new_val = _qt_to_string(qvar)
             elif isinstance(self._intern.value, PrefChoice):
-                new_val = qvar.toString()
+                new_val = _qt_to_string(qvar)
                 if new_val == 'None':
                     new_val = None
             else:
                 try:
-                    new_val = str(qvar.toString())
+                    new_val = _qt_to_string(qvar)
                 except Exception:
                     raise ValueError('[Pref.qtleaf] Unknown internal type = %r'
                                      % type(self._intern.value))
@@ -507,7 +521,7 @@ class Pref(PrefNode):
 # THE ABSTRACT ITEM MODEL
 # ---
 #QComboBox
-class QPreferenceModel(QAbstractItemModel):
+class QPreferenceModel(QtCore.QAbstractItemModel):
     'Convention states only items with column index 0 can have children'
     @report_thread_error
     def __init__(self, pref_struct, parent=None):
@@ -515,7 +529,7 @@ class QPreferenceModel(QAbstractItemModel):
         self.rootPref  = pref_struct
 
     @report_thread_error
-    def index2Pref(self, index=QModelIndex()):
+    def index2Pref(self, index=QtCore.QModelIndex()):
         '''Internal helper method'''
         if index.isValid():
             item = index.internalPointer()
@@ -526,65 +540,64 @@ class QPreferenceModel(QAbstractItemModel):
     #-----------
     # Overloaded ItemModel Read Functions
     @report_thread_error
-    def rowCount(self, parent=QModelIndex()):
+    def rowCount(self, parent=QtCore.QModelIndex()):
         parentPref = self.index2Pref(parent)
         return parentPref.qt_row_count()
 
     @report_thread_error
-    def columnCount(self, parent=QModelIndex()):
+    def columnCount(self, parent=QtCore.QModelIndex()):
         parentPref = self.index2Pref(parent)
         return parentPref.qt_col_count()
 
     @report_thread_error
-    def data(self, index, role=Qt.DisplayRole):
+    def data(self, index, role=QtCore.Qt.DisplayRole):
         '''Returns the data stored under the given role
         for the item referred to by the index.'''
         if not index.isValid():
-            return QVariant()
-        if role != Qt.DisplayRole and role != Qt.EditRole:
-            return QVariant()
+            return None
+        if role != QtCore.Qt.DisplayRole and role != QtCore.Qt.EditRole:
+            return None
         nodePref = self.index2Pref(index)
         data = nodePref.qt_get_data(index.column())
-        var = QVariant(data)
         #print('--- data() ---')
         #print('role = %r' % role)
         #print('data = %r' % data)
         #print('type(data) = %r' % type(data))
         if isinstance(data, float):
-            var = QVariant(QString.number(data, format='g', precision=6))
+            return format(data, 'g')
         if isinstance(data, bool):
-            var = QVariant(data).toString()
+            return str(data)
         if isinstance(data, int):
-            var = QVariant(data).toString()
+            return str(data)
         #print('var= %r' % var)
         #print('type(var)= %r' % type(var))
-        return var
+        return data
 
     @report_thread_error
-    def index(self, row, col, parent=QModelIndex()):
+    def index(self, row, col, parent=QtCore.QModelIndex()):
         '''Returns the index of the item in the model specified
         by the given row, column and parent index.'''
         if parent.isValid() and parent.column() != 0:
-            return QModelIndex()
+            return QtCore.QModelIndex()
         parentPref = self.index2Pref(parent)
         childPref  = parentPref.qt_get_child(row)
         if childPref:
             return self.createIndex(row, col, childPref)
         else:
-            return QModelIndex()
+            return QtCore.QModelIndex()
 
     @report_thread_error
     def parent(self, index=None):
         '''Returns the parent of the model item with the given index.
         If the item has no parent, an invalid QModelIndex is returned.'''
         if index is None:  # Overload with QObject.parent()
-            return QObject.parent(self)
+            return QtCore.QObject.parent(self)
         if not index.isValid():
-            return QModelIndex()
+            return QtCore.QModelIndex()
         nodePref = self.index2Pref(index)
         parentPref = nodePref.qt_get_parent()
         if parentPref == self.rootPref:
-            return QModelIndex()
+            return QtCore.QModelIndex()
         return self.createIndex(parentPref.qt_parents_index_of_me(), 0, parentPref)
 
     #-----------
@@ -594,19 +607,19 @@ class QPreferenceModel(QAbstractItemModel):
         'Returns the item flags for the given index.'
         if index.column() == 0:
             # The First Column is just a label and unchangable
-            return Qt.ItemIsEnabled | Qt.ItemIsSelectable
+            return QtCore.Qt.ItemIsEnabled | QtCore.Qt.ItemIsSelectable
         if not index.isValid():
-            return Qt.ItemFlag(0)
+            return QtCore.Qt.NoItemFlags
         childPref = self.index2Pref(index)
         if childPref:
             if childPref.qt_is_editable():
-                return Qt.ItemIsEditable | Qt.ItemIsEnabled | Qt.ItemIsSelectable
-        return Qt.ItemFlag(0)
+                return QtCore.Qt.ItemIsEditable | QtCore.Qt.ItemIsEnabled | QtCore.Qt.ItemIsSelectable
+        return QtCore.Qt.NoItemFlags
 
     @report_thread_error
-    def setData(self, index, data, role=Qt.EditRole):
+    def setData(self, index, data, role=QtCore.Qt.EditRole):
         'Sets the role data for the item at index to value.'
-        if role != Qt.EditRole:
+        if role != QtCore.Qt.EditRole:
             return False
         #print('--- setData() ---')
         #print('role = %r' % role)
@@ -619,13 +632,13 @@ class QPreferenceModel(QAbstractItemModel):
         return result
 
     @report_thread_error
-    def headerData(self, section, orientation, role=Qt.DisplayRole):
-        if orientation == Qt.Horizontal and role == Qt.DisplayRole:
+    def headerData(self, section, orientation, role=QtCore.Qt.DisplayRole):
+        if orientation == QtCore.Qt.Horizontal and role == QtCore.Qt.DisplayRole:
             if section == 0:
-                return QVariant('Config Key')
+                return 'Config Key'
             if section == 1:
-                return QVariant('Config Value')
-        return QVariant()
+                return 'Config Value'
+        return None
 
 
 # ---
@@ -636,25 +649,25 @@ class Ui_editPrefSkel(object):
         editPrefSkel.setObjectName(_fromUtf8("editPrefSkel"))
         editPrefSkel.resize(668, 530)
         # Add Pane for TreeView
-        self.verticalLayout = QtGui.QVBoxLayout(editPrefSkel)
+        self.verticalLayout = QtWidgets.QVBoxLayout(editPrefSkel)
         self.verticalLayout.setObjectName(_fromUtf8("verticalLayout"))
         # The TreeView for QAbstractItemModel to attach to
-        self.prefTreeView = QtGui.QTreeView(editPrefSkel)
+        self.prefTreeView = QtWidgets.QTreeView(editPrefSkel)
         self.prefTreeView.setObjectName(_fromUtf8("prefTreeView"))
         self.verticalLayout.addWidget(self.prefTreeView)
         # Add Pane for buttons
-        self.horizontalLayout = QtGui.QHBoxLayout()
+        self.horizontalLayout = QtWidgets.QHBoxLayout()
         self.horizontalLayout.setObjectName(_fromUtf8("horizontalLayout"))
         #
-        #self.redrawBUT = QtGui.QPushButton(editPrefSkel)
+        #self.redrawBUT = QtWidgets.QPushButton(editPrefSkel)
         #self.redrawBUT.setObjectName(_fromUtf8("redrawBUT"))
         #self.horizontalLayout.addWidget(self.redrawBUT)
         ##
-        #self.unloadFeaturesAndModelsBUT = QtGui.QPushButton(editPrefSkel)
+        #self.unloadFeaturesAndModelsBUT = QtWidgets.QPushButton(editPrefSkel)
         #self.unloadFeaturesAndModelsBUT.setObjectName(_fromUtf8("unloadFeaturesAndModelsBUT"))
         #self.horizontalLayout.addWidget(self.unloadFeaturesAndModelsBUT)
         #
-        self.defaultPrefsBUT = QtGui.QPushButton(editPrefSkel)
+        self.defaultPrefsBUT = QtWidgets.QPushButton(editPrefSkel)
         self.defaultPrefsBUT.setObjectName(_fromUtf8("defaultPrefsBUT"))
         self.horizontalLayout.addWidget(self.defaultPrefsBUT)
         # Buttons are a child of the View
@@ -673,7 +686,7 @@ class Ui_editPrefSkel(object):
 # ---
 # THE PREFERENCE WIDGET
 # ---
-class EditPrefWidget(QWidget):
+class EditPrefWidget(QtWidgets.QWidget):
     'The Settings Pane; Subclass of Main Windows.'
     def __init__(self, pref_struct):
         super(EditPrefWidget, self).__init__()
@@ -685,7 +698,7 @@ class EditPrefWidget(QWidget):
         #self.ui.defaultPrefsBUT.clicked.connect(fac.default_prefs)
         #self.ui.unloadFeaturesAndModelsBUT.clicked.connect(fac.unload_features_and_models)
 
-    @pyqtSlot(Pref, name='populatePrefTreeSlot')
+    @QtCore.pyqtSlot(Pref, name='populatePrefTreeSlot')
     def populatePrefTreeSlot(self, pref_struct):
         'Populates the Preference Tree Model'
         printDBG('Bulding Preference Model of: ' + repr(pref_struct))

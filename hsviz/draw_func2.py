@@ -1,3 +1,7 @@
+# HotSpotter port notes:
+# Updated visualization code for modern matplotlib and Python 3 behavior.
+# Normalized keypoint/SIFT drawing paths for current numpy array shapes.
+
 ''' Lots of functions for drawing and plotting visiony things '''
 # TODO: New naming scheme
 # viz_<func_name> will clear everything. The current axes and fig: clf, cla.  # Will add annotations
@@ -5,13 +9,10 @@
 # show_<func_name> will always clear the current axes, but not fig: cla # Might # add annotates?
 # plot_<func_name> will not clear the axes or figure. More useful for graphs
 # draw_<func_name> same as plot for now. More useful for images
-from __future__ import division, print_function
 from hscom import __common__
 (print, print_, print_on, print_off, rrr, profile,
  printDBG) = __common__.init(__name__, '[df2]', DEBUG=False, initmpl=True)
 # Python
-# from itertools import izip
-izip = zip
 from os.path import splitext, split, join, normpath, exists
 import colorsys
 import itertools
@@ -29,19 +30,11 @@ from matplotlib.patches import Rectangle, Circle, FancyArrow
 from matplotlib.transforms import Affine2D
 import matplotlib.pyplot as plt
 # Qt
-if 0:
-    from matplotlib.backends import backend_qt4 as backend_qt
-    from PyQt4 import QtCore, QtGui
-    from PyQt4.QtCore import Qt
-    QtGui = QtWidgets
-else:
-    from matplotlib.backends import backend_qt5 as backend_qt
-    from PyQt5 import QtCore
-    from PyQt5 import QtGui
-    from PyQt5.QtCore import *
-    from PyQt5.QtGui import *
-    from PyQt5.QtWidgets import *
-    from PyQt5 import QtWidgets
+from matplotlib.backends import backend_qt5 as backend_qt
+from PyQt5 import QtCore
+from PyQt5.QtCore import Qt
+from PyQt5 import QtGui
+from PyQt5 import QtWidgets
 
 # Scientific
 import numpy as np
@@ -57,7 +50,7 @@ from hscom.Printable import DynStruct
 #================
 
 TMP_mevent = None
-QT4_WINS = []
+QT_WINS = []
 plotWidget = None
 
 # GENERAL FONTS
@@ -118,7 +111,7 @@ def golden_wh2(sz):
 
 def golden_wh(x):
     'returns a width / height with a golden aspect ratio'
-    return map(int, map(round, (x * .618, x * .312)))
+    return tuple(map(int, map(round, (x * .618, x * .312))))
 
 
 # FIGURE GEOMETRY
@@ -189,7 +182,7 @@ def execstr_global():
 
 
 def register_matplotlib_widget(plotWidget_):
-    'talks to PyQt4 guis'
+    'talks to Qt guis'
     global plotWidget
     plotWidget = plotWidget_
     #fig = plotWidget.figure
@@ -198,15 +191,15 @@ def register_matplotlib_widget(plotWidget_):
     #plt.sca(ax)
 
 
-def unregister_qt4_win(win):
-    global QT4_WINS
+def unregister_qt_win(win):
+    global QT_WINS
     if win == 'all':
-        QT4_WINS = []
+        QT_WINS = []
 
 
-def register_qt4_win(win):
-    global QT4_WINS
-    QT4_WINS.append(win)
+def register_qt_win(win):
+    global QT_WINS
+    QT_WINS.append(win)
 
 
 def OooScreen2():
@@ -223,18 +216,20 @@ def OooScreen2():
 
 
 def deterministic_shuffle(list_):
-    randS = int(np.random.rand() * np.uint(0 - 2) / 2)
-    np.random.seed(len(list_))
-    np.random.shuffle(list_)
-    np.random.seed(randS)
+    rng_state = np.random.get_state()
+    try:
+        np.random.seed(len(list_))
+        np.random.shuffle(list_)
+    finally:
+        np.random.set_state(rng_state)
 
 
 def distinct_colors(N, brightness=.878):
     # http://blog.jianhuashao.com/2011/09/generate-n-distinct-colors.html
     sat = brightness
     val = brightness
-    HSV_tuples = [(x * 1.0 / N, sat, val) for x in xrange(N)]
-    RGB_tuples = map(lambda x: colorsys.hsv_to_rgb(*x), HSV_tuples)
+    HSV_tuples = [(x * 1.0 / N, sat, val) for x in range(N)]
+    RGB_tuples = list(map(lambda x: colorsys.hsv_to_rgb(*x), HSV_tuples))
     deterministic_shuffle(RGB_tuples)
     return RGB_tuples
 
@@ -357,8 +352,8 @@ def get_all_figures():
     return all_figures
 
 
-def get_all_qt4_wins():
-    return QT4_WINS
+def get_all_qt_wins():
+    return QT_WINS
 
 
 def all_figures_show():
@@ -395,7 +390,7 @@ def get_monitor_geometries():
     ensure_app_is_running()
     monitor_geometries = {}
     desktop = QtWidgets.QDesktopWidget()
-    for screenx in xrange(desktop.numScreens()):
+    for screenx in range(desktop.numScreens()):
         rect = desktop.availableGeometry(screen=screenx)
         geom = (rect.x(), rect.y(), rect.width(), rect.height())
         monitor_geometries[screenx] = geom
@@ -418,7 +413,7 @@ def all_figures_tile(num_rc=None, wh=400, xy_off=(0, 0), wh_off=(0, 0),
         wh = golden_wh(wh)
 
     all_figures = get_all_figures()
-    all_qt4wins = get_all_qt4_wins()
+    all_qt_wins = get_all_qt_wins()
 
     if override1:
         if len(all_figures) == 1:
@@ -428,7 +423,7 @@ def all_figures_tile(num_rc=None, wh=400, xy_off=(0, 0), wh_off=(0, 0),
             update()
             return
 
-    #nFigs = len(all_figures) + len(all_qt4_wins)
+    #nFigs = len(all_figures) + len(all_qt_wins)
 
     # Win7 Areo
     win7_sizes = {
@@ -503,9 +498,9 @@ def all_figures_tile(num_rc=None, wh=400, xy_off=(0, 0), wh_off=(0, 0),
     printDBG('[df2]     nRows, nCols = %r' % ((nRows, nCols),))
 
     def position_window(ix, win):
-        isqt4_mpl = isinstance(win, backend_qt.MainWindow)
-        isqt4_back = isinstance(win, QtWidgets.QMainWindow)
-        if not isqt4_mpl and not isqt4_back:
+        is_qt_mpl = isinstance(win, backend_qt.MainWindow)
+        is_qt_back = isinstance(win, QtWidgets.QMainWindow)
+        if not is_qt_mpl and not is_qt_back:
             raise NotImplementedError('%r-th Backend %r is not a Qt Window' %
                                       (ix, win))
         if row_first:
@@ -524,7 +519,7 @@ def all_figures_tile(num_rc=None, wh=400, xy_off=(0, 0), wh_off=(0, 0),
         except Exception as ex:
             print(ex)
     ioff = 0
-    for i, win in enumerate(all_qt4wins):
+    for i, win in enumerate(all_qt_wins):
         position_window(i, win)
         ioff += 1
     for i, fig in enumerate(all_figures):
@@ -634,11 +629,19 @@ def sanatize_img_fpath(fpath, defaultext):
 
 
 def prepare_figure_fpath(fig, fpath, fnum, usetitle, defaultext):
+    def _get_window_title(fig):
+        if hasattr(fig.canvas, 'manager') and fig.canvas.manager is not None:
+            if hasattr(fig.canvas.manager, 'get_window_title'):
+                return fig.canvas.manager.get_window_title()
+        if hasattr(fig.canvas, 'get_window_title'):
+            return fig.canvas.get_window_title()
+        return fig.get_label() or 'figure'
+
     if fpath is None:
         # Find the title
-        fpath = sanatize_img_fname(fig.canvas.get_window_title())
+        fpath = sanatize_img_fname(_get_window_title(fig))
     if usetitle:
-        title = sanatize_img_fname(fig.canvas.get_window_title())
+        title = sanatize_img_fname(_get_window_title(fig))
         fpath = join(fpath, title)
     # Add in DPI information
     fpath_noext, ext = splitext(fpath)
@@ -813,7 +816,7 @@ SAFE_POS = {
 
 
 def adjust_subplots_safe(**kwargs):
-    for key in SAFE_POS.iterkeys():
+    for key in SAFE_POS.keys():
         if not key in kwargs:
             kwargs[key] = SAFE_POS[key]
     adjust_subplots(**kwargs)
@@ -941,17 +944,25 @@ def set_figtitle(figtitle, subtitle='', forcefignum=True, incanvas=True):
         fig.suptitle('')
     window_figtitle = ('fig(%d) ' % fig.number) + figtitle
     window_figtitle = window_figtitle.replace('\n', ' ')
-    fig.canvas.set_window_title(window_figtitle)
+    if hasattr(fig.canvas, 'manager') and fig.canvas.manager is not None:
+        if hasattr(fig.canvas.manager, 'set_window_title'):
+            fig.canvas.manager.set_window_title(window_figtitle)
+            return
+    if hasattr(fig.canvas, 'set_window_title'):
+        fig.canvas.set_window_title(window_figtitle)
+        return
+    if hasattr(fig.canvas, 'setWindowTitle'):
+        fig.canvas.setWindowTitle(window_figtitle)
 
 
-def convert_keypress_event_mpl_to_qt4(mevent):
+def convert_keypress_event_mpl_to_qt(mevent):
     global TMP_mevent
     TMP_mevent = mevent
     # Grab the key from the mpl.KeyPressEvent
     key = mevent.key
-    print('[df2] convert event mpl -> qt4')
+    print('[df2] convert event mpl -> qt')
     print('[df2] key=%r' % key)
-    # dicts modified from backend_qt4.py
+    # dicts modified from Matplotlib's Qt backend
     mpl2qtkey = {'control': Qt.Key_Control, 'shift': Qt.Key_Shift,
                  'alt': Qt.Key_Alt, 'super': Qt.Key_Meta,
                  'enter': Qt.Key_Return, 'left': Qt.Key_Left, 'up': Qt.Key_Up,
@@ -970,24 +981,24 @@ def convert_keypress_event_mpl_to_qt4(mevent):
     type_ = QtCore.QEvent.Type(QtCore.QEvent.KeyPress)  # The type should always be KeyPress
     text = ''
     # Try to extract the original modifiers
-    modifiers = QtCore.Qt.NoModifier  # initialize to no modifiers
+    modifiers = Qt.NoModifier  # initialize to no modifiers
     if key.find(u'ctrl+') >= 0:
-        modifiers = modifiers | QtCore.Qt.ControlModifier
+        modifiers = modifiers | Qt.ControlModifier
         key = key.replace(u'ctrl+', u'')
         print('[df2] has ctrl modifier')
         text += 'Ctrl+'
     if key.find(u'alt+') >= 0:
-        modifiers = modifiers | QtCore.Qt.AltModifier
+        modifiers = modifiers | Qt.AltModifier
         key = key.replace(u'alt+', u'')
         print('[df2] has alt modifier')
         text += 'Alt+'
     if key.find(u'super+') >= 0:
-        modifiers = modifiers | QtCore.Qt.MetaModifier
+        modifiers = modifiers | Qt.MetaModifier
         key = key.replace(u'super+', u'')
         print('[df2] has super modifier')
         text += 'Super+'
     if key.isupper():
-        modifiers = modifiers | QtCore.Qt.ShiftModifier
+        modifiers = modifiers | Qt.ShiftModifier
         print('[df2] has shift modifier')
         text += 'Shift+'
     # Try to extract the original key
@@ -1003,7 +1014,7 @@ def convert_keypress_event_mpl_to_qt4(mevent):
         raise
     autorep = False  # default false
     count   = 1  # default 1
-    text = QtCore.QString(text)  # The text is somewhat arbitrary
+    text = str(text)  # The text is somewhat arbitrary
     # Create the QEvent
     print('----------------')
     print('[df2] Create event')
@@ -1013,24 +1024,24 @@ def convert_keypress_event_mpl_to_qt4(mevent):
     print('[df2] autorep = %r' % autorep)
     print('[df2] count = %r ' % count)
     print('----------------')
-    qevent = QtWidgets.QKeyEvent(type_, key_, modifiers, text, autorep, count)
+    qevent = QtGui.QKeyEvent(type_, key_, modifiers, text, autorep, count)
     return qevent
 
 
 def test_build_qkeyevent():
     import draw_func2 as df2
-    qtwin = df2.QT4_WINS[0]
+    qtwin = df2.QT_WINS[0]
     # This reconstructs an test mplevent
     canvas = df2.figure(1).canvas
     mevent = matplotlib.backend_bases.KeyEvent('key_press_event', canvas, u'ctrl+p', x=672, y=230.0)
-    qevent = df2.convert_keypress_event_mpl_to_qt4(mevent)
+    qevent = df2.convert_keypress_event_mpl_to_qt(mevent)
     app = qtwin.backend.app
     app.sendEvent(qtwin.ui, mevent)
     #type_ = QtCore.QEvent.Type(QtCore.QEvent.KeyPress)  # The type should always be KeyPress
     #text = QtCore.QString('A')  # The text is somewhat arbitrary
-    #modifiers = QtCore.Qt.NoModifier  # initialize to no modifiers
-    #modifiers = modifiers | QtCore.Qt.ControlModifier
-    #modifiers = modifiers | QtCore.Qt.AltModifier
+    #modifiers = Qt.NoModifier  # initialize to no modifiers
+    #modifiers = modifiers | Qt.ControlModifier
+    #modifiers = modifiers | Qt.AltModifier
     #key_ = ord('A')  # Qt works with uppercase keys
     #autorep = False  # default false
     #count   = 1  # default 1
@@ -1041,16 +1052,16 @@ def test_build_qkeyevent():
 # This actually doesn't matter
 def on_key_press_event(event):
     'redirects keypress events to main window'
-    global QT4_WINS
+    global QT_WINS
     print('[df2] %r' % event)
     print('[df2] %r' % str(event.__dict__))
-    for qtwin in QT4_WINS:
-        qevent = convert_keypress_event_mpl_to_qt4(event)
+    for qtwin in QT_WINS:
+        qevent = convert_keypress_event_mpl_to_qt(event)
         app = qtwin.backend.app
         print('[df2] attempting to send qevent to qtwin')
         app.sendEvent(qtwin, qevent)
         # TODO: FINISH ME
-        #PyQt4.QtWidgets.QKeyEvent
+        #QtWidgets.QKeyEvent
         #qtwin.keyPressEvent(event)
         #fig.canvas.manager.window.keyPressEvent()
 
@@ -1109,7 +1120,10 @@ def get_fig(fnum=None):
         fnum = fig.number
     else:
         try:
-            fig = plt.figure(fnum, **fig_kwargs)
+            if fnum in plt.get_fignums():
+                fig = plt.figure(fnum)
+            else:
+                fig = plt.figure(fnum, **fig_kwargs)
         except Exception as ex:
             print(repr(ex))
             warnings.warn(repr(ex))
@@ -1316,12 +1330,18 @@ def space_yticks(nTicks=9, spacing=32, ax=None):
 
 def small_xticks(ax=None):
     for tick in ax.xaxis.get_major_ticks():
-        tick.label.set_fontsize(8)
+        if hasattr(tick, 'label1'):
+            tick.label1.set_fontsize(8)
+        elif hasattr(tick, 'label'):
+            tick.label.set_fontsize(8)
 
 
 def small_yticks(ax=None):
     for tick in ax.yaxis.get_major_ticks():
-        tick.label.set_fontsize(8)
+        if hasattr(tick, 'label1'):
+            tick.label1.set_fontsize(8)
+        elif hasattr(tick, 'label'):
+            tick.label.set_fontsize(8)
 
 
 def plot_bars(y_data, nColorSplits=1):
@@ -1331,7 +1351,7 @@ def plot_bars(y_data, nColorSplits=1):
     ori_colors = distinct_colors(nColorSplits)
     x_data = np.arange(nDims)
     ax = gca()
-    for ix in xrange(nColorSplits):
+    for ix in range(nColorSplits):
         xs = np.arange(nGroup) + (nGroup * ix)
         color = ori_colors[ix]
         x_dat = x_data[xs]
@@ -1426,26 +1446,34 @@ def draw_sift(desc, kp=None):
 
     def cirlce_rad2xy(radians, mag):
         return np.cos(radians) * mag, np.sin(radians) * mag
+
+    def _kp5(kp_):
+        kp_ = np.asarray(kp_).reshape(-1)
+        if kp_.size < 5:
+            raise ValueError('Keypoint must have at least 5 values: %r' % (kp_,))
+        return kp_[:5]
+
+    def _scalar(val):
+        return float(np.asarray(val).reshape(-1)[0])
+
     discrete_ori = (np.arange(0, NORIENTS) * (tau / NORIENTS) + ORI_SHIFT)
     # Build list of plot positions
     # Build an "arm" for each sift measurement
     arm_mag   = desc / 255.0
     arm_ori = np.tile(discrete_ori, (NBINS, 1)).flatten()
     # The offset x,y's for each sift measurment
-    arm_dxy = np.array(zip(*cirlce_rad2xy(arm_ori, arm_mag)))
-    yxt_gen = itertools.product(xrange(NY), xrange(NX), xrange(NORIENTS))
-    yx_gen  = itertools.product(xrange(NY), xrange(NX))
+    arm_dxy = np.array(list(zip(*cirlce_rad2xy(arm_ori, arm_mag))))
+    yxt_gen = itertools.product(range(NY), range(NX), range(NORIENTS))
+    yx_gen  = itertools.product(range(NY), range(NX))
     # Transform the drawing of the SIFT descriptor to the its elliptical patch
     axTrans = ax.transData
     kpTrans = None
     if kp is None:
         kp = [0, 0, 1, 0, 1]
-    kp = np.array(kp)
-    kpT = kp.T
-    x, y, a, c, d = kpT[:, 0]
-    kpTrans = Affine2D([( a, 0, x),
-                        ( c, d, y),
-                        ( 0, 0, 1)])
+    x, y, a, c, d = [_scalar(v) for v in _kp5(kp)]
+    kpTrans = Affine2D(np.array([( a, 0.0, x),
+                                 ( c, d, y),
+                                 ( 0.0, 0.0, 1.0)], dtype=float))
     axTrans = ax.transData
     # Draw 8 directional arms in each of the 4x4 grid cells
     arrow_patches = []
@@ -1501,15 +1529,15 @@ def scores_to_color(score_list, cmap_='hot', logscale=False):
     mins = score_list.min()
     rnge = score_list.max() - mins
     if rnge == 0:
-        return [cmap(.5) for fx in xrange(len(score_list))]
+        return [cmap(.5) for fx in range(len(score_list))]
     else:
         if logscale:
             score2_01 = lambda score: np.log2(1.1 + .9 * (float(score) - mins) / (rnge))
             score_list = np.array(score_list)
             #rank_multiplier = score_list.argsort() / len(score_list)
             #normscore = np.array(map(score2_01, score_list)) * rank_multiplier
-            normscore = np.array(map(score2_01, score_list))
-            colors =  map(cmap, normscore)
+            normscore = np.array(list(map(score2_01, score_list)))
+            colors = list(map(cmap, normscore))
         else:
             score2_01 = lambda score: .1 + .9 * (float(score) - mins) / (rnge)
         colors    = [cmap(score2_01(score)) for score in score_list]
@@ -1528,7 +1556,8 @@ def scores_to_cmap(scores, colors=None, cmap_='hot'):
 def colorbar(scalars, colors):
     'adds a color bar next to the axes'
     # Parameters
-    xy, width, height = _axis_xy_width_height()
+    ax = gca()
+    xy, width, height = _axis_xy_width_height(ax=ax)
     orientation = ['vertical', 'horizontal'][0]
     TICK_FONTSIZE = 8
     #
@@ -1543,7 +1572,7 @@ def colorbar(scalars, colors):
     COLORBAR_ASPECT = np.abs(20 * height / (width))  # 1
     printDBG('[df] COLORBAR_ASPECT = %r' % COLORBAR_ASPECT)
 
-    cb = plt.colorbar(sm, orientation=orientation, shrink=COLORBAR_SHRINK,
+    cb = plt.colorbar(sm, ax=ax, orientation=orientation, shrink=COLORBAR_SHRINK,
                       pad=COLORBAR_PAD, aspect=COLORBAR_ASPECT)
     # Add the colorbar to the correct label
     axis = cb.ax.xaxis if orientation == 'horizontal' else cb.ax.yaxis
@@ -1579,15 +1608,16 @@ def draw_lines2(kpts1, kpts2, fm=None, fs=None, kpts2_offset=(0, 0),
                          kpts2_m[1] * scale_factor + hoff))
     if color_list is None:
         if fs is None:  # Draw with solid color
-            color_list    = [ LINE_COLOR for fx in xrange(len(fm))]
+            color_list    = [LINE_COLOR for fx in range(len(fm))]
         else:  # Draw with colors proportional to score difference
             color_list = scores_to_color(fs)
     segments  = [((x1, y1), (x2, y2)) for (x1, x2, y1, y2) in xxyy_iter]
-    linewidth = [LINE_WIDTH for fx in xrange(len(fm))]
+    linewidth = [LINE_WIDTH for fx in range(len(fm))]
     line_alpha = LINE_ALPHA
     if LINE_ALPHA_OVERRIDE is not None:
         line_alpha = LINE_ALPHA_OVERRIDE
-    line_group = LineCollection(segments, linewidth, color_list, alpha=line_alpha)
+    line_group = LineCollection(
+        segments, linewidths=linewidth, colors=color_list, alpha=line_alpha)
     #plt.colorbar(line_group, ax=ax)
     ax.add_collection(line_group)
     #figure(100)
@@ -1614,7 +1644,7 @@ def draw_kpts2(kpts, offset=(0, 0), ell=SHOW_ELLS, pts=False, pts_color=ORANGE,
     pltTrans = ax.transData
     ell_actors = []
     # data
-    kpts = np.array(kpts)
+    kpts = np.atleast_2d(np.asarray(kpts, dtype=float))
     kptsT = kpts.T
     x = kptsT[0, :] * scale_factor + offset[0]
     y = kptsT[1, :] * scale_factor + offset[1]
@@ -1625,16 +1655,18 @@ def draw_kpts2(kpts, offset=(0, 0), ell=SHOW_ELLS, pts=False, pts_color=ORANGE,
         if pts is True:
             rect = False
     if ell or rect:
+        def _scalar(val):
+            return float(np.asarray(val).reshape(-1)[0])
         # We have the transformation from unit circle to ellipse here. (inv(A))
         a = kptsT[2] * scale_factor
         b = np.zeros(len(a))
         c = kptsT[3] * scale_factor
         d = kptsT[4] * scale_factor
 
-        kpts_iter = izip(x, y, a, b, c, d)
-        aff_list = [Affine2D([( a_, b_, x_),
-                              ( c_, d_, y_),
-                              (  0,  0,  1)])
+        kpts_iter = zip(x, y, a, b, c, d)
+        aff_list = [Affine2D(np.array([( _scalar(a_), _scalar(b_), _scalar(x_)),
+                                       ( _scalar(c_), _scalar(d_), _scalar(y_)),
+                                       (  0.0,  0.0,  1.0)], dtype=float))
                     for (x_, y_, a_, b_, c_, d_) in kpts_iter]
         patch_list = []
         ell_actors = [Circle( (0, 0), 1, transform=aff) for aff in aff_list]
@@ -1658,13 +1690,13 @@ def draw_kpts2(kpts, offset=(0, 0), ell=SHOW_ELLS, pts=False, pts_color=ORANGE,
         ellipse_collection.set_linewidth(ell_linewidth)
         if not color_list is None:
             ell_color = color_list
-        if ell_color == 'distinct':
+        if isinstance(ell_color, str) and ell_color == 'distinct':
             ell_color = distinct_colors(len(kpts))
         ellipse_collection.set_edgecolor(ell_color)
         ax.add_collection(ellipse_collection)
     if pts:
         if color_list is None:
-            color_list = [pts_color for _ in xrange(len(x))]
+            color_list = [pts_color for _ in range(len(x))]
         ax.autoscale(enable=False)
         ax.scatter(x, y, c=color_list, s=2 * pts_size, marker='o', edgecolor='none')
         #ax.autoscale(enable=False)
@@ -1939,8 +1971,9 @@ def draw_boxedX(xywh, color=RED, lw=2, alpha=.5, theta=0):
     trans = trans + ax.transData
     width_list = [lw] * len(segments)
     color_list = [color] * len(segments)
-    line_group = LineCollection(segments, width_list, color_list, alpha=alpha,
-                                transOffset=trans)
+    line_group = LineCollection(
+        segments, linewidths=width_list, colors=color_list, alpha=alpha,
+        transOffset=trans)
     ax.add_collection(line_group)
 
 

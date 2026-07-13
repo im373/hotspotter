@@ -1,28 +1,20 @@
+# HotSpotter port notes:
+# Updated Qt dialogs, slots, and matplotlib interaction helpers for PyQt5.
+# Added logging-friendly orientation/ROI interaction behavior.
 
 from hscom import __common__
 (print, print_, print_on, print_off,
  rrr, profile) = __common__.init(__name__, '[guitools]')
 # Python
+import logging
+import math
 from os.path import split
 import sys
-#import warnings
 # Science
 import numpy as np
 # Qt
-if 0:
-    from PyQt4 import QtCore, QtGui
-    from PyQt4.QtCore import Qt
-    from PyQt5.QtGui import QApplication
-    QtWidgets = QtGui
-else:
-    from matplotlib.backends import backend_qt5 as backend_qt
-    from PyQt5 import QtCore
-    from PyQt5 import QtGui
-    from PyQt5.QtCore import *
-    from PyQt5.QtGui import *
-    from PyQt5.QtWidgets import *
-    from PyQt5.QtWidgets import QApplication
-    from PyQt5 import QtWidgets
+from PyQt5 import QtCore
+from PyQt5 import QtWidgets
 
 # HotSpotter
 from hscom import fileio as io
@@ -48,14 +40,14 @@ def configure_matplotlib():
     mplbackend = matplotlib.get_backend()
     if multiprocessing.current_process().name == 'MainProcess':
         print('[*guitools] current mplbackend is: %r' % mplbackend)
-        print('[*guitools] matplotlib.use(Qt4Agg)')
+        print('[*guitools] matplotlib.use(Qt5Agg)')
     else:
         return
     matplotlib.rcParams['toolbar'] = 'toolbar2'
     matplotlib.rc('text', usetex=False)
     #matplotlib.rcParams['text'].usetex = False
-    if mplbackend != 'Qt4Agg':
-        matplotlib.use('Qt4Agg', warn=True, force=True)
+    if mplbackend != 'Qt5Agg':
+        matplotlib.use('Qt5Agg', force=True)
         mplbackend = matplotlib.get_backend()
         if multiprocessing.current_process().name == 'MainProcess':
             print('[*guitools] current mplbackend is: %r' % mplbackend)
@@ -188,41 +180,51 @@ def drawing(func):
 @profile
 def select_orientation():
     #from matplotlib.backend_bases import mplDeprecation
-    print('[*guitools] Define an orientation angle by clicking two points')
+    log = logging.getLogger('root').info
+    log('[*guitools] Define an orientation angle by clicking two points')
+    fig = None
+    oldcbfn = None
     try:
         # Compute an angle from user interaction
         sys.stdout.flush()
         fig = df2.gcf()
         oldcbid, oldcbfn = df2.disconnect_callback(fig, 'button_press_event')
-        #with warnings.catch_warnings():
-            #warnings.filterwarnings("ignore", category=mplDeprecation)
-        pts = np.array(fig.ginput(2))
-        #print('[*guitools] ginput(2) = %r' % pts)
-        # Get reference point to origin
+        fig.canvas.draw_idle()
+        log('[*guitools] waiting for 2 points from ginput')
+        pts = np.asarray(fig.ginput(2))
+        log('[*guitools] ginput returned pts=%r' % (pts,))
+        # if len(pts) != 2:
+        #     print('[*guitools] orientation selection cancelled: pts=%r' % (pts,))
+        #     return None
         refpt = pts[1] - pts[0]
-        #theta = np.math.atan2(refpt[1], refpt[0])
-        theta = np.math.atan2(refpt[1], refpt[0])
-        print('The angle in radians is: %r' % theta)
-        df2.connect_callback(fig, 'button_press_event', oldcbfn)
+        theta = math.atan2(refpt[1], refpt[0])
+        log('[*guitools] theta=%r refpt=%r' % (theta, refpt))
         return theta
     except Exception as ex:
-        print('Annotate Orientation Failed %r' % ex)
+        log('[*guitools] Annotate Orientation Failed %r' % ex)
         return None
+    finally:
+        if fig is not None:
+            df2.connect_callback(fig, 'button_press_event', oldcbfn)
 
 
 @profile
 def select_roi():
     #from matplotlib.backend_bases import mplDeprecation
     print('[*guitools] Define a Rectanglular ROI by clicking two points.')
+    fig = None
+    oldcbfn = None
     try:
         sys.stdout.flush()
         fig = df2.gcf()
         # Disconnect any other button_press events
         oldcbid, oldcbfn = df2.disconnect_callback(fig, 'button_press_event')
-        #with warnings.catch_warnings():
-            #warnings.filterwarnings("ignore", category=mplDeprecation)
+        fig.canvas.draw_idle()
         pts = fig.ginput(2)
         print('[*guitools] ginput(2) = %r' % (pts,))
+        if len(pts) != 2:
+            print('[*guitools] ROI selection cancelled: pts=%r' % (pts,))
+            return None
         [(x1, y1), (x2, y2)] = pts
         xm = min(x1, x2)
         xM = max(x1, x2)
@@ -230,13 +232,14 @@ def select_roi():
         yM = max(y1, y2)
         xywh = list(map(int, list(map(round, (xm, ym, xM - xm, yM - ym)))))
         roi = np.array(xywh, dtype=np.int32)
-        # Reconnect the old button press events
-        df2.connect_callback(fig, 'button_press_event', oldcbfn)
         print('[*guitools] roi = %r ' % (roi,))
         return roi
     except Exception as ex:
         print('[*guitools] ROI selection Failed:\n%r' % (ex,))
         return None
+    finally:
+        if fig is not None:
+            df2.connect_callback(fig, 'button_press_event', oldcbfn)
 
 
 def _addOptions(msgBox, options):
@@ -359,7 +362,12 @@ def select_files(caption='Select Files:', directory=None, name_filter=None):
     qdlg = QtWidgets.QFileDialog()
     qfile_list = qdlg.getOpenFileNames(caption=caption, directory=directory, filter=name_filter)
     print('qfile_list = {!r}'.format(qfile_list))
-    file_list = list(map(str, qfile_list))
+    if isinstance(qfile_list, tuple):
+        qfile_list = qfile_list[0]
+    if isinstance(qfile_list, str):
+        file_list = [qfile_list]
+    else:
+        file_list = [str(fpath) for fpath in qfile_list]
     print('Selected %d files' % len(file_list))
     io.global_cache_write('select_directory', directory)
     return file_list
@@ -410,7 +418,7 @@ def init_qtapp():
     is_root = app is None
     if is_root:  # if not in qtconsole
         print('[*guitools] Initializing QApplication')
-        app = QApplication(sys.argv)
+        app = QtWidgets.QApplication(sys.argv)
         QAPP = app
     try:
         __IPYTHON__
@@ -448,11 +456,11 @@ def exec_core_event_loop(app):
     # This works but does not allow IPython injection
     print('[*guitools] running core application loop.')
     try:
-        from IPython.lib.inputhook import enable_qt4
-        enable_qt4()
-        from IPython.lib.guisupport import start_event_loop_qt4
-        print('Starting ipython qt4 hook')
-        start_event_loop_qt4(app)
+        from IPython.lib.inputhook import enable_qt5
+        enable_qt5()
+        from IPython.lib.guisupport import start_event_loop_qt5
+        print('Starting ipython qt5 hook')
+        start_event_loop_qt5(app)
     except ImportError:
         pass
     app.exec_()
@@ -515,7 +523,7 @@ def popup_menu(widget, opt2_callback, parent=None):
         for _slot in get_scope(parent, '_popup_scope'):
             parent.customContextMenuRequested.disconnect(_slot)
         clear_scope(parent, '_popup_scope')
-        parent.setContextMenuPolicy(Qt.CustomContextMenu)
+        parent.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         parent.customContextMenuRequested.connect(popup_slot)
         enfore_scope(parent, popup_slot, '_popup_scope')
     return popup_slot

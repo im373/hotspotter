@@ -1,3 +1,7 @@
+# HotSpotter port notes:
+# Modernized core HotSpotter logic for Python 3 and NumPy 2 compatibility.
+# Adjusted chip, feature, query, and table handling for current dependencies.
+
 ''' Computes feature representations '''
 
 from hscom import __common__
@@ -66,7 +70,7 @@ def sequential_feat_load(feat_cfg, feat_fpath_list):
         mark_progress, end_progress = util.progress_func(nFeats, prog_label)
         for count, feat_path in enumerate(feat_fpath_list):
             try:
-                npz = np.load(feat_path, mmap_mode=None)
+                npz = np.load(feat_path, mmap_mode=None, allow_pickle=True)
             except IOError:
                 print('\n')
                 util.checkpath(feat_path, verbose=True)

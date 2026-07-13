@@ -1,4 +1,7 @@
-from __future__ import division, print_function
+# HotSpotter port notes:
+# Updated visualization code for modern matplotlib and Python 3 behavior.
+# Normalized keypoint/SIFT drawing paths for current numpy array shapes.
+
 from hscom import __common__
 (print, print_, print_on, print_off, rrr, profile, printDBG)\
     = __common__.init(__name__, '[inter]', DEBUG=False)
@@ -53,7 +56,8 @@ def begin_interaction(type_, fnum):
 #==========================
 
 @profile
-def interact_image(hs, gx, sel_cxs=[], select_cx_func=None, fnum=1, **kwargs):
+def interact_image(hs, gx, sel_cxs=[], select_cx_func=None, fnum=1,
+                   nodraw=False, **kwargs):
     fig = begin_interaction('image', fnum)
 
     # Create callback wrapper
@@ -65,7 +69,8 @@ def interact_image(hs, gx, sel_cxs=[], select_cx_func=None, fnum=1, **kwargs):
             print(' ...out of axis')
             kwargs['draw_lbls'] = not kwargs.pop('draw_lbls', True)
             interact_image(hs, gx, sel_cxs=sel_cxs,
-                           select_cx_func=select_cx_func, **kwargs)
+                           select_cx_func=select_cx_func, nodraw=True,
+                           **kwargs)
         else:
             ax = event.inaxes
             hs_viewtype = ax.__dict__.get('_hs_viewtype', '')
@@ -82,11 +87,12 @@ def interact_image(hs, gx, sel_cxs=[], select_cx_func=None, fnum=1, **kwargs):
             cx = cx_list[centx]
             print(' ...clicked cx=%r' % cx)
             if select_cx_func is not None:
-                select_cx_func(cx)
+                select_cx_func(cx, nodraw=True)
         viz.draw()
 
     viz.show_image(hs, gx, sel_cxs, **kwargs)
-    viz.draw()
+    if not nodraw:
+        viz.draw()
     df2.connect_callback(fig, 'button_press_event', _on_image_click)
 
 
@@ -95,7 +101,8 @@ def interact_image(hs, gx, sel_cxs=[], select_cx_func=None, fnum=1, **kwargs):
 #==========================
 
 @profile
-def interact_name(hs, nx, sel_cxs=[], select_cx_func=None, fnum=5, **kwargs):
+def interact_name(hs, nx, sel_cxs=[], select_cx_func=None, fnum=5,
+                  nodraw=False, **kwargs):
     fig = begin_interaction('name', fnum)
 
     def _on_name_click(event):
@@ -111,11 +118,13 @@ def interact_name(hs, nx, sel_cxs=[], select_cx_func=None, fnum=5, **kwargs):
                 cx = ax.__dict__.get('_hs_cx')
                 print('... cx=%r' % cx)
                 viz.show_name(hs, nx, fnum=fnum, sel_cxs=[cx])
-                select_cx_func(cx)
+                if select_cx_func is not None:
+                    select_cx_func(cx, nodraw=True)
         viz.draw()
 
     viz.show_name(hs, nx, fnum=fnum, sel_cxs=sel_cxs)
-    viz.draw()
+    if not nodraw:
+        viz.draw()
     df2.connect_callback(fig, 'button_press_event', _on_name_click)
     pass
 
@@ -127,7 +136,8 @@ def interact_name(hs, nx, sel_cxs=[], select_cx_func=None, fnum=5, **kwargs):
 
 # CHIP INTERACTION 2
 @profile
-def interact_chip(hs, cx, fnum=2, figtitle=None, fx=None, **kwargs):
+def interact_chip(hs, cx, fnum=2, figtitle=None, fx=None, nodraw=False,
+                  **kwargs):
     fig = begin_interaction('chip', fnum)
     # Get chip info (make sure get_chip is called first)
     rchip = hs.get_chip(cx)
@@ -188,12 +198,14 @@ def interact_chip(hs, cx, fnum=2, figtitle=None, fx=None, **kwargs):
         _select_ith_kpt(fx)
     else:
         _chip_view(draw_ell=False, draw_pts=False)
-    viz.draw()
+    if not nodraw:
+        viz.draw()
     df2.connect_callback(fig, 'button_press_event', _on_chip_click)
 
 
 @profile
-def interact_keypoints(rchip, kpts, desc, fnum=0, figtitle=None, nodraw=False, **kwargs):
+def interact_keypoints(rchip, kpts, desc, fnum=0, figtitle=None, nodraw=False,
+                       **kwargs):
     fig = begin_interaction('keypoint', fnum)
     annote_ptr = [1]
 
@@ -252,7 +264,7 @@ def interact_keypoints(rchip, kpts, desc, fnum=0, figtitle=None, nodraw=False, *
 
 @profile
 def interact_chipres(hs, res, cx=None, fnum=4, figtitle='Inspect Query Result',
-                     same_fig=False, **kwargs):
+                     same_fig=False, nodraw=False, **kwargs):
     'Interacts with a single chipres, '
     fig = begin_interaction('chipres', fnum)
     qcx = res.qcx
@@ -398,7 +410,8 @@ def interact_chipres(hs, res, cx=None, fnum=4, figtitle='Inspect Query Result',
             hs_cx = ax.__dict__.get('_hs_cx', None)
             hs_fx = ax.__dict__.get('_hs_fx', None)
             if hs_cx is not None:
-                interact_chip(hs, hs_cx, fx=hs_fx, fnum=df2.next_fnum())
+                interact_chip(hs, hs_cx, fx=hs_fx, fnum=df2.next_fnum(),
+                              nodraw=True)
         else:
             print('...Unknown viewtype')
         viz.draw()
@@ -427,4 +440,5 @@ def interact_chipres(hs, res, cx=None, fnum=4, figtitle='Inspect Query Result',
         ('cancel', lambda: print('cancel')), ]
     guitools.popup_menu(fig.canvas, opt2_callback, fig.canvas)
     df2.connect_callback(fig, 'button_press_event', _click_chipres_click)
-    viz.draw()
+    if not nodraw:
+        viz.draw()

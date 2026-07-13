@@ -1,4 +1,8 @@
-#!/usr/bin/env python
+# HotSpotter port notes:
+# Updated application entry point for Python 3 startup behavior.
+# Kept GUI/bootstrap flow aligned with the converted PyQt5 stack.
+
+#!/usr/bin/env python3
 '''Hotspotter main script
 Runs hotspotter gui
 
@@ -7,7 +11,6 @@ Import as few things as possible at the global level in this module. Import at
 the function level instead. The reason is multiprocesing will fork this module
 many times. Less imports means less parallel overhead.
 '''
-from __future__ import division, print_function
 import multiprocessing
 
 

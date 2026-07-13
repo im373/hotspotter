@@ -1,3 +1,7 @@
+# HotSpotter port notes:
+# Updated shared compatibility helpers for Python 3, NumPy 2, and Windows paths.
+# Kept logging, preferences, file I/O, and argument handling aligned with modern runtimes.
+
 '''
 This module will be renamed to util.py
 
@@ -274,8 +278,8 @@ def intersect2d_numpy(A, B):
 
 def intersect2d(A, B):
     Cset  =  set(tuple(x) for x in A).intersection(set(tuple(x) for x in B))
-    Ax = np.array([x for x, item in enumerate(A) if tuple(item) in Cset], dtype=np.int)
-    Bx = np.array([x for x, item in enumerate(B) if tuple(item) in Cset], dtype=np.int)
+    Ax = np.array([x for x, item in enumerate(A) if tuple(item) in Cset], dtype=int)
+    Bx = np.array([x for x, item in enumerate(B) if tuple(item) in Cset], dtype=int)
     C = np.array(tuple(Cset))
     return C, Ax, Bx
 
@@ -1011,7 +1015,7 @@ def read_from(fpath):
         return None
     print('[helpers] * Reading text file: %r ' % split(fpath)[1])
     try:
-        text = open(fpath, 'r').read()
+        text = read_text(fpath)
     except Exception:
         print('[helpers] * Error reading fpath=%r' % fpath)
         raise
@@ -1020,10 +1024,25 @@ def read_from(fpath):
     return text
 
 
+def read_text(fpath, encodings=('utf-8-sig', 'mbcs', 'cp950')):
+    last_ex = None
+    for encoding in encodings:
+        try:
+            with open(fpath, 'r', encoding=encoding, errors='strict') as file:
+                return file.read()
+        except UnicodeDecodeError as ex:
+            last_ex = ex
+            continue
+    if last_ex is not None:
+        raise last_ex
+    with open(fpath, 'r', encoding='utf-8-sig', errors='surrogateescape') as file:
+        return file.read()
+
+
 def write_to(fpath, to_write):
     if __PRINT_WRITES__:
         print('[helpers] * Writing to text file: %r ' % fpath)
-    with open(fpath, 'w') as file:
+    with open(fpath, 'w', encoding='utf-8') as file:
         file.write(to_write)
 
 
@@ -1033,7 +1052,7 @@ def save_pkl(fpath, data):
 
 
 def load_pkl(fpath):
-    with open(fpath, 'wb') as file:
+    with open(fpath, 'rb') as file:
         return pickle.load(file)
 
 
@@ -1047,7 +1066,7 @@ def save_npz(fpath, *args, **kwargs):
 def load_npz(fpath):
     print('[helpers] load_npz: %r ' % split(fpath)[1])
     print('[helpers] filesize is: ' + file_megabytes_str(fpath))
-    npz = np.load(fpath, mmap_mode='r + ')
+    npz = np.load(fpath, mmap_mode='r + ', allow_pickle=True)
     data = tuple(npz[key] for key in sorted(npz.keys()))
     #print(' * npz.keys() = %r ' + str(npz.keys()))
     npz.close()
@@ -1106,12 +1125,12 @@ class ModulePrintLock():
     ## Find invalid chars
     #ntfs_inval = '< > : " / \ | ? *'.split(' ')
     #other_inval = [' ', '\'', '.']
-    ##case_inval = map(chr, xrange(97, 123))
-    #case_inval = map(chr, xrange(65, 91))
+    ##case_inval = map(chr, range(97, 123))
+    #case_inval = map(chr, range(65, 91))
     #invalid_chars = set(ntfs_inval + other_inval + case_inval)
     ## Find valid chars
     #valid_chars = []
-    #for index in xrange(32, 127):
+    #for index in range(32, 127):
         #char = chr(index)
         #if not char in invalid_chars:
             #print index, chr(index)
@@ -1168,7 +1187,7 @@ def load_cache_npz(input_data, uid='', cache_dir='.', is_sparse=False):
                 with open(data_fpath, 'rb') as file_:
                     data = pickle.load(file_)
             else:
-                npz = np.load(data_fpath)
+                npz = np.load(data_fpath, allow_pickle=True)
                 data = npz['arr_0']
                 npz.close()
             print('...success')
@@ -1596,7 +1615,8 @@ def runprofile(cmd, globals_=globals(), locals_=locals()):
     # RUN SNAKE
     print('[helpers] Profiled Output: ' + cProfOut_fpath)
     if sys.platform == 'win32':
-        rsr_fpath = 'C:/Python27/Scripts/runsnake.exe'
+        rsr_fpath = os.path.join(os.path.dirname(sys.executable),
+                                 'Scripts', 'runsnake.exe')
     else:
         rsr_fpath = 'runsnake'
     view_cmd = rsr_fpath + ' "' + cProfOut_fpath + '"'

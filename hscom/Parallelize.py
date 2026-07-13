@@ -1,3 +1,7 @@
+# HotSpotter port notes:
+# Updated shared compatibility helpers for Python 3, NumPy 2, and Windows paths.
+# Kept logging, preferences, file I/O, and argument handling aligned with modern runtimes.
+
 # http://docs.python.org/2/library/multiprocessing.html
 
 from . import __common__
@@ -18,7 +22,7 @@ def _calculate(func, args):
     printDBG('[parallel] * %s calculating...' % (multiprocessing.current_process().name,))
     result = func(*args)
     #arg_names = func.func_code.co_varnames[:func.func_code.co_argcount]
-    #arg_list  = [n+'='+str(v) for n,v in izip(arg_names, args)]
+    #arg_list  = [n+'='+str(v) for n,v in zip(arg_names, args)]
     #arg_str = '\n    *** '+str('\n    *** '.join(arg_list))
     printDBG('[parallel]  * %s finished:\n    ** %s' %
             (multiprocessing.current_process().name,

@@ -1,6 +1,10 @@
+# HotSpotter port notes:
+# Updated external feature wrappers for Python 3 and current pyhesaff behavior.
+# Normalized image/keypoint data passed between wrappers and dependencies.
+
 
 # Standard
-#from itertools import izip
+#from itertools import zip
 #from ctypes.util import find_library
 from os.path import realpath, dirname
 from . import ctypes_interface
@@ -8,6 +12,8 @@ import ctypes as C
 import collections
 # Scientific
 import numpy as np
+# Hotspotter
+from hscom import fileio as io
 # Hotspotter
 from hscom import __common__
 print, print_, print_on, print_off, rrr, profile, printDBG =\
@@ -96,6 +102,20 @@ def _make_hesaff_cpp_params(**kwargs):
             print('[pyhesaff] WARNING: key=%r is not known' % key)
 
 
+def _load_detect_image(img_fpath):
+    """
+    The installed pyhesaff backend may expect an image array instead of a path.
+    Load the chip with our Windows-safe reader and return a contiguous uint8 array.
+    """
+    img = io.imread(img_fpath)
+    if img is None:
+        raise IOError('Unable to load image for feature detection: %r' % (img_fpath,))
+    img = np.ascontiguousarray(img)
+    if img.dtype != np.uint8:
+        img = img.astype(np.uint8)
+    return img
+
+
 def new_hesaff(img_fpath, **kwargs):
     # Make detector and read image
     hesaff_params = hesaff_param_dict.copy()
@@ -108,7 +128,16 @@ def new_hesaff(img_fpath, **kwargs):
 def detect_kpts(img_fpath, use_adaptive_scale=False, **kwargs):
     if hesaff_lib is None:
         import pyhesaff
-        kpts, desc = pyhesaff.detect_feats_in_image(img_fpath, use_adaptive_scale=use_adaptive_scale)
+        img = _load_detect_image(img_fpath)
+        detect_fn = getattr(pyhesaff, 'detect_feats_in_image', None)
+        if detect_fn is None:
+            detect_fn = getattr(pyhesaff, 'detect_image')
+        try:
+            kpts, desc = detect_fn(img, use_adaptive_scale=use_adaptive_scale)
+        except TypeError:
+            # Some builds expose a lower-level detector only.
+            kpts, desc = pyhesaff.detect_image(
+                img, use_adaptive_scale=use_adaptive_scale)
         return kpts, desc
 
     #print('Detecting Keypoints')

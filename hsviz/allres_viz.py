@@ -1,4 +1,7 @@
-from __future__ import division, print_function
+# HotSpotter port notes:
+# Updated visualization code for modern matplotlib and Python 3 behavior.
+# Normalized keypoint/SIFT drawing paths for current numpy array shapes.
+
 from hscom import __common__
 (print, print_, print_on, print_off, rrr, profile, printDBG) = \
     __common__.init(__name__, '[allres-viz]', DEBUG=False)
@@ -168,7 +171,7 @@ def dump_gt_matches(allres):
     hs = allres.hs
     qcx2_res = allres.qcx2_res
     'Displays the matches to ground truth for all queries'
-    for qcx in xrange(0, len(qcx2_res)):
+    for qcx in range(0, len(qcx2_res)):
         res = qcx2_res[qcx]
         res.show_gt_matches(hs, fnum=FIGNUM)
         __dump_or_browse(allres.hs, 'gt_matches' + allres.title_suffix)
@@ -194,7 +197,7 @@ def dump_orgres_matches(allres, orgres_type):
 
 @profile
 def show_descriptors_match_distances(orgres2_distance, fnum=1, db_name='', **kwargs):
-    disttype_list = orgres2_distance.itervalues().next().keys()
+    disttype_list = next(iter(orgres2_distance.values())).keys()
     orgtype_list = orgres2_distance.keys()
     (nRow, nCol) = len(orgtype_list), len(disttype_list)
     nColors = nRow * nCol

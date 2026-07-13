@@ -1,3 +1,7 @@
+# HotSpotter port notes:
+# Modernized core HotSpotter logic for Python 3 and NumPy 2 compatibility.
+# Adjusted chip, feature, query, and table handling for current dependencies.
+
 
 from hscom import __common__
 (print, print_, print_on, print_off,
@@ -605,13 +609,17 @@ class HotSpotter(DynStruct):
     # ---------------
     @profile
     def change_roi(hs, cx, new_roi):
+        cid = hs.tables.cx2_cid[cx]
         hs.delete_cxdata(cx)  # Delete old data
+        hs.delete_ciddata(cid)  # Force chip recomputation with the new ROI
         hs.delete_queryresults_dir()  # Query results are now invalid
         hs.tables.cx2_roi[cx] = new_roi
 
     @profile
     def change_theta(hs, cx, new_theta):
+        cid = hs.tables.cx2_cid[cx]
         hs.delete_cxdata(cx)  # Delete old data
+        hs.delete_ciddata(cid)  # Force chip recomputation with the new theta
         hs.delete_queryresults_dir()  # Query results are now invalid
         hs.tables.cx2_theta[cx] = new_theta
 
@@ -709,6 +717,11 @@ class HotSpotter(DynStruct):
     @profile
     @util.indent_decor('[hs.add_images]')
     def add_images(hs, fpath_list, move_images=True):
+        fpath_list = util.ensure_iterable(fpath_list)
+        if isinstance(fpath_list, str):
+            fpath_list = [fpath_list]
+        else:
+            fpath_list = [str(fpath) for fpath in fpath_list]
         nImages = len(fpath_list)
         print('[hs.add_imgs] adding %d images' % nImages)
         img_dir = hs.dirs.img_dir
@@ -946,16 +959,21 @@ class HotSpotter(DynStruct):
     @tools.class_iter_input
     @profile
     def gx2_gname(hs, gx_input, full=False, prefix=None):
+        if gx_input is None:
+            raise ValueError('gx_input cannot be None')
         gx2_gname_ = hs.tables.gx2_gname
-        gname_list = [gx2_gname_[gx] for gx in iter(gx_input)]
+        gx_list = np.atleast_1d(gx_input).tolist()
+        gname_list = [gx2_gname_[int(gx)] for gx in gx_list]
         if full or prefix is not None:
             img_dir = hs.dirs.img_dir if prefix is None else prefix
-            gname_list = [join(img_dir, gname) for gname in iter(gname_list)]
+            gname_list = [join(img_dir, str(gname)) for gname in gname_list]
         return gname_list
 
     @tools.lru_cache(max_size=7)
     @profile
     def gx2_image(hs, gx):
+        if gx is None:
+            raise ValueError('gx cannot be None')
         img_fpath = hs.gx2_gname(gx, full=True)
         img = io.imread(img_fpath)
         return img
@@ -965,7 +983,7 @@ class HotSpotter(DynStruct):
     def gx2_image_size(hs, gx_input):
         gfpath_list = hs.gx2_gname(gx_input, full=True)
         # RCOS TODO: Do you need to do a .close here? or does gc take care of it?
-        gsize_list = [Image.open(gfpath).size for gfpath in iter(gfpath_list)]
+        gsize_list = [Image.open(gfpath).size for gfpath in gfpath_list]
         return gsize_list
 
     @tools.class_iter_input
@@ -1117,6 +1135,12 @@ class HotSpotter(DynStruct):
     def _try_cxlist_get(hs, cx_input, cx2_var):
         ''' Input: cx_input: a vector input, cx2_var: a array mapping cx to a
         variable Returns: list of values corresponding with cx_input '''
+        max_cx = len(cx2_var)
+        for cx in cx_input:
+            if cx is None:
+                raise IndexError('cx_input contains None')
+            if cx < 0 or cx >= max_cx:
+                raise IndexError('cx=%r out of range for size=%r' % (cx, max_cx))
         ret = [cx2_var[cx] for cx in cx_input]
         # None is invalid in a cx2_var array
         if any([val is None for val in ret]):

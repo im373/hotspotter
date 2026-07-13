@@ -1,3 +1,5 @@
+# Not in main application flow.
+# This helper/test/setup module is outside the normal HotSpotter runtime.
 # Adapted from Matlab to Python by Jon Crall
 # Original Matlab Source: 
 # http://www.mathworks.se/matlabcentral/fileexchange/36657-fast-bilateral-filter/content/FastBilateralFilter/shiftableBF.m

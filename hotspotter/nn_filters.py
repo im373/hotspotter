@@ -1,3 +1,7 @@
+# HotSpotter port notes:
+# Modernized core HotSpotter logic for Python 3 and NumPy 2 compatibility.
+# Adjusted chip, feature, query, and table handling for current dependencies.
+
 
 from hscom import __common__
 print, print_, print_on, print_off, rrr, profile, printDBG =\
@@ -40,7 +44,7 @@ def mark_name_valid_normalizers(qfx2_normnx, qfx2_topnx, qnx=None):
     #columns = qfx2_topnx
     #matrix = qfx2_normnx
     Kn = qfx2_normnx.shape[1]
-    qfx2_valid = True - compare_matrix_columns(qfx2_normnx, qfx2_topnx)
+    qfx2_valid = ~compare_matrix_columns(qfx2_normnx, qfx2_topnx)
     if qnx is not None:
         qfx2_valid = np.logical_and(qfx2_normnx != qnx, qfx2_valid)
     qfx2_validlist = [np.where(normrow)[0] for normrow in qfx2_valid]
@@ -200,12 +204,12 @@ def nn_roidist_weight(hs, qcx2_nns, qreq):
         qfx2_chipdiag2 = np.sqrt((qfx2_chipsize2 ** 2).sum(2))
         # Get query relative xy keypoints #.0160s / #.0180s (+cast)
         qdiag = np.sqrt((array(cx2_rchip_size[qcx]) ** 2).sum())
-        qfx2_xy1 = array(qfx2_kpts[:, 0:2], np.float)
+        qfx2_xy1 = array(qfx2_kpts[:, 0:2], dtype=float)
         qfx2_xy1[:, 0] /= qdiag
         qfx2_xy1[:, 1] /= qdiag
         # Get database relative xy keypoints
         qfx2_xy2 = array([cx2_kpts[cx][fx, 0:2] for (cx, fx) in
-                          zip(qfx2_cx.flat, qfx2_fx.flat)], np.float)
+                          zip(qfx2_cx.flat, qfx2_fx.flat)], dtype=float)
         qfx2_xy2.shape = (nQuery, K, 2)
         qfx2_xy2[:, :, 0] /= qfx2_chipdiag2
         qfx2_xy2[:, :, 1] /= qfx2_chipdiag2
@@ -233,11 +237,11 @@ def nn_scale_weight(hs, qcx2_nns, qreq):
         nQuery = len(qfx2_dx)
         qfx2_cx = dx2_cx[qfx2_nn]
         qfx2_fx = dx2_fx[qfx2_nn]
-        qfx2_det1 = array(qfx2_kpts[:, [2, 4]], np.float).prod(1)
+        qfx2_det1 = array(qfx2_kpts[:, [2, 4]], dtype=float).prod(1)
         qfx2_det1 = np.sqrt(1.0 / qfx2_det1)
         qfx2_K_det1 = np.rollaxis(np.tile(qfx2_det1, (K, 1)), 1)
         qfx2_det2 = array([cx2_kpts[cx][fx, [2, 4]] for (cx, fx) in
-                           zip(qfx2_cx.flat, qfx2_fx.flat)], np.float).prod(1)
+                           zip(qfx2_cx.flat, qfx2_fx.flat)], dtype=float).prod(1)
         qfx2_det2.shape = (nQuery, K)
         qfx2_det2 = np.sqrt(1.0 / qfx2_det2)
         qfx2_scaledist = qfx2_det2 / qfx2_K_det1

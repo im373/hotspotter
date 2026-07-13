@@ -1,3 +1,5 @@
+# Not in main application flow.
+# This helper/test/setup module is outside the normal HotSpotter runtime.
 # -*- coding: utf-8 -*-
 #
 # Copyright 2009 Pierre Raybaut
