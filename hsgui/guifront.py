@@ -484,7 +484,6 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
     @slot_(str, list, list, list, list)
     @blocking
     def populate_tbl(front, tblname, col_fancyheaders, col_editable, row_list, datatup_list):
-        #front.printDBG('populate_tbl(%s)' % table_name)
         tblname = str(tblname)
         fancytab_dict = {
             'gxs': 'Image Table',
@@ -499,18 +498,11 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
             'res': front.ui.res_TBL,
         }
         tbl = tbl_dict[tblname]
-        #try:
-            #tbl = front.ui.__dict__['%s_TBL' % tblname]
-        #except KeyError:
-            #ui_keys = front.ui.__dict__.keys()
-            #tblname_list = [key for key in ui_keys if key.find('_TBL') >= 0]
-            #msg = '\n'.join(['Invalid tblname = %s_TBL' % tblname,
-                             #'valid names:\n  ' + '\n  '.join(tblname_list)])
-            #raise Exception(msg)
+
         front._populate_table(tblname, tbl, col_fancyheaders, col_editable, row_list, datatup_list)
+        
         # Set the tab text to show the number of items listed
-        text = fancytab_dict[tblname] + ' : %d' % len(row_list)
-        set_tabwidget_text(front, tblname, text)
+        set_tabwidget_text(front, tblname, f"{fancytab_dict[tblname]} ({len(row_list)})")
 
     def _populate_table(front, tblname, tbl, col_fancyheaders, col_editable, row_list, datatup_list):
         # TODO: for chip table: delete metedata column
@@ -520,8 +512,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
         # RCOS TODO: How do we get the clicked item on a right click?
         # RCOS TODO:
         # The data tables should not use the item model
-        # Instead they should use the more efficient and powerful
-        # QAbstractItemModel / QAbstractTreeModel
+        # Instead they should use the more efficient and powerful QAbstractItemModel / QAbstractTreeModel
         def set_header_context_menu(hheader):
             hheader.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
             opt2_callback = [
@@ -566,10 +557,9 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
             data_tup = datatup_list[row]
             for col, data in enumerate(data_tup):
                 item = QtWidgets.QTableWidgetItem()
-                # RCOS TODO: Pass in datatype here.
                 # BOOLEAN DATA
-                if tools.is_bool(data) or data == 'True' or data == 'False':
-                    check_state = QtCore.Qt.Checked if bool(data) else QtCore.Qt.Unchecked
+                if tools.is_bool(data):
+                    check_state = QtCore.Qt.Checked if data else QtCore.Qt.Unchecked
                     item.setCheckState(check_state)
                     #DEBUG_COL_DTYPE(col, 'bool')
                     #item.setData(Qt.DisplayRole, bool(data))
