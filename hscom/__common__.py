@@ -56,6 +56,7 @@ __INDENT__     = argv_flag('--indent', True)
  #|  %(message)s         The result of record.getMessage(), computed just as
  #|                      the record is emitted
 
+@DEPRECATED
 def add_logging_handler(handler, default_format=True):
     """Attach an extra handler to the application root logger.
 

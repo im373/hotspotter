@@ -27,10 +27,15 @@ rrr = make_reloader(__name__, '[pref]')
 # GLOBALS
 # ---
 PrefNode = DynStruct
+VERY_VERBOSE = False
 
 
 def printDBG(msg):
     logger.debug(f"{msg}")
+
+def pref_trace(msg):
+    if VERY_VERBOSE:
+        logger.debug(f"{msg}")
 
 
 # ---
@@ -194,7 +199,7 @@ class Pref(PrefNode):
         return choice_obj.get_tuple()
 
     def __overwrite_child_attr(self, name, attr):
-        printDBG(f"overwrite_attr: {self._intern.name}.{name} = {attr!r}")
+        pref_trace(f"overwrite_attr: {self._intern.name}.{name} = {attr!r}")
         # get child node to "overwrite"
         row = self._tree.child_names.index(name)
         child = self._tree.child_list[row]
@@ -222,7 +227,7 @@ class Pref(PrefNode):
         if isinstance(attr, Pref):
             # Child attribute already has a Pref wrapping
 
-            printDBG(f"new_attr: {self._intern.name}.{name} = {attr.value()!r}")
+            pref_trace(f"new_attr: {self._intern.name}.{name} = {attr.value()!r}")
             new_childx = len(self._tree.child_names)
             # Children know about parents
             attr._tree.parent = self     # Give child parent
@@ -425,8 +430,18 @@ class Pref(PrefNode):
         return self._tree.aschildx
 
     def qt_get_child(self, row):
+        if row < 0 or row >= self.qt_row_count():
+            logger.debug(f"Preference child row out of range: row={row}, rows={self.qt_row_count()}")
+            return None
         row_offset = (np.array(self._tree.hidden_children) <= row).sum()
-        return self._tree.child_list[row + row_offset]
+        child_index = row + row_offset
+        if child_index < 0 or child_index >= len(self._tree.child_list):
+            logger.debug(
+                "Preference child index out of range: "
+                f"row={row}, child_index={child_index}, children={len(self._tree.child_list)}"
+            )
+            return None
+        return self._tree.child_list[child_index]
 
     def qt_row_count(self):
         return len(self._tree.child_list) - len(self._tree.hidden_children)
@@ -457,13 +472,13 @@ class Pref(PrefNode):
 
     def qt_set_leaf_data(self, qvar):
         'Sets backend data using Qt editor values'
-        logger.debug(f"qt_set_leaf_data: qvar={qvar!r}")
-        logger.debug(f"qt_set_leaf_data: qvar={str(qvar)}")
-        logger.debug(f"qt_set_leaf_data: qvar={_qt_to_string(qvar)}")
+        pref_trace(f"qt_set_leaf_data: qvar={qvar!r}")
+        pref_trace(f"qt_set_leaf_data: qvar={str(qvar)}")
+        pref_trace(f"qt_set_leaf_data: qvar={_qt_to_string(qvar)}")
 
-        logger.debug(f"qt_set_leaf_data: _intern.name={self._intern.name!r}")
-        logger.debug(f"qt_set_leaf_data: _intern.type_={self._intern.type()!r}")
-        logger.debug(f"qt_set_leaf_data: _intern.value={self._intern.value!r}")
+        pref_trace(f"qt_set_leaf_data: _intern.name={self._intern.name!r}")
+        pref_trace(f"qt_set_leaf_data: _intern.type_={self._intern.type()!r}")
+        pref_trace(f"qt_set_leaf_data: _intern.value={self._intern.value!r}")
 
         if self._tree.parent is None:
             raise Exception('[Pref.qtleaf] Cannot set root preference')
@@ -508,8 +523,12 @@ class Pref(PrefNode):
                 elif new_val.upper() == 'FALSE':
                     new_val = False
              # save to disk after modifying data
-            logger.debug(f"qt_set_leaf_data: new_val={new_val!r}")
-            logger.debug(f"qt_set_leaf_data: type(new_val)={type(new_val)!r}")
+            pref_trace(f"qt_set_leaf_data: new_val={new_val!r}")
+            pref_trace(f"qt_set_leaf_data: type(new_val)={type(new_val)!r}")
+            old_val = self.value()
+            if old_val == new_val:
+                pref_trace(f"qt_set_leaf_data: unchanged {self._intern.name}={old_val!r}")
+                return False
             # TODO Add ability to set a callback function when certain
             # preferences are changed.
             return self._tree.parent.pref_update(self._intern.name, new_val)
@@ -579,6 +598,10 @@ class QPreferenceModel(QtCore.QAbstractItemModel):
         if parent.isValid() and parent.column() != 0:
             return QtCore.QModelIndex()
         parentPref = self.index2Pref(parent)
+        if row < 0 or col < 0:
+            return QtCore.QModelIndex()
+        if col >= parentPref.qt_col_count() or row >= parentPref.qt_row_count():
+            return QtCore.QModelIndex()
         childPref  = parentPref.qt_get_child(row)
         if childPref:
             return self.createIndex(row, col, childPref)

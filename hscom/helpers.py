@@ -52,7 +52,6 @@ rrr = make_reloader(__name__, '[util]')
 def _message_from_args(args):
     return ' '.join(str(arg) for arg in args)
 
-@DEPRECATED
 def print(*args, **kwargs):
     """Legacy module-local print shim, now routed through logging."""
     logger.debug(f"{_message_from_args(args)}")
