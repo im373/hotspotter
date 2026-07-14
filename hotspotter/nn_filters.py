@@ -3,9 +3,12 @@
 # Adjusted chip, feature, query, and table handling for current dependencies.
 
 
-from hscom import __common__
-print, print_, print_on, print_off, rrr, profile, printDBG =\
-    __common__.init(__name__, '[nnfilt]', DEBUG=False)
+import logging
+from hscom.dev_utils import make_reloader
+from hscom.profiling import profile
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[nnfilt]')
 import numpy as np
 from numpy import array
 
@@ -33,10 +36,10 @@ vdist1 = vdist[:,0:1]
 vdist2 = vdist[:,0:2]
 vdist3 = vdist[:,0:3]
 vdist4 = vdist[:,0:4]
-print(LNBNN_fn(vdist1, ndist)) * 1000
-print(LNBNN_fn(vdist2, ndist)) * 1000
-print(LNBNN_fn(vdist3, ndist)) * 1000
-print(LNBNN_fn(vdist4, ndist)) * 1000
+logger.info(LNBNN_fn(vdist1, ndist) * 1000)
+logger.info(LNBNN_fn(vdist2, ndist) * 1000)
+logger.info(LNBNN_fn(vdist3, ndist) * 1000)
+logger.info(LNBNN_fn(vdist4, ndist) * 1000)
 '''
 
 

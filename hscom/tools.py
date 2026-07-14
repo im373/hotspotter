@@ -1,17 +1,19 @@
 # HotSpotter port notes:
 # Updated shared compatibility helpers for Python 3, NumPy 2, and Windows paths.
-# Kept logging, preferences, file I/O, and argument handling aligned with modern runtimes.
+# Replaced hscom.__common__ hooks with logging/dev helpers.
 
 
-from . import __common__
-(print, print_, print_on, print_off,
- rrr, profile) = __common__.init(__name__, '[tools]')
 # Python
+import logging
 import pylru  # because we dont have functools.lru_cache
 import sys
 import types
 # Science
 import numpy as np
+from .dev_utils import make_reloader
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[tools]')
 
 # Very odd that I have to put in dtypes in two different ways.
 VALID_INT_TYPES = (int,
@@ -35,7 +37,7 @@ DEBUG = False
 
 if DEBUG:
     def printDBG(msg):
-        print(msg)
+        logger.debug(f"{msg}")
 else:
     def printDBG(msg):
         pass
@@ -87,8 +89,7 @@ def debug_exception(func):
         try:
             return func(*args, **kwargs)
         except Exception as ex:
-            print('[tools] ERROR: %s(%r, %r)' % (func.__name__, args, kwargs))
-            print('[tools] ERROR: %r' % ex)
+            logger.exception(f"ERROR: {func.__name__}({args!r}, {kwargs!r})")
             raise
     ex_wrapper.__name__ = func.__name__
     return ex_wrapper
@@ -102,24 +103,23 @@ class lru_cache(object):
         cache.__name__ = None
 
     def clear_cache(cache):
-        printDBG('[tools.lru] clearing %r lru_cache' % (cache.__name__,))
+        printDBG(f"clearing {cache.__name__!r} lru_cache")
         cache.cache_.clear()
 
     def __call__(cache, func):
         def wrapped(self, *args):  # wrap a class
             try:
                 value = cache.cache_[args]
-                printDBG(func.__name__ + '(%r) ...lrucache hit' % (args,))
+                printDBG(f"{func.__name__}({args!r}) ...lrucache hit")
                 return value
             except KeyError:
-                printDBG(func.__name__ + '(%r) ...lrucache miss' % (args,))
+                printDBG(f"{func.__name__}({args!r}) ...lrucache miss")
 
             value = func(self, *args)
             cache.cache_[args] = value
             return value
         cache.__name__ = func.__name__
-        printDBG('[@tools.lru] wrapping %r with max_size=%r lru_cache' %
-                 (cache.__name__, cache.max_size))
+        printDBG(f"wrapping {cache.__name__!r} with max_size={cache.max_size!r} lru_cache")
         wrapped.__name__ = func.__name__
         wrapped.clear_cache = cache.clear_cache
         return wrapped
@@ -129,8 +129,8 @@ def assert_int(var, lbl='var'):
     try:
         assert is_int(var), 'type(%s)=%r is not int' % (lbl, get_type(var))
     except AssertionError:
-        print('[tools] %s = %r' % (lbl, var))
-        print('[tools] VALID_INT_TYPES: %r' % VALID_INT_TYPES)
+        logger.error(f"{lbl} = {var!r}")
+        logger.error(f"VALID_INT_TYPES: {VALID_INT_TYPES!r}")
         raise
 
 if sys.platform == 'win32':

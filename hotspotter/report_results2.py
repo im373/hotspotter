@@ -4,12 +4,15 @@
 
 #!/usr/bin/env python3
 
-from hscom import __common__
-(print, print_, print_on, print_off, rrr, profile, printDBG) =\
-    __common__.init(__name__, '[rr2]', DEBUG=False)
-# Matplotlib
-import matplotlib
-matplotlib.use('Qt5Agg')
+import logging
+from hscom.dev_utils import make_reloader
+from hscom.profiling import profile
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[rr2]')
+from hscom.mpl_utils import configure_matplotlib
+
+configure_matplotlib()
 # Python
 import os
 import sys
@@ -131,7 +134,7 @@ class OrganizedResult(DynStruct):
 
     def printme3(self):
         for qcx, cx, score, rank in self.iter():
-            print('%4d %4d %6.1f %4d' % (qcx, cx, score, rank))
+            logger.info('%4d %4d %6.1f %4d' % (qcx, cx, score, rank))
 
 
 def get_false_match_distances(allres):
@@ -178,7 +181,7 @@ def res2_true_and_false(hs, res):
 
 
 def init_organized_results(allres):
-    print('[rr2] init_organized_results()')
+    logger.info('[rr2] init_organized_results()')
     hs = allres.hs
     qcx2_res = allres.qcx2_res
     allres.true          = OrganizedResult()
@@ -237,7 +240,7 @@ def init_organized_results(allres):
 
 
 def init_score_matrix(allres):
-    print('[rr2] init score matrix')
+    logger.info('[rr2] init score matrix')
     hs = allres.hs
     qcx2_res = allres.qcx2_res
     qcx_list = allres.qcx_list
@@ -265,8 +268,8 @@ def init_score_matrix(allres):
         try:
             res = qcx2_res[qcx]
         except IndexError:
-            print('qcx = %r' % qcx)
-            print('len(qcx2_res) = %r' % len(qcx2_res))
+            logger.info('qcx = %r' % qcx)
+            logger.info('len(qcx2_res) = %r' % len(qcx2_res))
             raise
         if res is None:
             continue
@@ -300,7 +303,7 @@ def init_allres(hs, qcx2_res,
     allres = AllResults(hs, qcx2_res, qcx_list)
     allres.title_suffix = get_title_suffix(hs)
     #util.ensurepath(allres.summary_dir)
-    print('[rr2] init_allres()')
+    logger.info('[rr2] init_allres()')
     #---
     hs = allres.hs
     qcx2_res = allres.qcx2_res
@@ -499,7 +502,7 @@ def build_rankres_str(allres):
 def __dump_text_report(allres, report_type):
     if not 'report_type' in vars():
         report_type = 'rankres_str'
-    print('[rr2] Dumping textfile: ' + report_type)
+    logger.info('[rr2] Dumping textfile: ' + report_type)
     report_str = allres.__dict__[report_type]
     # Get directories
     result_dir    = allres.hs.dirs.result_dir
@@ -547,9 +550,9 @@ def dump_all(allres,
              analysis=ANALYSIS,
              pair_analysis=PARI_ANALY,
              allqueries=ALLQUERIES):
-    print('\n======================')
-    print('[rr2] DUMP ALL')
-    print('======================')
+    logger.info('\n======================')
+    logger.info('[rr2] DUMP ALL')
+    logger.info('======================')
     viz.BROWSE = False
     viz.DUMP = True
     # Text Reports
@@ -560,7 +563,7 @@ def dump_all(allres,
     if oxford:
         dump_oxsty_mAP_results(allres)
     if no_viz:
-        print('\n --- (NO VIZ) END DUMP ALL ---\n')
+        logger.info('\n --- (NO VIZ) END DUMP ALL ---\n')
         return
     # Viz Reports
     if stem:
@@ -586,7 +589,7 @@ def dump_all(allres,
         dump_feature_pair_analysis(allres)
     if allqueries:
         dump_all_queries(allres)
-    print('\n --- END DUMP ALL ---\n')
+    logger.info('\n --- END DUMP ALL ---\n')
 
 
 def dump_oxsty_mAP_results(allres):
@@ -615,7 +618,7 @@ def dump_score_matrixes(allres):
     try:
         allres_viz.plot_score_matrix(allres)
     except Exception as ex:
-        print('[dump_score_matixes] IMPLEMENTME: %r ' % ex)
+        logger.info('[dump_score_matixes] IMPLEMENTME: %r ' % ex)
     pass
 
 
@@ -657,7 +660,7 @@ def dump_missed_top5(allres):
 
 
 def dump_analysis(allres):
-    print('[rr2] dump analysis')
+    logger.info('[rr2] dump analysis')
     greater1_cxs = allres.greater1_cxs
     #qcx = greater5_cxs[0]
     for qcx in greater1_cxs:
@@ -669,7 +672,7 @@ def dump_all_queries2(hs):
     from . import QueryResult as qr
     test_cxs = hs.test_sample_cx
     title_suffix = get_title_suffix(hs)
-    print('[rr2] dumping all %r queries' % len(test_cxs))
+    logger.info('[rr2] dumping all %r queries' % len(test_cxs))
     for qcx in test_cxs:
         res = qr.QueryResult(qcx)
         res.load(hs)
@@ -689,19 +692,19 @@ def dump_all_queries2(hs):
 
         fpath_clean = df2.sanatize_img_fpath(fpath)
         fpath_aug_clean = df2.sanatize_img_fpath(fpath_aug)
-        print('----')
-        print(fpath_clean)
-        print(fpath_clean)
+        logger.info('----')
+        logger.info(fpath_clean)
+        logger.info(fpath_clean)
         if not exists(fpath_aug_clean):
             viz.plot_cx2(hs, res, 'analysis', subdir=subdir, annotations=False, title_aug=title_aug)
         if not exists(fpath_clean):
             viz.plot_cx2(hs, res, 'analysis', subdir=subdir)
-        print('----')
+        logger.info('----')
 
 
 def dump_all_queries(allres):
     test_cxs = allres.qcx_list
-    print('[rr2] dumping all %r queries' % len(test_cxs))
+    logger.info('[rr2] dumping all %r queries' % len(test_cxs))
     for qcx in test_cxs:
         viz.show_chip(allres, qcx, 'analysis', subdir='allqueries',
                       annotations=False, title_aug=' noanote')
@@ -725,7 +728,7 @@ def dump_orgres_matches(allres, orgres_type):
 
 
 def dump_feature_pair_analysis(allres):
-    print('[rr2] Doing: feature pair analysis')
+    logger.info('[rr2] Doing: feature pair analysis')
     # TODO: Measure score consistency over a spatial area.
     # Measures entropy of matching vs nonmatching descriptors
     # Measures scale of m vs nm desc
@@ -764,13 +767,13 @@ def dump_feature_pair_analysis(allres):
 
     # Load features if we need to
     if hs.feats.cx2_desc.size == 0:
-        print(' * forcing load of descriptors')
+        logger.info(' * forcing load of descriptors')
         hs.load_features()
     cx2_desc = hs.feats.cx2_desc
     cx2_kpts = hs.feats.cx2_kpts
 
     def measure_feat_pairs(allres, orgtype='top_true'):
-        print('Measure ' + orgtype + ' pairs')
+        logger.info('Measure ' + orgtype + ' pairs')
         orgres = allres.__dict__[orgtype]
         entropy_list = []
         scale_list = []
@@ -780,7 +783,7 @@ def dump_feature_pair_analysis(allres):
         rank_skips = []
         gt_skips = []
         for ix, (qcx, cx, score, rank) in enumerate(orgres.iter()):
-            util.print_(fmt_str % (ix + 1,))
+            logger.info(fmt_str % (ix + 1,))
             # Skip low ranks
             if rank > 5:
                 rank_skips.append(qcx)
@@ -796,7 +799,7 @@ def dump_feature_pair_analysis(allres):
             # Get their scores
             fs = res.cx2_fs[cx]
             # Get matching descriptors
-            printDBG('\nfm.shape=%r' % (fm.shape,))
+            logger.debug('\nfm.shape=%r' % (fm.shape,))
             desc1 = cx2_desc[qcx][fm[:, 0]]
             desc2 = cx2_desc[cx][fm[:, 1]]
             # Get matching keypoints
@@ -816,9 +819,9 @@ def dump_feature_pair_analysis(allres):
             entropy_list.append(entropy_tup)
             scale_list.append(scale_tup)
             score_list.append(fs)
-        print('Skipped %d total.' % (len(rank_skips) + len(gt_skips),))
-        print('Skipped %d for rank > 5, %d for no gt' % (len(rank_skips), len(gt_skips),))
-        print(np.unique(list(map(len, entropy_list))))
+        logger.info('Skipped %d total.' % (len(rank_skips) + len(gt_skips),))
+        logger.info('Skipped %d for rank > 5, %d for no gt' % (len(rank_skips), len(gt_skips),))
+        logger.info(np.unique(list(map(len, entropy_list))))
 
         def evstack(tup):
             return np.vstack(tup) if len(tup) > 0 else np.empty((0, 2))
@@ -829,7 +832,7 @@ def dump_feature_pair_analysis(allres):
         entropy_pairs = evstack(entropy_list)
         scale_pairs   = evstack(scale_list)
         scores        = ehstack(score_list)
-        print('\n * Measured %d pairs' % len(entropy_pairs))
+        logger.info('\n * Measured %d pairs' % len(entropy_pairs))
         return entropy_pairs, scale_pairs, scores
 
     tt_entropy, tt_scale, tt_scores = measure_feat_pairs(allres, 'top_true')
@@ -914,18 +917,18 @@ def report_all(hs, qcx2_res, qcx_list, **kwargs):
         dump_all(allres, **kwargs)
     except Exception as ex:
         import traceback
-        print('\n\n-----------------')
-        print('report_all(hs, qcx2_res, **kwargs=%r' % (kwargs))
-        print('Caught Error in rr2.dump_all')
-        print(repr(ex))
+        logger.info('\n\n-----------------')
+        logger.info('report_all(hs, qcx2_res, **kwargs=%r' % (kwargs))
+        logger.info('Caught Error in rr2.dump_all')
+        logger.info(repr(ex))
         exc_type, exc_value, exc_traceback = sys.exc_info()
-        print("*** print_tb:")
+        logger.info("*** print_tb:")
         traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)
-        print("*** print_exception:")
+        logger.info("*** print_exception:")
         traceback.print_exception(exc_type, exc_value, exc_traceback,
                                   limit=2, file=sys.stdout)
-        print('Caught Error in rr2.dump_all')
-        print('-----------------\n')
+        logger.info('Caught Error in rr2.dump_all')
+        logger.info('-----------------\n')
         raise
         return allres, ex
     return allres
@@ -940,7 +943,7 @@ def read_until(file, target):
 
 
 def print_result_summaries_list(topnum=5):
-    print('\n<(^_^<)\n')
+    logger.info('\n<(^_^<)\n')
     # Print out some summary of all results you have
     hs = ld2.HotSpotter()
     hs.load_tables(ld2.DEFAULT)
@@ -949,7 +952,7 @@ def print_result_summaries_list(topnum=5):
     sorted_rankres = []
     for result_fname in iter(result_file_list):
         if fnmatch.fnmatch(result_fname, 'rankres_str*.csv'):
-            print(result_fname)
+            logger.info(result_fname)
             with open(join(hs.dirs.result_dir, result_fname), 'r', encoding='utf-8-sig', errors='surrogateescape') as file:
 
                 metaline = file.readline()
@@ -979,26 +982,26 @@ def print_result_summaries_list(topnum=5):
                     sorted_rankres.append(top5line + metaline)
                 else:
                     sorted_rankres.append(top1line + metaline)
-                print(toprint + '\n')
+                logger.info(toprint + '\n')
 
-    print('\n(>^_^)>\n')
+    logger.info('\n(>^_^)>\n')
 
     sorted_mapscore = []
     for result_fname in iter(result_file_list):
         if fnmatch.fnmatch(result_fname, 'oxsty_map_csv*.csv'):
-            print(result_fname)
+            logger.info(result_fname)
             with open(join(hs.dirs.result_dir, result_fname), 'r', encoding='utf-8-sig', errors='surrogateescape') as file:
                 metaline = file.readline()
                 scoreline = file.readline()
                 toprint = metaline + scoreline
 
                 sorted_mapscore.append(scoreline + metaline)
-                print(toprint)
+                logger.info(toprint)
 
-    print('\n'.join(sorted(sorted_rankres)))
-    print('\n'.join(sorted(sorted_mapscore)))
+    logger.info('\n'.join(sorted(sorted_rankres)))
+    logger.info('\n'.join(sorted(sorted_mapscore)))
 
-    print('\n^(^_^)^\n')
+    logger.info('\n^(^_^)^\n')
 
 
 def _get_orgres2_distances(allres, orgres_list=None):
@@ -1012,8 +1015,8 @@ def _get_orgres2_distances(allres, orgres_list=None):
         try:
             orgres2_distance[orgres] = dist_fn(orgres)
         except Exception as ex:
-            print(ex)
-            print('failed dist orgres=%r' % orgres)
+            logger.info(ex)
+            logger.info('failed dist orgres=%r' % orgres)
     return orgres2_distance
 
 
@@ -1023,10 +1026,10 @@ def get_orgres_match_distances(allres, orgtype_='false'):
     qcxs = allres[orgtype_].qcxs
     cxs  = allres[orgtype_].cxs
     match_list = list(zip(qcxs, cxs))
-    printDBG('[rr2] getting orgtype_=%r distances between sifts' % orgtype_)
+    logger.debug('[rr2] getting orgtype_=%r distances between sifts' % orgtype_)
     adesc1, adesc2 = get_matching_descriptors(allres, match_list)
-    printDBG('[rr2]  * adesc1.shape = %r' % (adesc1.shape,))
-    printDBG('[rr2]  * adesc2.shape = %r' % (adesc2.shape,))
+    logger.debug('[rr2]  * adesc1.shape = %r' % (adesc1.shape,))
+    logger.debug('[rr2]  * adesc2.shape = %r' % (adesc2.shape,))
     #dist_list = ['L1', 'L2', 'hist_isect', 'emd']
     #dist_list = ['L1', 'L2', 'hist_isect']
     dist_list = ['L2', 'hist_isect']
@@ -1077,17 +1080,17 @@ def load_qcx2_res(hs, qcx_list, nocache=False):
     qcxs_uid  = util.hashstr_arr(qcx_list, lbl='_qcxs')
     qres_uid  = hs_uid + query_uid + qcxs_uid
     cache_dir = join(hs.dirs.cache_dir, 'query_results_bigcache')
-    print('[rr2] load_qcx2_res(): %r' % qres_uid)
+    logger.info('[rr2] load_qcx2_res(): %r' % qres_uid)
     io_kwargs = dict(dpath=cache_dir, fname='query_results', uid=qres_uid, ext='.cPkl')
     # Return cache if available
     if not params.args.nocache_query and (not nocache):
         qcx2_res = io.smart_load(**io_kwargs)
         if qcx2_res is not None:
-            print('[rr2]  *  cache hit')
+            logger.info('[rr2]  *  cache hit')
             return qcx2_res
-        print('[rr2]  *  cache miss')
+        logger.info('[rr2]  *  cache miss')
     else:
-        print('[rr2]  *  cache off')
+        logger.info('[rr2]  *  cache off')
     # Individually load / compute queries
     if isinstance(qcx_list, list):
         qcx_set = set(qcx_list)
@@ -1096,7 +1099,7 @@ def load_qcx2_res(hs, qcx_list, nocache=False):
     qcx_max = max(qcx_list) + 1
     qcx2_res = [hs.query(qcx) if qcx in qcx_set else None for qcx in range(qcx_max)]
     # Save to the cache
-    print('[rr2] Saving query_results to bigcache: %r' % qres_uid)
+    logger.info('[rr2] Saving query_results to bigcache: %r' % qres_uid)
     util.ensuredir(cache_dir)
     io.smart_save(qcx2_res, **io_kwargs)
     return qcx2_res
@@ -1104,7 +1107,7 @@ def load_qcx2_res(hs, qcx_list, nocache=False):
 
 def get_allres(hs, qcx_list):
     'Performs / Loads all queries and build allres structure'
-    print('[rr2] get_allres()')
+    logger.info('[rr2] get_allres()')
     #valid_cxs = hs.get_valid_cxs()
     qcx2_res = load_qcx2_res(hs, qcx_list)
     allres = init_allres(hs, qcx2_res, qcx_list=qcx_list)

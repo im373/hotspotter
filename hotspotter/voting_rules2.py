@@ -3,9 +3,12 @@
 # Adjusted chip, feature, query, and table handling for current dependencies.
 
 
-from hscom import __common__
-(print, print_, print_on, print_off,
- rrr, profile) = __common__.init(__name__, '[vr2]')
+import logging
+from hscom.dev_utils import make_reloader
+from hscom.profiling import profile
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[vr2]')
 # Python
 
 # Scientific
@@ -176,7 +179,7 @@ def _chipmatch2_utilities(hs, qcx, chipmatch, K):
 
 
 def _filter_utilities(qfx2_utilities, max_alts=200):
-    print('[vote] filtering utilities')
+    logger.info('[vote] filtering utilities')
     tnxs = [util[1] for utils in qfx2_utilities for util in utils]
     if len(tnxs) == 0:
         return qfx2_utilities
@@ -185,7 +188,7 @@ def _filter_utilities(qfx2_utilities, max_alts=200):
     tnx2_freq = np.bincount(tnxs - tnxs_min)
     nAlts = (tnx2_freq > 0).sum()
     nRemove = max(0, nAlts - max_alts)
-    print(' * removing %r/%r alternatives' % (nRemove, nAlts))
+    logger.info(' * removing %r/%r alternatives' % (nRemove, nAlts))
     if nRemove > 0:  # remove least frequent names
         most_freq_tnxs = tnx2_freq.argsort()[::-1] + tnxs_min
         keep_tnxs = set(most_freq_tnxs[0:max_alts].tolist())
@@ -196,7 +199,7 @@ def _filter_utilities(qfx2_utilities, max_alts=200):
 
 
 def _utilities2_pairwise_breaking(qfx2_utilities):
-    print('[vote] building pairwise matrix')
+    logger.info('[vote] building pairwise matrix')
     hstack = np.hstack
     cartesian = helpers.cartesian
     tnxs = [util[1] for utils in qfx2_utilities for util in utils]
@@ -221,7 +224,6 @@ def _utilities2_pairwise_breaking(qfx2_utilities):
         nReport = len(porder)
         if nReport == 0:
             continue
-        #sys.stdout.write('.')
         corder = np.setdiff1d(altxs, porder)
         # pairwise winners and losers
         pw_winners = [porder[r:r + 1] for r in range(nReport)]
@@ -254,7 +256,7 @@ def _get_alts_from_utilities(qfx2_utilities):
 
 
 def _utilities2_weighted_pairwise_breaking(qfx2_utilities):
-    print('[vote] building pairwise matrix')
+    logger.info('[vote] building pairwise matrix')
     tnxs, altx2_tnx, tnx2_altx, nUtilities, nAlts, altxs = _get_alts_from_utilities(qfx2_utilities)
     pairwise_mat = np.zeros((nAlts, nAlts))
     # agent to alternative vote vectors
@@ -273,7 +275,6 @@ def _utilities2_weighted_pairwise_breaking(qfx2_utilities):
         nReport = len(porder)
         if nReport == 0:
             continue
-        #sys.stdout.write('.')
         corder = np.setdiff1d(altxs, porder)
         nUnreport = len(corder)
         # pairwise winners and losers

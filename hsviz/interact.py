@@ -2,12 +2,16 @@
 # Updated visualization code for modern matplotlib and Python 3 behavior.
 # Normalized keypoint/SIFT drawing paths for current numpy array shapes.
 
-from hscom import __common__
-(print, print_, print_on, print_off, rrr, profile, printDBG)\
-    = __common__.init(__name__, '[inter]', DEBUG=False)
+import logging
 # Scientific
 import numpy as np
 # Hotspotter
+from hscom.dev_utils import make_reloader
+from hscom.profiling import profile
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[inter]')
+
 from . import draw_func2 as df2
 from . import viz
 from hstpl import mask_creator
@@ -44,7 +48,7 @@ def detect_keypress(fig):
 
 
 def begin_interaction(type_, fnum):
-    print('[inter] starting %s interaction' % type_)
+    logger.debug(f"starting {type_} interaction")
     fig = df2.figure(fnum=fnum, docla=True, doclf=True)
     ax = df2.gca()
     df2.disconnect_callback(fig, 'button_press_event', axes=[ax])
@@ -63,10 +67,10 @@ def interact_image(hs, gx, sel_cxs=[], select_cx_func=None, fnum=1,
     # Create callback wrapper
     @profile
     def _on_image_click(event):
-        print_('[inter] clicked image')
+        logger.debug("clicked image")
         if event is None or event.inaxes is None or event.xdata is None:
             # Toggle draw lbls
-            print(' ...out of axis')
+            logger.debug("out of axis")
             kwargs['draw_lbls'] = not kwargs.pop('draw_lbls', True)
             interact_image(hs, gx, sel_cxs=sel_cxs,
                            select_cx_func=select_cx_func, nodraw=True,
@@ -74,10 +78,10 @@ def interact_image(hs, gx, sel_cxs=[], select_cx_func=None, fnum=1,
         else:
             ax = event.inaxes
             hs_viewtype = ax.__dict__.get('_hs_viewtype', '')
-            print_(' hs_viewtype=%r' % hs_viewtype)
+            logger.debug(f"hs_viewtype={hs_viewtype!r}")
             centers = ax.__dict__.get('_hs_centers')
             if centers is None or len(centers) == 0:
-                print(' ...no chips to click')
+                logger.warning("no chips to click")
                 return
             x, y = event.xdata, event.ydata
             # Find ROI center nearest to the clicked point
@@ -85,7 +89,7 @@ def interact_image(hs, gx, sel_cxs=[], select_cx_func=None, fnum=1,
             centers = ax._hs_centers
             centx = nearest_point(x, y, centers)[0]
             cx = cx_list[centx]
-            print(' ...clicked cx=%r' % cx)
+            logger.debug(f"clicked cx={cx!r}")
             if select_cx_func is not None:
                 select_cx_func(cx, nodraw=True)
         viz.draw()
@@ -106,17 +110,17 @@ def interact_name(hs, nx, sel_cxs=[], select_cx_func=None, fnum=5,
     fig = begin_interaction('name', fnum)
 
     def _on_name_click(event):
-        print_('[inter] clicked name')
+        logger.debug("clicked name")
         ax, x, y = event.inaxes, event.xdata, event.ydata
         if ax is None or x is None:
             # The click is not in any axis
-            print('... out of axis')
+            logger.debug("out of axis")
         else:
             hs_viewtype = ax.__dict__.get('_hs_viewtype', '')
-            print_(' hs_viewtype=%r' % hs_viewtype)
+            logger.debug(f"hs_viewtype={hs_viewtype!r}")
             if hs_viewtype == 'chip':
                 cx = ax.__dict__.get('_hs_cx')
-                print('... cx=%r' % cx)
+                logger.debug(f"cx={cx!r}")
                 viz.show_name(hs, nx, fnum=fnum, sel_cxs=[cx])
                 if select_cx_func is not None:
                     select_cx_func(cx, nodraw=True)
@@ -161,22 +165,22 @@ def interact_chip(hs, cx, fnum=2, figtitle=None, fx=None, nodraw=False,
         df2.set_figtitle(figtitle)
 
     def _on_chip_click(event):
-        print_('[inter] clicked chip')
+        logger.debug("clicked chip")
         ax, x, y = event.inaxes, event.xdata, event.ydata
         if ax is None or x is None:
             # The click is not in any axis
-            print('... out of axis')
+            logger.debug("out of axis")
             annote_ptr[0] = (annote_ptr[0] + 1) % 3
             mode = annote_ptr[0]
             draw_ell = mode == 1
             draw_pts = mode == 2
-            print('... default kpts view mode=%r' % mode)
+            logger.debug(f"default kpts view mode={mode!r}")
             _chip_view(draw_ell=draw_ell, draw_pts=draw_pts)
         else:
             hs_viewtype = ax.__dict__.get('_hs_viewtype', '')
-            print_(' hs_viewtype=%r' % hs_viewtype)
+            logger.debug(f"hs_viewtype={hs_viewtype!r}")
             if hs_viewtype == 'chip' and event.key == 'shift':
-                print('... masking')
+                logger.debug("masking")
                 # TODO: Do better integration of masking
                 _chip_view()
                 df2.disconnect_callback(fig, 'button_press_event')
@@ -185,12 +189,12 @@ def interact_chip(hs, cx, fnum=2, figtitle=None, fx=None, nodraw=False,
                 kpts = hs.get_kpts(cx)
                 if len(kpts) > 0:
                     fx = nearest_point(x, y, kpts)[0]
-                    print('... clicked fx=%r' % fx)
+                    logger.debug(f"clicked fx={fx!r}")
                     _select_ith_kpt(fx)
                 else:
-                    print('... len(kpts) == 0')
+                    logger.warning("len(kpts) == 0")
             else:
-                print('...Unknown viewtype')
+                logger.warning(f"Unknown viewtype {hs_viewtype!r}")
         viz.draw()
 
     # Draw without keypoints the first time
@@ -210,7 +214,7 @@ def interact_keypoints(rchip, kpts, desc, fnum=0, figtitle=None, nodraw=False,
     annote_ptr = [1]
 
     def _select_ith_kpt(fx):
-        print_('[interact] viewing ith=%r keypoint' % fx)
+        logger.debug(f"viewing ith={fx!r} keypoint")
         # Get the fx-th keypiont
         kp, sift = kpts[fx], desc[fx]
         # Draw the image with keypoint fx highlighted
@@ -226,29 +230,29 @@ def interact_keypoints(rchip, kpts, desc, fnum=0, figtitle=None, nodraw=False,
             df2.set_figtitle(figtitle)
 
     def _on_keypoints_click(event):
-        print_('[viz] clicked keypoint view')
+        logger.debug("clicked keypoint view")
         if event is None  or event.xdata is None or event.inaxes is None:
             annote_ptr[0] = (annote_ptr[0] + 1) % 3
             mode = annote_ptr[0]
             draw_ell = mode == 1
             draw_pts = mode == 2
-            print('... default kpts view mode=%r' % mode)
+            logger.debug(f"default kpts view mode={mode!r}")
             _viz_keypoints(fnum, draw_ell=draw_ell, draw_pts=draw_pts)
         else:
             ax = event.inaxes
             hs_viewtype = ax.__dict__.get('_hs_viewtype', None)
-            print_(' viewtype=%r' % hs_viewtype)
+            logger.debug(f"viewtype={hs_viewtype!r}")
             if hs_viewtype == 'keypoints':
                 kpts = ax.__dict__.get('_hs_kpts', [])
                 if len(kpts) == 0:
-                    print('...nokpts')
+                    logger.warning("no keypoints")
                 else:
-                    print('...nearest')
+                    logger.debug("nearest keypoint")
                     x, y = event.xdata, event.ydata
                     fx = nearest_point(x, y, kpts)[0]
                     _select_ith_kpt(fx)
             else:
-                print('...unhandled')
+                logger.warning(f"unhandled viewtype {hs_viewtype!r}")
         viz.draw()
 
     # Draw without keypoints the first time
@@ -330,7 +334,7 @@ def interact_chipres(hs, res, cx=None, fnum=4, figtitle='Inspect Query Result',
             info3 = '\nnorm %s k=%r' % (hs.cidstr(cx3), normk)
             extracted_list.append((rchip3, kp3, sift3, fx3, cx3, info3))
         else:
-            print('WARNING: meta doesnt exist')
+            logger.warning("meta does not exist")
 
         #----------------------
         # Draw the _select_ith_match plot
@@ -367,7 +371,7 @@ def interact_chipres(hs, res, cx=None, fnum=4, figtitle='Inspect Query Result',
     # Callback
     @profile
     def _click_chipres_click(event):
-        print_('[inter] clicked chipres')
+        logger.debug("clicked chipres")
         if event is None:
             return
         button = event.button
@@ -377,23 +381,23 @@ def interact_chipres(hs, res, cx=None, fnum=4, figtitle='Inspect Query Result',
         (x, y, ax) = (event.xdata, event.ydata, event.inaxes)
         # Out of axes click
         if None in [x, y, ax]:
-            print('... out of axis')
+            logger.debug("out of axis")
             _chipmatch_view()
             viz.draw()
             return
         hs_viewtype = ax.__dict__.get('_hs_viewtype', '')
-        print_(' hs_viewtype=%r ' % hs_viewtype)
+        logger.debug(f"hs_viewtype={hs_viewtype!r}")
         key = '' if event.key is None else event.key
-        print_('key=%r ' % key)
+        logger.debug(f"key={key!r}")
         ctrl_down = key.find('control') == 0
         # Click in match axes
         if hs_viewtype == 'chipres' and ctrl_down:
             # Ctrl-Click
-            print('.. control click')
+            logger.debug("control click")
             return _sv_view(cx)
         elif hs_viewtype == 'chipres':
             if len(fm) == 0:
-                print('[inter] no feature matches to click')
+                logger.warning("no feature matches to click")
             else:
                 # Normal Click
                 # Select nearest feature match to the click
@@ -404,7 +408,7 @@ def interact_chipres(hs, res, cx=None, fnum=4, figtitle='Inspect Query Result',
                 _mx1, _dist1 = nearest_point(x, y, kpts1_m)
                 _mx2, _dist2 = nearest_point(x - x2, y - y2, kpts2_m)
                 mx = _mx1 if _dist1 < _dist2 else _mx2
-                print('... clicked mx=%r' % mx)
+                logger.debug(f"clicked mx={mx!r}")
                 _select_ith_match(mx, qcx, cx)
         elif hs_viewtype in ['warped', 'unwarped']:
             hs_cx = ax.__dict__.get('_hs_cx', None)
@@ -413,7 +417,7 @@ def interact_chipres(hs, res, cx=None, fnum=4, figtitle='Inspect Query Result',
                 interact_chip(hs, hs_cx, fx=hs_fx, fnum=df2.next_fnum(),
                               nodraw=True)
         else:
-            print('...Unknown viewtype')
+            logger.warning(f"Unknown viewtype {hs_viewtype!r}")
         viz.draw()
 
     if mx is None:
@@ -437,7 +441,7 @@ def interact_chipres(hs, res, cx=None, fnum=4, figtitle='Inspect Query Result',
     opt2_callback = [
         (toggle_samefig_key, toggle_samefig),
         ('query last feature', query_last_feature),
-        ('cancel', lambda: print('cancel')), ]
+        ('cancel', lambda: logger.debug("cancel")), ]
     guitools.popup_menu(fig.canvas, opt2_callback, fig.canvas)
     df2.connect_callback(fig, 'button_press_event', _click_chipres_click)
     if not nodraw:

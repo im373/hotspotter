@@ -1,13 +1,18 @@
 
-from . import __common__
-(print, print_, print_on, print_off,
- rrr, profile) = __common__.init(__name__, '[latex]')
+# HotSpotter port notes:
+# Replaced hscom.__common__ hooks with logging/dev helpers.
+
 # Python
+import logging
 import re
 from . import helpers
 import textwrap
 # Science
 import numpy as np
+from .dev_utils import make_reloader
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[latex]')
 
 
 def render(text):
@@ -17,7 +22,7 @@ def render(text):
     #text = (r'\begin{document}' + '\n' +
             #text + '\n' +
             #r'\end{document}')
-    print(text)
+    logger.info(f"Rendering LaTeX text:\n{text}")
 
     mpl.rc('text', usetex=True)
     mpl.rc('font', family='serif')

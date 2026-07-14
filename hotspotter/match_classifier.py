@@ -1,7 +1,10 @@
 
-from hscom import __common__
-(print, print_, print_on, print_off, rrr, profile,
- printDBG) = __common__.init(__name__, '[classifier]', DEBUG=False)
+import logging
+from hscom.dev_utils import make_reloader
+from hscom.profiling import profile
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[classifier]')
 # Science
 import numpy as np
 # HotSpotter
@@ -63,8 +66,8 @@ def test_classifier(classifier, pos_test, neg_test):
 
     tp_rate = pos_output.sum() / len(pos_output)
     fp_rate = neg_output.sum() / len(neg_output)
-    print('tp_rate = %r' % tp_rate)
-    print('fp_rate = %r' % fp_rate)
+    logger.info('tp_rate = %r' % tp_rate)
+    logger.info('fp_rate = %r' % fp_rate)
 
 
 def train_random_forest(hs, train_data, train_lbl, pos_test, neg_test):

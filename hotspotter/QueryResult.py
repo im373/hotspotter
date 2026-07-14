@@ -3,9 +3,12 @@
 # Adjusted chip, feature, query, and table handling for current dependencies.
 
 
-from hscom import __common__
-(print, print_, print_on, print_off,
- rrr, profile, printDBG) = __common__.init(__name__, '[qr]', DEBUG=False)
+import logging
+from hscom.dev_utils import make_reloader
+from hscom.profiling import profile
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[qr]')
 # Python
 
 from os.path import exists, split, join
@@ -83,7 +86,7 @@ class QueryResult(DynStruct):
     @profile
     def save(res, hs):
         fpath = res.get_fpath(hs)
-        print('[qr] cache save: %r' % (fpath if params.args.verbose_cache
+        logger.debug('[qr] cache save: %r' % (fpath if params.args.verbose_cache
                                        else split(fpath)[1],))
         with open(fpath, 'wb') as file_:
             np.savez(file_, **res.__dict__.copy())
@@ -99,7 +102,7 @@ class QueryResult(DynStruct):
                 for _key in npz.files:
                     res.__dict__[_key] = npz[_key]
                 npz.close()
-            print('[qr] res.load() fpath=%r' % (split(fpath)[1],))
+            logger.debug('[qr] res.load() fpath=%r' % (split(fpath)[1],))
             # These are nonarray items even if they are not lists
             # tolist seems to convert them back to their original
             # python representation
@@ -107,35 +110,35 @@ class QueryResult(DynStruct):
             try:
                 res.filt2_meta = res.filt2_meta.tolist()
             except AttributeError:
-                print('[qr] loading old result format')
+                logger.debug('[qr] loading old result format')
                 res.filt2_meta = {}
             res.uid = res.uid.tolist()
             return True
         except IOError as ex:
             #print('[qr] encountered IOError: %r' % ex)
             if not exists(fpath):
-                print('[qr] query result cache miss')
+                logger.debug('[qr] query result cache miss')
                 #print(fpath)
                 #print('[qr] QueryResult(qcx=%d) does not exist' % res.qcx)
                 raise
             else:
                 msg = ['[qr] QueryResult(qcx=%d) is corrupted' % (res.qcx)]
                 msg += ['\n%r' % (ex,)]
-                print(''.join(msg))
+                logger.warning(''.join(msg))
                 raise Exception(msg)
         except BadZipFile as ex:
-            print('[qr] Caught other BadZipFile: %r' % ex)
+            logger.warning('[qr] Caught other BadZipFile: %r' % ex)
             msg = ['[qr] Attribute Error: QueryResult(qcx=%d) is corrupted' % (res.qcx)]
             msg += ['\n%r' % (ex,)]
-            print(''.join(msg))
+            logger.warning(''.join(msg))
             if exists(fpath):
-                print('[qr] Removing corrupted file: %r' % fpath)
+                logger.warning('[qr] Removing corrupted file: %r' % fpath)
                 os.remove(fpath)
                 raise IOError(msg)
             else:
                 raise Exception(msg)
         except Exception as ex:
-            print('Caught other Exception: %r' % ex)
+            logger.exception('Caught other Exception while loading query result: %r' % ex)
             raise
         res.qcx = qcx_good
 
@@ -220,7 +223,7 @@ class QueryResult(DynStruct):
 
     def show_query(res, hs, **kwargs):
         from hsviz import viz
-        print('[qr] show_query')
+        logger.debug('[qr] show_query')
         viz.show_chip(hs, res=res, **kwargs)
 
     def show_analysis(res, hs, *args, **kwargs):

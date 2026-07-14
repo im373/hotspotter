@@ -3,9 +3,12 @@
 # Adjusted chip, feature, query, and table handling for current dependencies.
 
 
-from hscom import __common__
-(print, print_, print_on, print_off,
- rrr, profile) = __common__.init(__name__, '[hs]')
+import logging
+from hscom.dev_utils import make_reloader
+from hscom.profiling import profile
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[hs]')
 import sys
 # Standard
 import os
@@ -57,7 +60,7 @@ def _checkargs_onload(hs):
     if params.args.delete_cache:
         hs.delete_cache()
     if params.args.quit:
-        print('[hs] user requested quit.')
+        logger.info('[hs] user requested quit.')
         sys.exit(1)
 
 
@@ -261,7 +264,7 @@ class HotSpotter(DynStruct):
     def __init__(hs, args=None, db_dir=None):
         #super(HotSpotter, hs).__init__(child_exclude_list=['prefs', 'args'])
         with util.Indenter2('[hs.init]'):
-            print('[hs] creating HotSpotter()')
+            logger.debug('[hs] creating HotSpotter()')
             super(HotSpotter, hs).__init__()
             #printDBG('[\hs] Creating HotSpotter API')
             # TODO Remove args / integrate into prefs
@@ -299,9 +302,9 @@ class HotSpotter(DynStruct):
         'Adds debugging functions'
         try:
             dev_api.augment_api(hs)
-            print('[hs] created debug api')
+            logger.debug('[hs] created debug api')
         except NameError as ex:
-            print('[hs] created release api: %s' % ex)
+            logger.debug('[hs] created release api: %s' % ex)
 
         #printDBG(r'[/hs] Created HotSpotter API')
 
@@ -318,21 +321,21 @@ class HotSpotter(DynStruct):
     @profile
     def load_preferences(hs):
         with util.Indenter2('[hs.load_prefs]'):
-            print('[hs] load preferences')
+            logger.debug('[hs] load preferences')
             hs.default_preferences()
             prefmsg = hs.prefs.load()
             was_loaded = prefmsg is True
-            print('[hs] Able to load prefs? ...%r' % was_loaded)
+            logger.debug('[hs] Able to load prefs? ...%r' % was_loaded)
             if was_loaded:
                 hs._ensure_pref_pointers()
             else:
-                print('[hs]' + prefmsg)
+                logger.warning('[hs]' + prefmsg)
                 hs.default_preferences()
             hs.assert_prefs()
 
     @profile
     def default_preferences(hs):
-        print('[hs] defaulting preferences')
+        logger.debug('[hs] defaulting preferences')
         hs.prefs.display_cfg = Config.default_display_cfg()
         hs.prefs.chip_cfg  = Config.default_chip_cfg()
         hs.prefs.feat_cfg  = Config.default_feat_cfg(hs)
@@ -340,13 +343,13 @@ class HotSpotter(DynStruct):
         hs._ensure_pref_pointers()
 
     def _ensure_pref_pointers(hs):
-        print('[hs] _ensure_pref_pointers()')
+        logger.debug('[hs] _ensure_pref_pointers()')
         # When loading some pointers may become broken. Fix them.
         hs.prefs.feat_cfg._chip_cfg = hs.prefs.chip_cfg
         hs.prefs.query_cfg._feat_cfg = hs.prefs.feat_cfg
 
     def attatch_qreq(hs, qreq):
-        print('[hs] attatch_qreq()')
+        logger.debug('[hs] attatch_qreq()')
         # Fix pointers in the correct direction
         hs.qreq = qreq
         hs.prefs.query_cfg = hs.qreq.cfg
@@ -354,7 +357,7 @@ class HotSpotter(DynStruct):
         hs.prefs.chip_cfg  = hs.qreq.cfg._feat_cfg._chip_cfg
 
     def assert_prefs(hs):
-        print('[hs] assert_prefs()')
+        logger.debug('[hs] assert_prefs()')
         try:
             query_cfg = hs.prefs.query_cfg
             feat_cfg  = hs.prefs.feat_cfg
@@ -364,31 +367,31 @@ class HotSpotter(DynStruct):
             assert query_cfg._feat_cfg._chip_cfg is chip_cfg, errmsg
             assert feat_cfg._chip_cfg is chip_cfg, errmsg
         except AssertionError:
-            print('[hs] DBG query_cfg.get_uid() = %r' % query_cfg.get_uid())
-            print('[hs] DBG ----')
-            print('[hs] DBG query_cfg = %r' % query_cfg)
-            print('[hs] DBG ----')
-            print('[hs] DBG feat_cfg            = %r' % feat_cfg)
-            print('[hs] DBG query_cfg._feat_cfg = %r' % query_cfg._feat_cfg)
-            print('[hs] DBG feat_cfg.get_uid()            = %r' % feat_cfg.get_uid())
-            print('[hs] DBG query_cfg._feat_cfg.get_uid() = %r' %  query_cfg._feat_cfg.get_uid())
-            print('[hs] DBG ----')
-            print('[hs] DBG chip_cfg           = %r' % chip_cfg)
-            print('[hs] DBG feat_cfg._chip_cfg = %r' % feat_cfg._chip_cfg)
-            print('[hs] DBG chip_cfg.get_uid()            = %r' % chip_cfg.get_uid())
-            print('[hs] DBG feat_cfg._chip_cfg.get_uid()  = %r' %  feat_cfg._chip_cfg.get_uid())
-            print('[hs] preferences dependency tree is broken')
+            logger.debug('[hs] DBG query_cfg.get_uid() = %r' % query_cfg.get_uid())
+            logger.debug('[hs] DBG ----')
+            logger.debug('[hs] DBG query_cfg = %r' % query_cfg)
+            logger.debug('[hs] DBG ----')
+            logger.debug('[hs] DBG feat_cfg            = %r' % feat_cfg)
+            logger.debug('[hs] DBG query_cfg._feat_cfg = %r' % query_cfg._feat_cfg)
+            logger.debug('[hs] DBG feat_cfg.get_uid()            = %r' % feat_cfg.get_uid())
+            logger.debug('[hs] DBG query_cfg._feat_cfg.get_uid() = %r' %  query_cfg._feat_cfg.get_uid())
+            logger.debug('[hs] DBG ----')
+            logger.debug('[hs] DBG chip_cfg           = %r' % chip_cfg)
+            logger.debug('[hs] DBG feat_cfg._chip_cfg = %r' % feat_cfg._chip_cfg)
+            logger.debug('[hs] DBG chip_cfg.get_uid()            = %r' % chip_cfg.get_uid())
+            logger.debug('[hs] DBG feat_cfg._chip_cfg.get_uid()  = %r' %  feat_cfg._chip_cfg.get_uid())
+            logger.error('[hs] preferences dependency tree is broken')
             raise
 
     def update_preferences(hs, **kwargs):
-        print('[hs] updateing preferences')
+        logger.debug('[hs] updateing preferences')
         hs.prefs.query_cfg.update_cfg(**kwargs)
 
     # --------------
     # Saving functions
     # --------------
     def save_database(hs):
-        print('[hs] save_database')
+        logger.info('[hs] save_database')
         ld2.write_csv_tables(hs)
         ld2.write_flat_table(hs)
 
@@ -402,18 +405,18 @@ class HotSpotter(DynStruct):
     @util.indent_decor('[hs.load]')
     def load(hs, load_all=False):
         '(current load function) Loads the appropriate database'
-        print('[hs] load()')
+        logger.debug('[hs] load()')
         if not hs.fresh or hs.tables is None:
             hs.unload_all()
             hs.load_tables()
             hs.fresh = False
         hs.update_samples()
         if load_all:
-            print('[hs] aggro loading')
+            logger.info('[hs] eager loading database data')
             #printDBG('[hs] load_all=True')
             hs.refresh_features()
         else:
-            print('[hs] lazy loading')
+            logger.debug('[hs] lazy loading')
             #printDBG('[hs] load_all=False')
             hs.refresh_features([])
         return hs
@@ -428,7 +431,7 @@ class HotSpotter(DynStruct):
         hs.tables = hs_tables
         hs.dirs = hs_dirs
         if db_version != 'current':
-            print('[hs] Loaded db_version=%r. Converting...' % db_version)
+            logger.info('[hs] Loaded db_version=%r. Converting...' % db_version)
             hs.save_database()
         _checkargs_onload(hs)
 
@@ -460,12 +463,12 @@ class HotSpotter(DynStruct):
     @profile
     def update_samples(hs, test_samp=None, train_samp=None, indx_samp=None):
         ''' This is the correct function to use when setting samples '''
-        print('[hs] update_samples():')
+        logger.debug('[hs] update_samples():')
         valid_cxs = hs.get_valid_cxs()
         if test_samp is None:
             test_samp = valid_cxs
         if train_samp is None:
-            print('[hs] * default: all chips in training')
+            logger.debug('[hs] * default: all chips in training')
             train_samp = valid_cxs
         if indx_samp is None:
             indx_samp = train_samp
@@ -484,12 +487,12 @@ class HotSpotter(DynStruct):
             indx_train_isect = np.intersect1d(indx_samp, train_samp)
             indx_test_isect  = np.intersect1d(indx_samp, test_samp)
             lentup = (len(test_samp), len(train_samp), len(indx_samp))
-            print('[hs]   ---')
-            print('[hs] * num_valid_cxs = %d' % len(valid_cxs))
-            print('[hs] * num_test=%d, num_train=%d, num_indx=%d' % lentup)
-            print('[hs] * | isect(test, train) |  = %d' % len(test_train_isect))
-            print('[hs] * | isect(indx, train) |  = %d' % len(indx_train_isect))
-            print('[hs] * | isect(indx, test)  |  = %d' % len(indx_test_isect))
+            logger.debug('[hs]   ---')
+            logger.debug('[hs] * num_valid_cxs = %d' % len(valid_cxs))
+            logger.debug('[hs] * num_test=%d, num_train=%d, num_indx=%d' % lentup)
+            logger.debug('[hs] * | isect(test, train) |  = %d' % len(test_train_isect))
+            logger.debug('[hs] * | isect(indx, train) |  = %d' % len(indx_train_isect))
+            logger.debug('[hs] * | isect(indx, test)  |  = %d' % len(indx_test_isect))
         # Set the sample
         hs.indexed_sample_cx  = indx_samp
         hs.train_sample_cx    = train_samp
@@ -500,20 +503,20 @@ class HotSpotter(DynStruct):
     #---------------
     @profile
     def unload_all(hs):
-        print('[hs] unload_all() START')
+        logger.debug('[hs] unload_all() START')
         hs.dirty = True
         hs.feats  = ds.HotspotterChipFeatures()
         hs.cpaths = ds.HotspotterChipPaths()
         hs.qreq.unload_data()
         hs.featid2_qreq = {}
         hs.clear_lru_caches()
-        print('[hs] unload_all() DONE')
+        logger.debug('[hs] unload_all() DONE')
 
     @util.indent_decor('[unload_cx]')
     @profile
     def unload_cxdata(hs, cx):
         'unloads features and chips. not tables'
-        print('[hs] unload_cxdata(cx=%r)' % cx)
+        logger.debug('[hs] unload_cxdata(cx=%r)' % cx)
         # HACK This should not really be removed EVERY time you unload any cx
         hs.dirty = True
         hs.qreq.unload_data()
@@ -547,7 +550,7 @@ class HotSpotter(DynStruct):
     def delete_cxdata(hs, cx):
         'deletes features and chips. not tables'
         hs.unload_cxdata(cx)
-        print('[hs] delete_cxdata(cx=%r)' % cx)
+        logger.info('[hs] delete_cxdata(cx=%r)' % cx)
         cid = hs.tables.cx2_cid[cx]
         hs.delete_ciddata(cid)
         hs.clear_lru_caches()
@@ -582,7 +585,7 @@ class HotSpotter(DynStruct):
     def query_cxs(hs, qcx, cxs, query_cfg=None, **kwargs):
         '''wrapper that restricts query to only known groundtruth.
         Calls the function level query wrappers'''
-        print('[hs] query_cxs(kwargs=%r)' % kwargs)
+        logger.debug('[hs] query_cxs(kwargs=%r)' % kwargs)
         # Ensure that we can process a query like this
         if query_cfg is None:
             query_cfg = hs.prefs.query_cfg
@@ -595,13 +598,13 @@ class HotSpotter(DynStruct):
             res = mc3.process_query_request(hs, qreq)[qcx]
         except mf.QueryException as ex:
             msg = '[hs] Query Failure: %r' % ex
-            print(msg)
+            logger.warning(msg)
             if params.args.strict:
                 raise
             return msg
         except AssertionError as ex:
             msg = '[hs] Query Failure: %r' % ex
-            print(msg)
+            logger.exception(msg)
             raise
         return res
     # ---------------
@@ -687,7 +690,7 @@ class HotSpotter(DynStruct):
     def add_chip(hs, gx, roi, nx=0, theta=0, props={}, dochecks=True):
         # TODO: Restructure for faster adding (preallocate and double size)
         # OR just make all the tables python lists
-        print('[hs] adding chip to gx=%r' % gx)
+        logger.info('[hs] adding chip to gx=%r' % gx)
         if len(hs.tables.cx2_cid) > 0:
             next_cid = hs.tables.cx2_cid.max() + 1
         else:
@@ -723,7 +726,7 @@ class HotSpotter(DynStruct):
         else:
             fpath_list = [str(fpath) for fpath in fpath_list]
         nImages = len(fpath_list)
-        print('[hs.add_imgs] adding %d images' % nImages)
+        logger.info('[hs.add_imgs] adding %d images' % nImages)
         img_dir = hs.dirs.img_dir
         copy_list = []
         util.ensurepath(img_dir)
@@ -733,21 +736,21 @@ class HotSpotter(DynStruct):
             copy_iter = zip(fpath_list, fpath_list2)
             copy_list = [(src, dst) for src, dst in copy_iter if not exists(dst)]
             nExist = len(fpath_list2) - len(copy_list)
-            print('[hs] copying %d images' % len(copy_list))
-            print('[hs] %d images already exist' % nExist)
+            logger.info('[hs] copying %d images' % len(copy_list))
+            logger.debug('[hs] %d images already exist' % nExist)
             # RCOS TODO: Copying like this should be a helper function.
             # It appears in multiple places
             # Also there should be the option of parallelization? IDK, these are
             # disk writes, but it still might help.
             mark_progress, end_progress = util.progress_func(len(copy_list), lbl='Copying Image')
             for count, (src, dst) in enumerate(copy_list):
-                print('src = {!r}'.format(src))
-                print('dst = {!r}'.format(dst))
+                logger.debug('src = {!r}'.format(src))
+                logger.debug('dst = {!r}'.format(dst))
                 shutil.copy(src, dst)
                 mark_progress(count)
             end_progress()
         else:
-            print('[hs.add_imgs] using original image paths')
+            logger.debug('[hs.add_imgs] using original image paths')
             fpath_list2 = fpath_list
         # Get location of the new images relative to the image dir
         gx2_gname = hs.tables.gx2_gname.tolist()
@@ -759,9 +762,9 @@ class HotSpotter(DynStruct):
         new_aifs   = [False] * len(new_gnames)
         nNewImages = len(new_gnames)
         nIndexed = nImages - nNewImages
-        print('[hs.add_imgs] new_gnames:\n' + '\n'.join(new_gnames))
-        print('[hs.add_imgs] %d images already indexed.' % nIndexed)
-        print('[hs.add_imgs] Added %d new images.' % nIndexed)
+        logger.debug('[hs.add_imgs] new_gnames:\n' + '\n'.join(new_gnames))
+        logger.info('[hs.add_imgs] %d images already indexed.' % nIndexed)
+        logger.info('[hs.add_imgs] Added %d new images.' % nNewImages)
         # Append the new gnames to the hotspotter table
         hs.tables.gx2_gname = np.array(gx2_gname + new_gnames)
         hs.tables.gx2_aif   = np.array(gx2_aif   + new_aifs)
@@ -788,7 +791,7 @@ class HotSpotter(DynStruct):
 
     @util.indent_decor('[hs.delete_cache]')
     def delete_cache(hs):
-        print('[hs] DELETE CACHE')
+        logger.info('[hs] DELETE CACHE')
         computed_dir = hs.dirs.computed_dir
         hs.unload_all()
         #[hs.unload_cxdata(cx) for cx in hs.get_valid_cxs()]
@@ -1014,8 +1017,7 @@ class HotSpotter(DynStruct):
         try:
             gx_output = [index_of(gname, gx2_gname) for gname in gname_input]
         except IndexError as ex:
-            print('[hs] ERROR %r ' % ex)
-            print('[hs] ERROR a gname in %r does not exist.' % (gname_input,))
+            logger.exception('[hs] a gname in %r does not exist.' % (gname_input,))
             raise
         return gx_output
 
@@ -1036,9 +1038,8 @@ class HotSpotter(DynStruct):
         try:
             cx_output = [index_of(cid, cx2_cid) for cid in cid_input]
         except IndexError as ex:
-            print('[hs.cid2_cx] ERROR %r ' % ex)
-            print('[hs.cid2_cx] ERROR a cid in cid_input=%r does not exist.' % (cid_input,))
-            print('[hs.cid2_cx = %r' % (cx2_cid,))
+            logger.exception('[hs.cid2_cx] a cid in cid_input=%r does not exist.' % (cid_input,))
+            logger.debug('[hs.cid2_cx = %r' % (cx2_cid,))
             raise
         return cx_output
 
@@ -1159,13 +1160,13 @@ class HotSpotter(DynStruct):
                 load_fn(cx_input)
                 ret = hs._try_cxlist_get(cx_input, cx2_var)
             except Exception as ex:
-                print('[hs] Caught Exception ex=%r' % ex)
+                logger.exception('[hs] Data was not loaded/unloaded properly')
                 msg = ['[hs] Data was not loaded/unloaded propertly']
                 msg += ['[hs] cx_input=%r' % cx_input]
                 msg += ['[hs] cx2_var=%r' % cx2_var]
                 msg += ['[hs] load_fn=%r' % load_fn]
                 msg_ = '\n'.join(msg)
-                print(msg_)
+                logger.debug(msg_)
                 raise
         return ret
 
@@ -1216,34 +1217,34 @@ class HotSpotter(DynStruct):
     # Print Tables
 
     def print_name_table(hs):
-        print(ld2.make_name_csv(hs))
+        logger.info(ld2.make_name_csv(hs))
 
     def print_image_table(hs):
-        print(ld2.make_image_csv(hs))
+        logger.info(ld2.make_image_csv(hs))
 
     def print_chip_table(hs):
-        print(ld2.make_chip_csv(hs))
+        logger.info(ld2.make_chip_csv(hs))
 
     #---------------
     # View Directories
     def vdd(hs):
         db_dir = os.path.normpath(hs.dirs.db_dir)
-        print('[hs] viewing db_dir: %r ' % db_dir)
+        logger.info('[hs] viewing db_dir: %r ' % db_dir)
         cplat.view_directory(db_dir)
 
     def vcd(hs):
         computed_dir = os.path.normpath(hs.dirs.computed_dir)
-        print('[hs] viewing computed_dir: %r ' % computed_dir)
+        logger.info('[hs] viewing computed_dir: %r ' % computed_dir)
         cplat.view_directory(computed_dir)
 
     def vgd(hs):
         global_dir = io.GLOBAL_CACHE_DIR
-        print('[hs] viewing global_dir: %r ' % global_dir)
+        logger.info('[hs] viewing global_dir: %r ' % global_dir)
         cplat.view_directory(global_dir)
 
     def vrd(hs):
         result_dir = os.path.normpath(hs.dirs.result_dir)
-        print('[hs] viewing result_dir: %r ' % result_dir)
+        logger.info('[hs] viewing result_dir: %r ' % result_dir)
         cplat.view_directory(result_dir)
 
     #---------------

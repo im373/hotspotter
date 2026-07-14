@@ -3,7 +3,7 @@
 # Kept logging, preferences, file I/O, and argument handling aligned with modern runtimes.
 
 '''
-This module will be renamed to util.py
+This module will be renamed to util.py (or will be deprecated)
 
 This is less of a helper function file and more of a pile of things
 where I wasn't sure of where to put.
@@ -15,9 +15,6 @@ into a global set of helper functions.
 Wow, pylint is nice for cleaning.
 '''
 
-from . import __common__
-(print, print_, print_on, print_off,
- rrr, profile, printDBG) = __common__.init(__name__, '[util]', DEBUG=False)
 # Scientific
 import numpy as np
 # Standard
@@ -33,6 +30,7 @@ import decimal
 import fnmatch
 import hashlib
 import inspect
+import logging
 import os
 import platform
 import shutil
@@ -42,9 +40,39 @@ import time
 import types
 import warnings
 # HotSpotter
+from .dev_utils import make_reloader
 from . import tools
 from .Printable import printableVal
+from .profiling import profile
 #print('LOAD_MODULE: helpers.py')
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[util]')
+
+
+def _message_from_args(args):
+    return ' '.join(str(arg) for arg in args)
+
+
+def print(*args, **kwargs):
+    """Legacy module-local print shim, now routed through logging."""
+    logger.debug(f"{_message_from_args(args)}")
+
+
+def print_(msg=''):
+    logger.debug(f"{str(msg).rstrip()}")
+
+
+def print_on():
+    """Compatibility no-op for legacy modules that toggled helper printing."""
+
+
+def print_off():
+    """Compatibility no-op for legacy modules that toggled helper printing."""
+
+
+def printDBG(msg):
+    logger.debug(f"{msg}")
 
 # --- Globals ---
 
@@ -62,12 +90,11 @@ VERY_VERBOSE = False
 
 def DEPRICATED(func):
     'deprication decorator'
-    warn_msg = 'Depricated call to: %s' % func.__name__
+    warn_msg = f'Deprecated call to: {func.__name__}'
 
     def __DEP_WRAPPER(*args, **kwargs):
-        raise Exception('dep')
+        logger.warning(warn_msg)
         warnings.warn(warn_msg, category=DeprecationWarning)
-        #printWARN(warn_msg, category=DeprecationWarning)
         return func(*args, **kwargs)
     __DEP_WRAPPER.__name__ = func.__name__
     __DEP_WRAPPER.__doc__ = func.__doc__
@@ -84,22 +111,6 @@ def try_get_path(path_list):
         if exists(path):
             return path
     return (False, tried_list)
-
-
-def get_lena_fpath():
-    possible_lena_locations = [
-        'lena.png',
-        '~/code/hotspotter/_tpl/extern_feat/lena.png',
-        '_tpl/extern_feat/lena.png',
-        '../_tpl/extern_feat/lena.png',
-        '~/local/lena.png',
-        '../lena.png',
-        '/lena.png',
-        'C:\\lena.png']
-    lena_fpath = try_get_path(possible_lena_locations)
-    if not isinstance(lena_fpath, str):
-        raise Exception('cannot find lena: tried: %r' % (lena_fpath,))
-    return lena_fpath
 
 
 def horiz_print(*args):
@@ -451,10 +462,10 @@ def simple_progres_func(verbosity, msg, progchar='.'):
         pass
 
     def mark_progress1(*args):
-        sys.stdout.write(progchar)
+        logger.debug(progchar)
 
     def mark_progress2(*args):
-        print(msg % args)
+        logger.debug(msg % args)
 
     if verbosity == 0:
         mark_progress = mark_progress0
@@ -470,10 +481,11 @@ def progress_func(max_val=0, lbl='Progress: ', mark_after=-1,
                   flush_after=4, spacing=0, line_len=80,
                   progress_type='fmtstr'):
     '''Returns a function that marks progress taking the iteration count as a
-    parameter. Prints if max_val > mark_at. Prints dots if max_val not
-    specified or simple=True'''
-    write_fn = sys.stdout.write
-    #write_fn = print_
+    parameter. Progress is logged at DEBUG level so normal GUI runs stay quiet.'''
+
+    def log_progress(message):
+        logger.debug(message)
+
     # Tell the user we are about to make progress
     if progress_type in ['simple', 'fmtstr'] and max_val < mark_after:
         return lambda count: None, lambda: None
@@ -482,61 +494,42 @@ def progress_func(max_val=0, lbl='Progress: ', mark_after=-1,
         mark_progress =  lambda count: None
     # simple: one dot per progress. no flush.
     if progress_type == 'simple':
-        mark_progress = lambda count: write_fn('.')
+        mark_progress = lambda count: log_progress(f"{lbl}{count + 1}/{max_val}" if max_val else lbl)
     # dots: spaced dots
     if progress_type == 'dots':
-        indent_ = '    '
-        write_fn(indent_)
-
         if spacing > 0:
             # With spacing
             newline_len = spacing * line_len // spacing
 
             def mark_progress_sdot(count):
-                write_fn('.')
                 count_ = count + 1
-                if (count_) % newline_len == 0:
-                    write_fn('\n' + indent_)
-                    sys.stdout.flush()
-                elif (count_) % spacing == 0:
-                    write_fn(' ')
-                    sys.stdout.flush()
-                elif (count_) % flush_after == 0:
-                    sys.stdout.flush()
+                if (count_) % spacing == 0 or (count_) == max_val:
+                    log_progress(f"{lbl}{count_}/{max_val}")
             mark_progress = mark_progress_sdot
         else:
-            # No spacing
-            newline_len = line_len
-
             def mark_progress_dot(count):
-                write_fn('.')
                 count_ = count + 1
-                if (count_) % newline_len == 0:
-                    write_fn('\n' + indent_)
-                    sys.stdout.flush()
-                elif (count_) % flush_after == 0:
-                    sys.stdout.flush()
+                if (count_) % flush_after == 0 or (count_) == max_val:
+                    log_progress(f"{lbl}{count_}/{max_val}")
             mark_progress = mark_progress_dot
     # fmtstr: formated string progress
     if progress_type == 'fmtstr':
-        fmt_str = progress_str(max_val, lbl=lbl)
-
         def mark_progress_fmtstr(count):
             count_ = count + 1
-            write_fn(fmt_str % (count_))
-            if (count_) % flush_after == 0:
-                sys.stdout.flush()
+            if count_ == 1 or count_ == max_val or count_ % flush_after == 0:
+                log_progress(f"{lbl}{count_}/{max_val}")
         mark_progress = mark_progress_fmtstr
     # FIXME idk why argparse2.ARGS_ is none here.
     if '--aggroflush' in sys.argv:
+        base_mark_progress = mark_progress
+
         def mark_progress_agressive(count):
-            mark_progress(count)
-            sys.stdout.flush()
-        return mark_progress_agressive
+            base_mark_progress(count)
+        mark_progress = mark_progress_agressive
 
     def end_progress():
-        write_fn('\n')
-        sys.stdout.flush()
+        if max_val:
+            log_progress(f"{lbl}done {max_val}/{max_val}")
     mark_progress(0)
     return mark_progress, end_progress
     raise Exception('unkown progress type = %r' % progress_type)
@@ -1277,7 +1270,7 @@ def toc(tt):
     (msg, start_time) = tt
     ellapsed = (time.time() - start_time)
     if not msg is None:
-        sys.stdout.write('...toc(%.4fs, ' % ellapsed + '"' + str(msg) + '"' + ')\n')
+        logger.debug(f"...toc({ellapsed:.4f}s, {str(msg)!r})")
     return ellapsed
 
 
@@ -1328,44 +1321,20 @@ class Indenter(RedirectStdout):
 
 
 class Indenter2(object):
-    # THIS IS MUCH BETTER
+    """Legacy indentation context.
+
+    Older HotSpotter code monkey-patched every module-local ``print`` function
+    while this context was active. Logging now owns formatting, so the context
+    stays as a safe compatibility wrapper for decorators/call sites.
+    """
     def __init__(self, lbl='    '):
-        #self.modules = modules
-        self.modules = __common__.get_modules()
-        self.old_prints = {}
-        self.old_prints_ = {}
         self.lbl = lbl
-        self.INDENT_PRINT_ = False
 
     def start(self):
-        # Chain functions together rather than overwriting stdout
-        def indent_msg(msg):
-            return self.lbl + str(msg).replace('\n', '\n' + self.lbl)
-
-        for mod in self.modules:
-            try:
-                self.old_prints[mod] = mod.print
-                if self.INDENT_PRINT_:
-                    self.old_prints_[mod] = mod.print_
-            except KeyError as ex:
-                print('KeyError: ' + str(ex))
-                print('WARNING: module=%r was loaded between indent sessions' % mod)
-            except AttributeError as ex:
-                print('AttributeError: ' + str(ex))
-                print('WARNING: module=%r is not managed by __common__' % mod)
-
-        for mod in list(self.old_prints.keys()):
-            indent_print = lambda msg: self.old_prints[mod](indent_msg(msg))
-            mod.print = indent_print
-            if self.INDENT_PRINT_:
-                indent_print_ = lambda msg: self.old_prints_[mod](indent_msg(msg))
-                mod.print_ = indent_print_
+        logger.debug(f"Entering indented context {self.lbl}")
 
     def stop(self):
-        for mod in self.old_prints.keys():
-            mod.print =  self.old_prints[mod]
-            if self.INDENT_PRINT_:
-                mod.print_ =  self.old_prints_[mod]
+        logger.debug(f"Leaving indented context {self.lbl}")
 
     def __enter__(self):
         self.start()
@@ -1721,10 +1690,8 @@ def print_list(list):
 
 def printWARN(warn_msg, category=UserWarning):
     warn_msg = 'Probably not a big issue, but you should know...: ' + warn_msg
-    sys.stdout.write(warn_msg + '\n')
-    sys.stdout.flush()
+    logger.warning(warn_msg)
     warnings.warn(warn_msg, category=category)
-    sys.stdout.flush()
     return warn_msg
 
 

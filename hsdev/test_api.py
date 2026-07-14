@@ -1,7 +1,11 @@
 
-from hscom import __common__
-(print, print_, print_on, print_off, rrr,
- profile, printDBG) = __common__.init(__name__, '[tapi]', DEBUG=False)
+import logging
+
+from hscom.dev_utils import make_reloader
+from hscom.profiling import profile
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[tapi]')
 
 
 def signal_reset():
@@ -16,8 +20,8 @@ def signal_set():
 
 def on_ctrl_c(signal, frame):
     import sys
-    print('Caught ctrl+c')
-    print('Hotspotter parent process killed by ctrl+c')
+    logger.warning("Caught ctrl+c")
+    logger.warning("HotSpotter parent process killed by ctrl+c")
     sys.exit(0)
 
 
@@ -62,7 +66,7 @@ def main(defaultdb='cache', preload=False, app=None):
     if setcfg is not None:
         # FIXME move experiment harness to hsdev
         from . import experiment_harness
-        print('[tapi.main] setting cfg to %r' % setcfg)
+        logger.info(f"Setting cfg to {setcfg!r}")
         varied_list = experiment_harness.get_varied_params_list([setcfg])
         cfg_dict = varied_list[0]
         hs.prefs.query_cfg.update_cfg(**cfg_dict)
@@ -75,7 +79,7 @@ def main(defaultdb='cache', preload=False, app=None):
         db_dir = hs.dirs.db_dir
         io.global_cache_write('db_dir', db_dir)
     except ValueError as ex:
-        print('[tapi.main] ValueError = %r' % (ex,))
+        logger.exception(f"Failed to load HotSpotter data: {ex!r}")
         if params.args.strict:
             raise
     if app is not None:
@@ -109,14 +113,8 @@ def get_valid_cid(hs, num=0):
             raise IndexError('THERE ARE NO TEST_CIDS IN THIS DATABASE')
         cid = test_cids[num % len(test_cids)]
     except IndexError as ex:
-        print('Index Error: %s' % str(ex))
+        logger.exception(f"Index Error: {ex}")
         raise
-        print(hs.tables)
-        print('cx2_cid: %r' % hs.tables.cx2_cid)
-        print(ex)
-        print(test_cxs)
-        print(test_cids)
-        print(cid)
     return cid
 
 
@@ -136,7 +134,7 @@ def get_qcx_list(hs):
     import numpy as np
     from hscom import params
     from hscom import helpers as util
-    print('[tapi!] get_qcx_list()')
+    logger.debug("get_qcx_list()")
 
     valid_cxs = hs.get_valid_cxs()
     def get_cases(hs, with_hard=True, with_gt=True, with_nogt=True, with_notes=False):
@@ -163,37 +161,37 @@ def get_qcx_list(hs):
     # Sample a large pool of query indexes
     histids = None if params.args.histid is None else np.array(params.args.histid)
     if params.args.all_cases:
-        print('[tapi] all cases')
+        logger.debug("Using all cases")
         qcx_all = get_cases(hs, with_gt=True, with_nogt=True)
     elif params.args.all_gt_cases:
-        print('[tapi] all gt cases')
+        logger.debug("Using all gt cases")
         qcx_all = get_cases(hs, with_hard=True, with_gt=True, with_nogt=False)
     elif params.args.qcid is None:
         # FIXEME: BUG
-        print('[tapi] did not select cases')
+        logger.debug("No query cases selected")
         qcx_all = get_cases(hs, with_hard=True, with_gt=False, with_nogt=False)
     else:
-        print('[tapi] Chosen qcid=%r' % params.args.qcid)
+        logger.debug(f"Chosen qcid={params.args.qcid!r}")
         qcx_all =  util.ensure_iterable(hs.cid2_cx(params.args.qcid))
     # Filter only the ones you want from the large pool
     if histids is None:
         qcx_list = qcx_all
     else:
         histids = util.ensure_iterable(histids)
-        print('[tapi] Chosen histids=%r' % histids)
+        logger.debug(f"Chosen histids={histids!r}")
         qcx_list = [qcx_list[id_] for id_ in histids]
 
     if len(qcx_list) == 0:
         msg = '[tapi.get_qcxs] no qcx_list history'
-        print(msg)
+        logger.warning(msg)
         import sys
         if '--vstrict' in sys.argv:  # if params.args.vstrict:
             raise Exception(msg)
-        print(valid_cxs)
+        logger.debug(f"valid_cxs={valid_cxs!r}")
         qcx_list = valid_cxs[0:1]
-    print('[tapi] len(qcx_list) = %d' % len(qcx_list))
+    logger.debug(f"len(qcx_list) = {len(qcx_list)}")
     qcx_list = util.unique_keep_order(qcx_list)
-    print('[tapi] qcx_list = %r' % qcx_list)
+    logger.debug(f"qcx_list = {qcx_list!r}")
     return qcx_list
 
 
@@ -221,12 +219,12 @@ def main_loop(app, is_root, back, runqtmain=True):
     # Allow for a IPython connection by passing the --cmd flag
     embedded = util.inIPython()
     if not embedded and util.get_flag('--cmd'):
-        print('Embedding')
+        logger.info("Embedding")
         util.embed()
         sys.exit(1)
     if not embedded and runqtmain:
-        print('Running main loop')
+        logger.debug("Running main loop")
         # If not in IPython run the QT main loop
         guitools.run_main_loop(app, is_root, back, frequency=100)
     signal_reset()
-    print('hotspotter will exit')
+    logger.debug("HotSpotter will exit")

@@ -4,9 +4,12 @@
 
 ''' Computes feature representations '''
 
-from hscom import __common__
-(print, print_, print_on, print_off,
- rrr, profile) = __common__.init(__name__, '[fc2]')
+import logging
+from hscom.dev_utils import make_reloader
+from hscom.profiling import profile
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[fc2]')
 # scientific
 import numpy as np
 # python
@@ -21,14 +24,14 @@ from . import extern_feat
 
 def whiten_features(desc_list):
     from . import algos
-    print('[fc2] * Whitening features')
+    logger.debug('[fc2] * Whitening features')
     ax2_desc = np.vstack(desc_list)
     ax2_desc_white = algos.scale_to_byte(algos.whiten(ax2_desc))
     index = 0
     offset = 0
     for cx in range(len(desc_list)):
         old_desc = desc_list[cx]
-        print ('[fc2] * ' + util.info(old_desc, 'old_desc'))
+        logger.debug('[fc2] * ' + util.info(old_desc, 'old_desc'))
         offset = len(old_desc)
         new_desc = ax2_desc_white[index:(index + offset)]
         desc_list[cx] = new_desc
@@ -40,7 +43,7 @@ def whiten_features(desc_list):
 # =======================================
 @profile
 def bigcache_feat_save(cache_dir, uid, ext, kpts_list, desc_list):
-    print('[fc2] Caching desc_list and kpts_list')
+    logger.debug('[fc2] Caching desc_list and kpts_list')
     io.smart_save(kpts_list, cache_dir, 'kpts_list', uid, ext)
     io.smart_save(desc_list, cache_dir, 'desc_list', uid, ext)
 
@@ -54,7 +57,7 @@ def bigcache_feat_load(cache_dir, uid, ext):
         return None
     desc_list = desc_list.tolist()
     kpts_list = kpts_list.tolist()
-    print('[fc2]  Loaded kpts_list and desc_list from big cache')
+    logger.debug('[fc2]  Loaded kpts_list and desc_list from big cache')
     return kpts_list, desc_list
 
 
@@ -63,7 +66,7 @@ def sequential_feat_load(feat_cfg, feat_fpath_list):
     kpts_list = []
     desc_list = []
     # Debug loading (seems to use lots of memory)
-    print('\n')
+    logger.debug('')
     try:
         nFeats = len(feat_fpath_list)
         prog_label = '[fc2] Loading feature: '
@@ -72,9 +75,9 @@ def sequential_feat_load(feat_cfg, feat_fpath_list):
             try:
                 npz = np.load(feat_path, mmap_mode=None, allow_pickle=True)
             except IOError:
-                print('\n')
+                logger.debug('')
                 util.checkpath(feat_path, verbose=True)
-                print('IOError on feat_path=%r' % feat_path)
+                logger.exception('IOError on feat_path=%r' % feat_path)
                 raise
             kpts = npz['arr_0']
             desc = npz['arr_1']
@@ -83,13 +86,12 @@ def sequential_feat_load(feat_cfg, feat_fpath_list):
             desc_list.append(desc)
             mark_progress(count)
         end_progress()
-        print('[fc2] Finished load of individual kpts and desc')
+        logger.debug('[fc2] Finished load of individual kpts and desc')
     except MemoryError:
-        print('\n------------')
-        print('[fc2] Out of memory')
-        print('[fc2] Trying to read: %r' % feat_path)
-        print('[fc2] len(kpts_list) = %d' % len(kpts_list))
-        print('[fc2] len(desc_list) = %d' % len(desc_list))
+        logger.exception('[fc2] Out of memory while loading features')
+        logger.error('[fc2] Trying to read: %r' % feat_path)
+        logger.debug('[fc2] len(kpts_list) = %d' % len(kpts_list))
+        logger.debug('[fc2] len(desc_list) = %d' % len(desc_list))
         raise
     if feat_cfg.whiten:
         desc_list = whiten_features(desc_list)
@@ -108,7 +110,7 @@ def _load_features_individualy(hs, cx_list):
     feat_cfg = hs.prefs.feat_cfg
     feat_dir = hs.dirs.feat_dir
     feat_uid = feat_cfg.get_uid()
-    print('[fc2]  Loading ' + feat_uid + ' individually')
+    logger.debug('[fc2]  Loading ' + feat_uid + ' individually')
     # Build feature paths
     rchip_fpath_list = [hs.cpaths.cx2_rchip_path[cx] for cx in iter(cx_list)]
     cid_list = hs.tables.cx2_cid[cx_list]
@@ -154,8 +156,8 @@ def _load_features_bigcache(hs, cx_list):
 def load_features(hs, cx_list=None, **kwargs):
     # TODO: There needs to be a fast way to ensure that everything is
     # already loaded. Same for cc2.
-    print('=============================')
-    print('[fc2] Precomputing and loading features: %r' % hs.get_db_name())
+    logger.debug('=============================')
+    logger.debug('[fc2] Precomputing and loading features: %r' % hs.get_db_name())
     #----------------
     # COMPUTE SETUP
     #----------------
@@ -164,17 +166,17 @@ def load_features(hs, cx_list=None, **kwargs):
     feat_cfg = hs.prefs.feat_cfg
     feat_uid = feat_cfg.get_uid()
     if hs.feats.feat_uid != '' and hs.feats.feat_uid != feat_uid:
-        print('[fc2] Disagreement: OLD_feat_uid = %r' % hs.feats.feat_uid)
-        print('[fc2] Disagreement: NEW_feat_uid = %r' % feat_uid)
-        print('[fc2] Unloading all chip information')
+        logger.info('[fc2] Feature config changed; unloading cached feature information')
+        logger.debug('[fc2] Disagreement: OLD_feat_uid = %r' % hs.feats.feat_uid)
+        logger.debug('[fc2] Disagreement: NEW_feat_uid = %r' % feat_uid)
         hs.unload_all()
         hs.load_chips(cx_list=cx_list)
-    print('[fc2] feat_uid = %r' % feat_uid)
+    logger.debug('[fc2] feat_uid = %r' % feat_uid)
     # Get the list of chip features to load
     cx_list = hs.get_valid_cxs() if cx_list is None else cx_list
     if not np.iterable(cx_list):
         cx_list = [cx_list]
-    print('[cc2] len(cx_list) = %r' % len(cx_list))
+    logger.debug('[fc2] len(cx_list) = %r' % len(cx_list))
     if len(cx_list) == 0:
         return  # HACK
     cx_list = np.array(cx_list)  # HACK
@@ -192,7 +194,7 @@ def load_features(hs, cx_list=None, **kwargs):
     for lx, cx in enumerate(cx_list):
         hs.feats.cx2_desc[cx] = desc_list[lx]
     hs.feats.feat_uid = feat_uid
-    print('[fc2]=============================')
+    logger.debug('[fc2]=============================')
 
 
 def clear_feature_cache(hs):
@@ -200,7 +202,7 @@ def clear_feature_cache(hs):
     feat_dir = hs.dirs.feat_dir
     cache_dir = hs.dirs.cache_dir
     feat_uid = feat_cfg.get_uid()
-    print('[fc2] clearing feature cache: %r' % feat_dir)
+    logger.info('[fc2] clearing feature cache: %r' % feat_dir)
     util.remove_files_in_dir(feat_dir, '*' + feat_uid + '*', verbose=True, dryrun=False)
     util.remove_files_in_dir(cache_dir, '*' + feat_uid + '*', verbose=True, dryrun=False)
     pass

@@ -2,16 +2,20 @@
 # Updated visualization code for modern matplotlib and Python 3 behavior.
 # Normalized keypoint/SIFT drawing paths for current numpy array shapes.
 
-from hscom import __common__
-(print, print_, print_on, print_off, rrr, profile, printDBG) = \
-    __common__.init(__name__, '[viz]', DEBUG=False)
-import matplotlib
-matplotlib.use('Qt5Agg')
+import logging
 #import re
 import warnings
 # Scientific
 import numpy as np
 # Hotspotter
+from hscom.dev_utils import make_reloader
+from hscom.mpl_utils import configure_matplotlib
+from hscom.profiling import profile
+
+configure_matplotlib()
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[viz]')
+
 from . import draw_func2 as df2
 from . import extract_patch
 from hscom import params
@@ -73,7 +77,7 @@ def show_name_of(hs, cx, **kwargs):
 
 def show_name(hs, nx, nx2_cxs=None, fnum=0, sel_cxs=[], subtitle='',
               annote=False, **kwargs):
-    print('[viz] show_name nx=%r' % nx)
+    logger.info(f"show_name nx={nx!r}")
     nx2_name = hs.tables.nx2_name
     cx2_nx   = hs.tables.cx2_nx
     name = nx2_name[nx]
@@ -81,15 +85,15 @@ def show_name(hs, nx, nx2_cxs=None, fnum=0, sel_cxs=[], subtitle='',
         cxs = nx2_cxs[nx]
     else:
         cxs = np.where(cx2_nx == nx)[0]
-    print('[viz] show_name %r' % hs.cidstr(cxs))
+    logger.info(f"show_name {hs.cidstr(cxs)!r}")
     if len(cxs) == 0:
-        print('[viz] show_name nx=%r has no chips' % nx)
+        logger.info(f"show_name nx={nx!r} has no chips")
         df2.figure(fnum=fnum, **kwargs)
         df2.gca().set_axis_off()
         df2.set_figtitle('Name View nx=%r name=%r (empty)' % (nx, name))
         return
     nRows, nCols = get_square_row_cols(len(cxs))
-    print('[viz*] r=%r, c=%r' % (nRows, nCols))
+    logger.debug(f"r={nRows!r}, c={nCols!r}")
     #gs2 = gridspec.GridSpec(nRows, nCols)
     pnum = lambda px: (nRows, nCols, px + 1)
     fig = df2.figure(fnum=fnum, pnum=pnum(0), **kwargs)
@@ -192,12 +196,13 @@ def _annotate_qcx_match_results(hs, res, qcx, kpts, cx2_color):
             stack_ints = np.array(stack_list, dtype=int)
             unique_ints = np.unique(stack_ints)
             return unique_ints
-        except Exception as ex:
-            print('Ex: %r' % ex)
-            print('fx_list = %r ' % fx_list)
-            print('stack_insts = %r' % stack_ints)
-            print('unique_ints = %r' % unique_ints)
-            print(unique_ints)
+        except Exception:
+            logger.exception(
+                f"Could not stack unique feature indexes; "
+                f"fx_list={fx_list!r}, "
+                f"stack_ints={locals().get('stack_ints', None)!r}, "
+                f"unique_ints={locals().get('unique_ints', None)!r}"
+            )
             raise
 
     def _kpts_helper(kpts_, color, alpha, label):
@@ -212,10 +217,12 @@ def _annotate_qcx_match_results(hs, res, qcx, kpts, cx2_color):
                 qfxs = res.cx2_fm[cx][:, 0]
                 kpts_ = np.empty((0, 5)) if len(qfxs) == 0 else kpts[qfxs]
                 _kpts_helper(kpts_, color, .4, hs.cidstr(cx))
-            except Exception as ex:
-                print('qfxs=%r' % qfxs)
-                print('kpts.shape=%r' % (kpts.shape,))
-                print(ex)
+            except Exception:
+                logger.exception(
+                    f"Could not annotate qcx match result; "
+                    f"qfxs={locals().get('qfxs', None)!r}, "
+                    f"kpts.shape={getattr(kpts, 'shape', None)!r}"
+                )
                 raise
     else:
         # Show which keypoints match groundtruth, etc...
@@ -282,7 +289,7 @@ def _annotate_kpts(kpts, sel_fx, draw_ell, draw_pts, color=None, nRandKpts=None,
 def show_chip(hs, cx=None, allres=None, res=None, draw_ell=True,
               draw_pts=False, nRandKpts=None, prefix='', sel_fx=None,
               color=None, in_image=False, sel_fx2=None, **kwargs):
-    printDBG('[viz] show_chip()')
+    logger.debug("show_chip()")
     if allres is not None:
         res = allres.qcx2_res[cx]
     if res is not None:
@@ -406,7 +413,7 @@ def show_chipres(hs, res, cx, fnum=None, pnum=None, sel_fm=[], in_image=False, *
     #printDBG('[viz.show_chipres()] Showing matches from %s' % (vs_str))
     #printDBG('[viz.show_chipres()] fnum=%r, pnum=%r' % (fnum, pnum))
     # Test valid cx
-    printDBG('[viz] show_chipres()')
+    logger.debug("show_chipres()")
     if np.isnan(cx):
         nan_img = np.zeros((32, 32), dtype=np.uint8)
         title = '(q%s v %r)' % (hs.cidstr(qcx), cx)
@@ -439,12 +446,10 @@ def show_chipres(hs, res, cx, fnum=None, pnum=None, sel_fm=[], in_image=False, *
     kwargs_.update(kwargs)
     try:
         ax, xywh1, xywh2 = df2.show_chipmatch2(rchip1, rchip2, kpts1, kpts2, fm, **kwargs_)
-    except Exception as ex:
-        print('!!!!!!!!!!!!!!!')
-        print('[viz] %s: %s' % (type(ex), ex))
-        print('[viz] vsstr = %s' % hs.vs_str(qcx, cx))
+    except Exception:
+        logger.exception(f"Could not show chip result for {hs.vs_str(qcx, cx)}")
         dev_consistency.dbg_check_query_result(hs, res)
-        print('consider qr.remove_corrupted_queries(hs, res, dryrun=False)')
+        logger.warning("consider qr.remove_corrupted_queries(hs, res, dryrun=False)")
         # Only drop into IPython when we're already in an interactive session.
         if util.inIPython():
             util.qflag()
@@ -466,7 +471,7 @@ def annotate_chipres(hs, res, cx, showTF=True, showScore=True, showRank=True, ti
                      title_suff='', show_gname=False, show_name=True,
                      time_appart=True, in_image=False, offset1=(0, 0),
                      offset2=(0, 0), show_query=True, xywh2=None, **kwargs):
-    printDBG('[viz] annotate_chipres()')
+    logger.debug("annotate_chipres()")
     #print('Did not expect args: %r' % (kwargs.keys(),))
     qcx = res.qcx
     score = res.cx2_score[cx]
@@ -549,7 +554,7 @@ def show_top(res, hs, *args, **kwargs):
 @util.indent_decor('[analysis]')
 @profile
 def res_show_analysis(res, hs, **kwargs):
-        print('[viz] res.show_analysis()')
+        logger.info("res.show_analysis()")
         # Parse arguments
         noshow_gt  = kwargs.pop('noshow_gt', params.args.noshow_gt)
         show_query = kwargs.pop('show_query', params.args.noshow_query)
@@ -563,7 +568,7 @@ def res_show_analysis(res, hs, **kwargs):
 
         # Compare to cx_list instead of using top ranks
         if cx_list is None:
-            print('[viz.analysis] showing topN cxs')
+            logger.info("showing topN cxs")
             topN_cxs = res.topN_cxs(hs)
             if figtitle is None:
                 if len(topN_cxs) == 0:
@@ -573,7 +578,7 @@ def res_show_analysis(res, hs, **kwargs):
                     topscore = res.get_cx2_score()[topN_cxs][0]
                     figtitle = ('q%s -- topscore=%r' % (hs.cidstr(res.qcx), topscore))
         else:
-            print('[viz.analysis] showing a given list of cxs')
+            logger.info("showing a given list of cxs")
             topN_cxs = cx_list
             if figtitle is None:
                 figtitle = 'comparing to ' + hs.cidstr(topN_cxs) + figtitle
@@ -614,15 +619,15 @@ def _show_res(hs, res, **kwargs):
     if len(topN_cxs) in [8]:
         max_nCols = 4
 
-    printDBG('[viz]========================')
-    printDBG('[viz._show_res()]----------------')
+    logger.debug("========================")
+    logger.debug("_show_res()")
     all_gts = hs.get_other_indexed_cxs(res.qcx)
     _tup = tuple(map(len, (topN_cxs, gt_cxs, all_gts)))
-    printDBG('[viz._show_res()] #topN=%r #missed_gts=%r/%r' % _tup)
-    printDBG('[viz._show_res()] * fnum=%r' % (fnum,))
-    printDBG('[viz._show_res()] * figtitle=%r' % (figtitle,))
-    printDBG('[viz._show_res()] * max_nCols=%r' % (max_nCols,))
-    printDBG('[viz._show_res()] * show_query=%r' % (show_query,))
+    logger.debug(f"#topN={_tup[0]!r} #missed_gts={_tup[1]!r}/{_tup[2]!r}")
+    logger.debug(f"fnum={fnum!r}")
+    logger.debug(f"figtitle={figtitle!r}")
+    logger.debug(f"max_nCols={max_nCols!r}")
+    logger.debug(f"show_query={show_query!r}")
     ranked_cxs = res.topN_cxs(hs, N='all')
     # Build a subplot grid
     nQuerySubplts = 1 if show_query else 0
@@ -712,7 +717,7 @@ def _show_res(hs, res, **kwargs):
         nRows, nCols = get_square_row_cols(nSubplots, 3)
         nTopNCols = nGTCols = nCols
         shift_topN = 1
-        printDBG('nRows, nCols = (%r, %r)' % (nRows, nCols))
+        logger.debug(f"nRows, nCols = ({nRows!r}, {nCols!r})")
     else:
         shift_topN = nGtCells
 
@@ -734,10 +739,10 @@ def _show_res(hs, res, **kwargs):
 
     # Result Interaction
     if interact:
-        printDBG('[viz._show_res()] starting interaction')
+        logger.debug("starting result interaction")
 
         def _ctrlclicked_cx(cx):
-            printDBG('ctrl+clicked cx=%r' % cx)
+            logger.debug(f"ctrl+clicked cx={cx!r}")
             fnum = FNUMS['special']
             fig = df2.figure(fnum=fnum, docla=True, doclf=True)
             df2.disconnect_callback(fig, 'button_press_event')
@@ -746,7 +751,7 @@ def _show_res(hs, res, **kwargs):
             df2.bring_to_front(fig)
 
         def _clicked_cx(cx):
-            printDBG('clicked cx=%r' % cx)
+            logger.debug(f"clicked cx={cx!r}")
             fnum = FNUMS['inspect']
             res.interact_chipres(hs, cx, fnum=fnum)
             fig = df2.gcf()
@@ -755,38 +760,38 @@ def _show_res(hs, res, **kwargs):
 
         def _clicked_none():
             # Toggle if the click is not in any axis
-            printDBG('clicked none')
+            logger.debug("clicked none")
             #print(kwargs)
             _show_res(hs, res, annote=(annote + 1) % 3, **kwargs)
             fig.canvas.draw()
 
         def _on_res_click(event):
             'result interaction mpl event callback slot'
-            print('[viz] clicked result')
+            logger.debug("clicked result")
             if event.xdata is None or event.inaxes is None:
                 #print('clicked outside axes')
                 return _clicked_none()
             ax = event.inaxes
             hs_viewtype = ax.__dict__.get('_hs_viewtype', '')
-            printDBG(event.__dict__)
-            printDBG('hs_viewtype=%r' % hs_viewtype)
+            logger.debug(f"{event.__dict__!r}")
+            logger.debug(f"hs_viewtype={hs_viewtype!r}")
             # Clicked a specific chipres
             if hs_viewtype.find('chipres') == 0:
                 cx = ax.__dict__.get('_hs_cx')
                 # Ctrl-Click
                 key = '' if event.key is None else event.key
-                print('key = %r' % key)
+                logger.debug(f"key = {key!r}")
                 if key.find('control') == 0:
-                    print('[viz] result control clicked')
+                    logger.debug("result control clicked")
                     return _ctrlclicked_cx(cx)
                 # Left-Click
                 else:
-                    print('[viz] result clicked')
+                    logger.debug("result clicked")
                     return _clicked_cx(cx)
 
         df2.connect_callback(fig, 'button_press_event', _on_res_click)
     df2.adjust_subplots_safe()
-    printDBG('[viz._show_res()] Finished')
+    logger.debug("_show_res() finished")
     return fig
 
 #==========================#
@@ -906,16 +911,15 @@ def show_nearest_descriptors(hs, qcx, qfx, fnum=None):
         df2.figure(fnum=fnum, docla=True, doclf=True)
         px = 0  # plot offset
         for (rchip, kp, sift, fx, cx, info, type_) in extracted_list:
-            print('[viz] ' + info.replace('\n', ''))
+            logger.info(f"{info.replace(chr(10), '')}")
             px = draw_feat_row(rchip, fx, kp, sift, fnum, nRows, nCols, px,
                                prevsift=prevsift, cx=cx, info=info, type_=type_)
             prevsift = sift
 
         df2.adjust_subplots_safe(hspace=1)
 
-    except Exception as ex:
-        print('[viz] Error in show nearest descriptors')
-        print(ex)
+    except Exception:
+        logger.exception("Error in show nearest descriptors")
         raise
 
 
@@ -929,13 +933,13 @@ def ensure_fm(hs, cx1, cx2, fm=None, res='db'):
     '''
     if fm is not None:
         return fm
-    print('[viz.sv] ensure_fm()')
+    logger.info("ensure_fm()")
     if res == 'db':
         query_args = hs.prefs.query_cfg.flat_dict()
         query_args['sv_on'] = False
         query_args['use_cache'] = False
         # Query without spatial verification to get assigned matches
-        print('[viz.sv] query_args = %r' % (query_args))
+        logger.info(f"query_args = {query_args!r}")
         res = hs.query(cx1, **query_args)
     elif res == 'gt':
         # For testing purposes query_groundtruth is a bit faster than
@@ -943,28 +947,28 @@ def ensure_fm(hs, cx1, cx2, fm=None, res='db'):
         query_args = hs.prefs.query_cfg.flat_dict()
         query_args['sv_on'] = False
         query_args['use_cache'] = False
-        print('[viz.sv] query_args = %r' % (query_args))
+        logger.info(f"query_args = {query_args!r}")
         res = hs.query_groundtruth(cx1, **query_args)
     assert isinstance(res, qr.QueryResult)
     # Get chip index to feature match
     fm = res.cx2_fm[cx2]
     if len(fm) == 0:
         raise Exception('No feature matches for %s' % hs.vs_str(cx1, cx2))
-    print('[viz] len(fm) = %r' % len(fm))
+    logger.info(f"len(fm) = {len(fm)!r}")
     return fm
 
 
 def ensure_cx2(hs, cx1, cx2=None):
     if cx2 is not None:
         return cx2
-    print('[viz] ensure_cx2()')
+    logger.info("ensure_cx2()")
     gt_cxs = hs.get_other_indexed_cxs(cx1)  # list of ground truth chip indexes
     if len(gt_cxs) == 0:
         msg = 'q%s has no groundtruth' % hs.cidstr(cx1)
         msg += 'cannot perform tests without groundtruth'
         raise Exception(msg)
     cx2 = gt_cxs[0]  # Pick a ground truth to test against
-    print('[viz] cx2 = %r' % cx2)
+    logger.info(f"cx2 = {cx2!r}")
     return cx2
 
 
@@ -973,9 +977,9 @@ def viz_spatial_verification(hs, cx1, figtitle='Spatial Verification View', **kw
     #kwargs = {}
     from hotspotter import spatial_verification2 as sv2
     import cv2
-    print('\n[viz] ======================')
+    logger.info("======================")
     cx2 = ensure_cx2(hs, cx1, kwargs.pop('cx2', None))
-    print('[viz] viz_spatial_verification  %s' % hs.vs_str(cx1, cx2))
+    logger.info(f"viz_spatial_verification {hs.vs_str(cx1, cx2)}")
     fnum = kwargs.get('fnum', 4)
     fm  = ensure_fm(hs, cx1, cx2, kwargs.pop('fm', None), kwargs.pop('res', 'db'))
     # Get keypoints
@@ -1000,18 +1004,18 @@ def viz_spatial_verification(hs, cx1, figtitle='Spatial Verification View', **kw
     try:
         Aff, aff_inliers = sv2.homography_inliers(*homog_args, just_affine=True)
         H, inliers = sv2.homography_inliers(*homog_args, just_affine=False)
-    except Exception as ex:
-        print(ex)
+    except Exception:
+        logger.exception("Could not compute spatial verification transforms")
         #print('[viz] homog_args = %r' % (homog_args))
         #print('[viz] ex = %r' % (ex,))
         raise
-    print(util.horiz_string(['H = ', str(H)]))
-    print(util.horiz_string(['Aff = ', str(Aff)]))
+    logger.info(f"{util.horiz_string(['H = ', str(H)])}")
+    logger.info(f"{util.horiz_string(['Aff = ', str(Aff)])}")
 
     # Transform the chips
-    print('warp homog')
+    logger.info("warp homog")
     rchip1_Ht = cv2.warpPerspective(rchip1, H, wh2)
-    print('warp affine')
+    logger.info("warp affine")
     rchip1_At = cv2.warpAffine(rchip1, Aff[0:2, :], wh2)
 
     rchip2_blendA = np.zeros(rchip2.shape, dtype=rchip2.dtype)

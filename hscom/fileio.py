@@ -3,13 +3,10 @@
 # Kept logging, preferences, file I/O, and argument handling aligned with modern runtimes.
 
 
-from . import __common__
-(print, print_, print_on, print_off,
- rrr, profile) = __common__.init(__name__, '[io]')
 # Python
+import logging
 import os
 import fnmatch
-import pickle
 import pickle
 from os.path import normpath, exists, realpath, join, expanduser, dirname
 import datetime
@@ -21,7 +18,12 @@ import cv2
 from PIL import Image
 from PIL.ExifTags import TAGS
 # Hotspotter
+from .dev_utils import make_reloader
 from . import helpers
+from .profiling import profile
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[io]')
 
 VERBOSE_IO = 0  # 2
 
@@ -53,9 +55,25 @@ def save_pkl(fpath, data):
 
 
 # --- Loading ---
+def _pickle_load_py2_compatible(file):
+    """Load pickle data, falling back to Python 2 byte-string encoding."""
+    try:
+        return pickle.load(file)
+    except UnicodeDecodeError:
+        file.seek(0)
+        return pickle.load(file, encoding='latin1')
+
+
+def _np_load_py2_compatible(file, **kwargs):
+    """Load NumPy data that may contain pickled Python 2 object arrays."""
+    kwargs.setdefault('allow_pickle', True)
+    kwargs.setdefault('encoding', 'latin1')
+    return np.load(file, **kwargs)
+
+
 def load_npz_memmap(fpath):
     with open(fpath, 'rb') as file:
-        npz = np.load(file, mmap_mode='r', allow_pickle=True)
+        npz = _np_load_py2_compatible(file, mmap_mode='r')
         data = npz['arr_0']
         npz.close()
     return data
@@ -63,7 +81,7 @@ def load_npz_memmap(fpath):
 
 def load_npz(fpath):
     with open(fpath, 'rb') as file:
-        npz = np.load(file, mmap_mode=None, allow_pickle=True)
+        npz = _np_load_py2_compatible(file, mmap_mode=None)
         data = npz['arr_0']
         npz.close()
     return data
@@ -71,19 +89,19 @@ def load_npz(fpath):
 
 def load_npy(fpath):
     with open(fpath, 'rb') as file:
-        data = np.load(file)
+        data = _np_load_py2_compatible(file)
     return data
 
 
 def load_cPkl(fpath):
     with open(fpath, 'rb') as file:
-        data = pickle.load(file)
+        data = _pickle_load_py2_compatible(file)
     return data
 
 
 def load_pkl(fpath):
     with open(fpath, 'rb') as file:
-        data = pickle.load(file)
+        data = _pickle_load_py2_compatible(file)
     return data
 
 
@@ -103,11 +121,11 @@ ext2_save_func = {
 
 def debug_smart_load(dpath='', fname='*', uid='*', ext='*'):
     pattern = fname + uid + ext
-    print('[io] debug_smart_load(): dpath=%r' % (dpath))
+    logger.debug(f"debug_smart_load(): dpath={dpath!r}")
     for fname_ in os.listdir(dpath):
         if fnmatch.fnmatch(fname_, pattern):
             #fpath = join(dpath, fname_)
-            print(fname_)
+            logger.debug(f"{fname_}")
 
 
 # --- Smart Load/Save ---
@@ -141,11 +159,11 @@ def smart_save(data, dpath='', fname='', uid='', ext='', verbose=VERBOSE_IO):
     fpath = __args2_fpath(dpath, fname, uid, ext)
     if verbose:
         if verbose > 1:
-            print('[io]')
-        print(smart_fname_info('smart_save', dpath, fname, uid, ext))
+            logger.info("")
+        logger.info(f"{smart_fname_info('smart_save', dpath, fname, uid, ext)}")
     ret = __smart_save(data, fpath, verbose)
     if verbose > 1:
-        print('[io]')
+        logger.info("")
     return ret
 
 
@@ -155,11 +173,11 @@ def smart_load(dpath='', fname='', uid='', ext='', verbose=VERBOSE_IO, **kwargs)
     fpath = __args2_fpath(dpath, fname, uid, ext)
     if verbose:
         if verbose > 1:
-            print('[io]')
-        print(smart_fname_info('smart_save', dpath, fname, uid, ext))
+            logger.info("")
+        logger.info(f"{smart_fname_info('smart_load', dpath, fname, uid, ext)}")
     data = __smart_load(fpath, verbose, **kwargs)
     if verbose > 1:
-        print('[io]')
+        logger.info("")
     return data
 
 
@@ -170,14 +188,13 @@ def __smart_save(data, fpath, verbose):
     fname_noext, ext_ = os.path.splitext(fname)
     save_func = ext2_save_func[ext_]
     if verbose > 1:
-        print('[io] saving: %r' % (type(data),))
+        logger.info(f"saving: {type(data)!r}")
     try:
         save_func(fpath, data)
         if verbose > 1:
-            print('[io] saved %s ' % (filesize_str(fpath),))
+            logger.info(f"saved {filesize_str(fpath)}")
     except Exception as ex:
-        print('[io] ! Exception will saving %r' % fpath)
-        print(helpers.indent(repr(ex), '[io]    '))
+        logger.exception(f"Exception while saving {fpath!r}")
         raise
 
 
@@ -189,7 +206,7 @@ def __smart_load(fpath, verbose, allow_alternative=False, can_fail=True, **kwarg
     fname_noext, ext_ = os.path.splitext(fname)
     # If exact path doesnt exist
     if not exists(fpath):
-        print('[io] fname=%r does not exist' % fname)
+        logger.warning(f"fname={fname!r} does not exist")
         if allow_alternative:
             # allows alternative extension
             convert_alternative(fpath, verbose, can_fail=can_fail, **kwargs)
@@ -201,20 +218,19 @@ def __smart_load(fpath, verbose, allow_alternative=False, can_fail=True, **kwarg
         # Do actual data loading
         try:
             if verbose > 1:
-                print('[io] loading ' + filesize_str(fpath))
+                logger.info(f"loading {filesize_str(fpath)}")
             data = load_func(fpath)
             if verbose:
-                print('[io]... loaded data')
+                logger.info("loaded data")
         except Exception as ex:
             if verbose:
-                print('[io] ! Exception while loading %r' % fpath)
-                print('[io] caught ex=%r' % (ex,))
+                logger.exception(f"Exception while loading {fpath!r}")
             data = None
             if not can_fail:
                 raise
     if data is None:
         if verbose:
-            print('[io]... did not load %r' % fpath)
+            logger.warning(f"did not load {fpath!r}")
     return data
 #----
 
@@ -228,7 +244,7 @@ def convert_alternative(fpath, verbose, can_fail):
     if len(alternatives) == 0:
         fail_msg = '[io] ...no alternatives to %r' % fname
         if verbose:
-            print(fail_msg)
+            logger.warning(f"{fail_msg}")
         if can_fail:
             return None
         else:
@@ -237,7 +253,7 @@ def convert_alternative(fpath, verbose, can_fail):
         #load and convert alternative
         alt_fpath = alternatives[0]
         if verbose > 1:
-            print('[io] ...converting %r' % alt_fpath)
+            logger.info(f"converting {alt_fpath!r}")
         data = __smart_load(alt_fpath, verbose, allow_alternative=False)
         __smart_save(data, fpath, verbose)
         return data
@@ -257,9 +273,9 @@ def find_alternatives(fpath, verbose):
             alternatives.append(alt_fpath)
     if verbose > 1:
         # Print num alternatives / filesizes
-        print('[io] Found %d alternate(s)' % len(alternatives))
+        logger.info(f"Found {len(alternatives)} alternate(s)")
         for alt_fpath in iter(alternatives):
-            print('[io] ' + filesize_str(alt_fpath))
+            logger.info(f"{filesize_str(alt_fpath)}")
     return alternatives
 
 
@@ -271,10 +287,6 @@ def sanatize_fpath(fpath, ext=None):  # UNUSED!
         fname = fname_noext + ext
     fpath = normpath(join(dpath, fname))
     return fpath
-
-
-def print_filesize(fpath):
-    print(filesize_str(fpath))
 
 
 @profile
@@ -301,10 +313,7 @@ def exiftime_to_unixtime(datetime_str):
                 return -1
             if datetime_str == '0000:00:00 00:00:00':
                 return -1
-        print('!!!!!!!!!!!!!!!!!!')
-        print('Caught Error: ' + repr(ex))
-        print('type(datetime_str) = %r' % type(datetime_str))
-        print('datetime_str = %r' % datetime_str)
+        logger.exception(f"Could not parse EXIF datetime {datetime_str!r} of type {type(datetime_str)!r}")
         raise
 
 
@@ -319,8 +328,7 @@ def check_exif_keys(pil_image):
             valid_keys.append((key, exif_keyval))
         except KeyError:
             invalid_keys.append(key)
-    print('[io] valid_keys = ' + '\n'.join(valid_keys))
-    print('-----------')
+    logger.info(f"valid_keys = {valid_keys!r}")
     #import draw_func2 as df2
     #exec(df2.present())
 
@@ -364,7 +372,7 @@ def read_exif(fpath, tag=None):
             return 'No EXIF Data'
     except IOError as ex:
         from . import argparse2
-        print('Caught IOError: %r' % (ex,))
+        logger.exception(f"Caught IOError reading EXIF from {fpath!r}")
         print_image_checks(fpath)
         if argparse2.ARGS_.strict:
             raise
@@ -382,9 +390,9 @@ def print_image_checks(img_fpath):
     hasimg = helpers.checkpath(img_fpath, verbose=True)
     if hasimg:
         _tup = (img_fpath, filesize_str(img_fpath))
-        print('[io] Image %r (%s) exists. Is it corrupted?' % _tup)
+        logger.warning(f"Image {_tup[0]!r} ({_tup[1]}) exists. Is it corrupted?")
     else:
-        print('[io] Image %r does not exist' % (img_fpath,))
+        logger.warning(f"Image {img_fpath!r} does not exist")
     return hasimg
 
 
@@ -433,8 +441,7 @@ def imread(img_fpath, mode=None):
                 return cv2.cvtColor(imgBGR, cv2.COLOR_BGR2HSV)
         return imgBGR
     except Exception as ex:
-        print('[io] Caught Exception: %r' % ex)
-        print('[io] ERROR reading: %r' % (img_fpath,))
+        logger.exception(f"ERROR reading image {img_fpath!r}")
         raise
 
 

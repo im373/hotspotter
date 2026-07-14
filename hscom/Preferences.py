@@ -1,17 +1,14 @@
 # HotSpotter port notes:
 # Updated shared compatibility helpers for Python 3, NumPy 2, and Windows paths.
-# Kept logging, preferences, file I/O, and argument handling aligned with modern runtimes.
+# Replaced hscom.__common__ hooks with logging/dev helpers.
 
 
-from . import __common__
-(print, print_, print_on, print_off,
- rrr, profile) = __common__.init(__name__, '[pref]')
 # Python
+import logging
 import pickle
 import os.path
 import sys
 from . import tools
-import traceback
 import warnings
 # Science
 import numpy as np
@@ -21,6 +18,10 @@ from PyQt5 import QtWidgets
 
 # HotSpotter
 from .Printable import DynStruct
+from .dev_utils import make_reloader
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[pref]')
 
 # ---
 # GLOBALS
@@ -29,8 +30,7 @@ PrefNode = DynStruct
 
 
 def printDBG(msg):
-    #print('[PREFS] '+msg)
-    pass
+    logger.debug(f"{msg}")
 
 
 # ---
@@ -81,8 +81,7 @@ def report_thread_error(fn):
             ret = fn(*args, **kwargs)
             return ret
         except Exception as ex:
-            print('\n\n *!!* Thread Raised Exception: ' + str(ex))
-            print('\n\n *!!* Thread Exception Traceback: \n\n' + traceback.format_exc())
+            logger.exception(f"Thread raised exception: {ex}")
             sys.stdout.flush()
             et, ei, tb = sys.exc_info()
             raise
@@ -195,7 +194,7 @@ class Pref(PrefNode):
         return choice_obj.get_tuple()
 
     def __overwrite_child_attr(self, name, attr):
-        printDBG( "overwrite_attr: %s.%s = %r" % (self._intern.name, name, attr))
+        printDBG(f"overwrite_attr: {self._intern.name}.{name} = {attr!r}")
         # get child node to "overwrite"
         row = self._tree.child_names.index(name)
         child = self._tree.child_list[row]
@@ -223,7 +222,7 @@ class Pref(PrefNode):
         if isinstance(attr, Pref):
             # Child attribute already has a Pref wrapping
 
-            printDBG( 'new_attr: %s.%s = %r' % (self._intern.name, name, attr.value()))
+            printDBG(f"new_attr: {self._intern.name}.{name} = {attr.value()!r}")
             new_childx = len(self._tree.child_names)
             # Children know about parents
             attr._tree.parent = self     # Give child parent
@@ -301,7 +300,7 @@ class Pref(PrefNode):
             return self._tree.child_list[attrx]
         #print(self._internal.name)
         #print(self._tree)
-        print('[prefs!] !!! ERROR !!!')
+        logger.error("Preference attribute lookup failed")
         raise AttributeError('attribute: %s.%s not found' % (self._intern.name, name))
 
     def items(self):
@@ -335,7 +334,7 @@ class Pref(PrefNode):
             printDBG('[save] I cannot be saved. I have no parents.')
             return False
         with open(self._intern.fpath, 'wb') as f:
-            print('[pref] Saving to ' + self._intern.fpath)
+            logger.info(f"Saving preferences to {self._intern.fpath}")
             pref_dict = self.to_dict()
             pickle.dump(pref_dict, f)
         return True
@@ -349,7 +348,7 @@ class Pref(PrefNode):
             return msg
         with open(self._intern.fpath, 'rb') as f:
             try:
-                printDBG('load: %r' % self._intern.fpath)
+                printDBG(f"load: {self._intern.fpath!r}")
                 pref_dict = pickle.load(f)
             except EOFError as ex:
                 msg = ('[pref] WARN: fpath=%r did not load correctly.' +
@@ -399,7 +398,7 @@ class Pref(PrefNode):
 
     def pref_update(self, key, new_val):
         'Changes a prefeters value and saves it to disk'
-        print('Update and save pref from: %s=%r, to: %s=%r' % (key, str(self[key]), key, str(new_val)))
+        logger.info(f"Update and save pref from: {key}={str(self[key])!r}, to: {key}={str(new_val)!r}")
         self.__setattr__(key, new_val)
         return self.save()
 
@@ -458,13 +457,13 @@ class Pref(PrefNode):
 
     def qt_set_leaf_data(self, qvar):
         'Sets backend data using Qt editor values'
-        print('[pref] qt_set_leaf_data: qvar=%r' % qvar)
-        print('[pref] qt_set_leaf_data: qvar=%s' % str(qvar))
-        print('[pref] qt_set_leaf_data: qvar=%s' % _qt_to_string(qvar))
+        logger.debug(f"qt_set_leaf_data: qvar={qvar!r}")
+        logger.debug(f"qt_set_leaf_data: qvar={str(qvar)}")
+        logger.debug(f"qt_set_leaf_data: qvar={_qt_to_string(qvar)}")
 
-        print('[pref] qt_set_leaf_data: _intern.name=%r' % self._intern.name)
-        print('[pref] qt_set_leaf_data: _intern.type_=%r' % self._intern.type())
-        print('[pref] qt_set_leaf_data: _intern.value=%r' % self._intern.value)
+        logger.debug(f"qt_set_leaf_data: _intern.name={self._intern.name!r}")
+        logger.debug(f"qt_set_leaf_data: _intern.type_={self._intern.type()!r}")
+        logger.debug(f"qt_set_leaf_data: _intern.value={self._intern.value!r}")
 
         if self._tree.parent is None:
             raise Exception('[Pref.qtleaf] Cannot set root preference')
@@ -509,8 +508,8 @@ class Pref(PrefNode):
                 elif new_val.upper() == 'FALSE':
                     new_val = False
              # save to disk after modifying data
-            print('[pref] qt_set_leaf_data: new_val=%r' % new_val)
-            print('[pref] qt_set_leaf_data: type(new_val)=%r' % type(new_val))
+            logger.debug(f"qt_set_leaf_data: new_val={new_val!r}")
+            logger.debug(f"qt_set_leaf_data: type(new_val)={type(new_val)!r}")
             # TODO Add ability to set a callback function when certain
             # preferences are changed.
             return self._tree.parent.pref_update(self._intern.name, new_val)
@@ -701,9 +700,9 @@ class EditPrefWidget(QtWidgets.QWidget):
     @QtCore.pyqtSlot(Pref, name='populatePrefTreeSlot')
     def populatePrefTreeSlot(self, pref_struct):
         'Populates the Preference Tree Model'
-        printDBG('Bulding Preference Model of: ' + repr(pref_struct))
+        printDBG(f"Bulding Preference Model of: {pref_struct!r}")
         #Creates a QStandardItemModel that you can connect to a QTreeView
         self.pref_model = QPreferenceModel(pref_struct)
-        printDBG('Built: ' + repr(self.pref_model))
+        printDBG(f"Built: {self.pref_model!r}")
         self.ui.prefTreeView.setModel(self.pref_model)
         self.ui.prefTreeView.header().resizeSection(0, 250)

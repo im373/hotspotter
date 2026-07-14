@@ -1,12 +1,18 @@
 
-from . import __common__
-(print, print_, print_on, print_off,
- rrr, profile, printDBG) = __common__.init(__name__, '[parallel]', DEBUG=False)
+# HotSpotter port notes:
+# Replaced hscom.__common__ hooks with logging/dev helpers.
+
+import logging
 # Python
 import psutil
 import os
 # HotSpotter
 from . import helpers as util
+from .dev_utils import make_reloader
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[resources]')
+printDBG = logger.debug
 
 
 def peak_memory():
@@ -38,10 +44,10 @@ def used_memory():
 
 
 def memstats():
-    print('total = %s' % util.byte_str2(total_memory()))
-    print('available = %s' % util.byte_str2(available_memory()))
-    print('used = %s' % util.byte_str2(used_memory()))
-    print('current = %s' % util.byte_str2(current_memory_usage()))
+    logger.info(f"total = {util.byte_str2(total_memory())}")
+    logger.info(f"available = {util.byte_str2(available_memory())}")
+    logger.info(f"used = {util.byte_str2(used_memory())}")
+    logger.info(f"current = {util.byte_str2(current_memory_usage())}")
 
 if __name__ == '__main__':
     memstats()

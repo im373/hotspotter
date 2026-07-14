@@ -4,9 +4,12 @@
 
 'hotspotter.algos contains algorithm poltpori'
 
-from hscom import __common__
-(print, print_, print_on, print_off,
- rrr, profile, printDBG) = __common__.init(__name__, '[algos]', DEBUG=False)
+import logging
+from hscom.dev_utils import make_reloader
+from hscom.profiling import profile
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[algos]')
 # Python
 
 from os.path import join
@@ -88,8 +91,8 @@ def emd(hist1, hist2):
     try:
         from cv2 import cv
     except ImportError as ex:
-        print(repr(ex))
-        print('Cannot import cv. Is opencv 2.4.9?')
+        logger.warning('Cannot import cv. Is opencv 2.4.9?')
+        logger.debug(repr(ex))
         return -1
 
     # Stack weights into the first column
@@ -126,7 +129,7 @@ def xywh_to_tlbr(roi, img_wh):
         img_w = 1
         img_h = 1
         msg = '[cc2.1] Your csv tables have an invalid ROI.'
-        print(msg)
+        logger.warning(msg)
         #warnings.warn(msg)
         #ht = 1
         #wt = 1
@@ -192,7 +195,7 @@ def tune_flann(data, **kwargs):
     badchar_list = ',{}\': '
     for badchar in badchar_list:
         suffix = suffix.replace(badchar, '')
-    print(flann_atkwargs)
+    logger.debug(flann_atkwargs)
     tuned_params = flann.build_index(data, **flann_atkwargs)
     helpers.myprint(tuned_params)
     out_file = 'flann_tuned' + suffix
@@ -311,7 +314,7 @@ def scale_to_byte(data):
 def plot_clusters(data, datax2_clusterx, clusters, num_pca_dims=3,
                   whiten=False):
     # http://www.janeriksolem.net/2012/03/isomap-with-scikit-learn.html
-    print('[algos] Doing PCA')
+    logger.debug('[algos] Doing PCA')
     from hsviz import draw_func2 as df2
     data_dims = data.shape[1]
     num_pca_dims = min(num_pca_dims, data_dims)
@@ -321,15 +324,15 @@ def plot_clusters(data, datax2_clusterx, clusters, num_pca_dims=3,
     pca_data = pca.transform(data)
     pca_clusters = pca.transform(clusters)
     K = len(clusters)
-    print('[algos] ...Finished PCA')
+    logger.debug('[algos] ...Finished PCA')
     fig = df2.plt.figure(1)
     fig.clf()
     #cmap = plt.get_cmap('hsv')
     data_x = pca_data[:, 0]
     data_y = pca_data[:, 1]
     colors = np.array(df2.distinct_colors(K))
-    print(colors)
-    print(datax2_clusterx)
+    logger.debug(colors)
+    logger.debug(datax2_clusterx)
     data_colors = colors[np.array(datax2_clusterx, dtype=np.int32)]
     clus_x = pca_clusters[:, 0]
     clus_y = pca_clusters[:, 1]
@@ -357,7 +360,7 @@ def plot_clusters(data, datax2_clusterx, clusters, num_pca_dims=3,
 
 def force_quit_akmeans(signal, frame):
     try:
-        print(textwrap.dedent('''
+        logger.info(textwrap.dedent('''
                               --- algos ---
                               Caught Ctrl+C in:
                               function: %r
@@ -372,11 +375,11 @@ def force_quit_akmeans(signal, frame):
             if target_frame.f_code.co_name == target_frame_coname:
                 break
             if target_frame.f_code.co_name == '<module>':
-                print('Traced back to module level. Missed frame: %r ' %
+                logger.debug('Traced back to module level. Missed frame: %r ' %
                       target_frame_coname)
                 break
             target_frame = target_frame.f_back
-            print('Is target frame?: ' + target_frame.f_code.co_name)
+            logger.debug('Is target frame?: ' + target_frame.f_code.co_name)
 
         fpath = target_frame.f_back.f_back.f_locals['fpath']
 
@@ -385,7 +388,7 @@ def force_quit_akmeans(signal, frame):
         datax2_clusterx = target_frame.f_locals['datax2_clusterx']
         helpers.save_npz(fpath + '.earlystop', datax2_clusterx, clusters)
     except Exception as ex:
-        print(repr(ex))
+        logger.exception('Failed to save early-stop akmeans state')
         exec(helpers.IPYTHON_EMBED_STR)
 
 
@@ -410,22 +413,22 @@ def __akmeans_iterate(data,
     num_clusters = clusters.shape[0]
     # Keep track of how many points have changed in each iteration
     xx2_unchanged = np.zeros(ave_unchanged_iterwin, dtype=np.int32) + len(data)
-    print('[algos] Running akmeans: data.shape=%r ; num_clusters=%r' %
+    logger.debug('[algos] Running akmeans: data.shape=%r ; num_clusters=%r' %
           (data.shape, num_clusters))
-    print('[algos] * max_iters = %r ' % max_iters)
-    print('[algos] * ave_unchanged_iterwin=%r ; ave_unchanged_thresh=%r' %
+    logger.debug('[algos] * max_iters = %r ' % max_iters)
+    logger.debug('[algos] * ave_unchanged_iterwin=%r ; ave_unchanged_thresh=%r' %
           (ave_unchanged_thresh, ave_unchanged_iterwin))
-    print('[algos] Printing akmeans info in format:' +
+    logger.debug('[algos] Printing akmeans info in format:' +
           'time (iterx, ave(#changed), #unchanged)')
     for xx in range(0, max_iters):
         # 1) Find each datapoints nearest cluster center
         tt = helpers.tic()
-        helpers.print_('...tic')
+        logger.debug('...tic')
         helpers.flush()
         (datax2_clusterx, _dist) = ann_flann_once(clusters, data, 1,
                                                   flann_params)
         ellapsed = helpers.toc(tt)
-        helpers.print_('...toc(%.2fs)' % ellapsed)
+        logger.debug('...toc(%.2fs)' % ellapsed)
         helpers.flush()
         # 2) Find new cluster datapoints
         datax_sort    = datax2_clusterx.argsort()  # NOQA
@@ -437,7 +440,7 @@ def __akmeans_iterate(data,
                 clusterx2_dataLRx[clusterx_sort[_L]] = (_L, _R)
                 _L = _R
         # 3) Compute new cluster centers
-        helpers.print_('+')
+        logger.debug('+')
         helpers.flush()
         for clusterx, dataLRx in enumerate(clusterx2_dataLRx):
             if dataLRx is None:
@@ -450,13 +453,13 @@ def __akmeans_iterate(data,
             clusters[clusterx] = np.array(np.round(clusters[clusterx]),
                                           dtype=np.uint8)
         # 4) Check for convergence (no change of cluster id)
-        helpers.print_('+')
+        logger.debug('+')
         helpers.flush()
         num_changed = (datax2_clusterx_old != datax2_clusterx).sum()
         xx2_unchanged[xx % ave_unchanged_iterwin] = num_changed
         ave_unchanged = xx2_unchanged.mean()
         #(iterx, ave(#changed), #unchanged)
-        helpers.print_('  (%d, %.2f, %d)\n' % (xx, ave_unchanged, num_changed))
+        logger.debug('  (%d, %.2f, %d)\n' % (xx, ave_unchanged, num_changed))
         helpers.flush()
         if ave_unchanged < ave_unchanged_thresh:
             break
@@ -464,7 +467,7 @@ def __akmeans_iterate(data,
             datax2_clusterx_old = datax2_clusterx
             if xx % 5 == 0:
                 sys.stdout.flush()
-    print('[algos]  * AKMEANS: converged in %d/%d iters' % (xx + 1, max_iters))
+    logger.debug('[algos]  * AKMEANS: converged in %d/%d iters' % (xx + 1, max_iters))
     sys.stdout.flush()
     return (datax2_clusterx, clusters)
 
@@ -506,7 +509,7 @@ def precompute_akmeans(data, num_clusters, max_iters=100,
     'precompute aproximate kmeans'
     if flann_params is None:
         flann_params = {}
-    print('[algos] pre_akmeans()')
+    logger.debug('[algos] pre_akmeans()')
     if same_data:
         data_uid = helpers.hashstr_arr(data, 'dID')
         uid += data_uid
@@ -523,13 +526,13 @@ def precompute_akmeans(data, num_clusters, max_iters=100,
         # Hack to refine akmeans with a few more iterations
         if '--refine' in sys.argv or '--refine-exit' in sys.argv:
             max_iters_override = helpers.get_arg('--refine', type_=int)
-            print('Overriding max_iters=%r' % max_iters_override)
+            logger.info('Overriding max_iters=%r' % max_iters_override)
             if not max_iters_override is None:
                 max_iters = max_iters_override
             datax2_clusterx_old = datax2_clusterx
-            print('[algos] refining:')
-            print('[algos] ' + '_'.join([clusters_fname, uid]) + '.npy')
-            print('[algos] ' + '_'.join([datax2cl_fname, uid]) + '.npy')
+            logger.debug('[algos] refining:')
+            logger.debug('[algos] ' + '_'.join([clusters_fname, uid]) + '.npy')
+            logger.debug('[algos] ' + '_'.join([datax2cl_fname, uid]) + '.npy')
             (datax2_clusterx, clusters) = __akmeans_iterate(
                 data, clusters, datax2_clusterx_old, max_iters, flann_params,
                 0, 10)
@@ -537,32 +540,32 @@ def precompute_akmeans(data, num_clusters, max_iters=100,
             io.smart_save(datax2_clusterx, cache_dir, datax2cl_fname, uid,
                           '.npy')
             if '--refine-exit' in sys.argv:
-                print('exiting after refine')
+                logger.info('exiting after refine')
                 sys.exit(1)
-        print('[algos] pre_akmeans(): ... loaded akmeans.')
+        logger.debug('[algos] pre_akmeans(): ... loaded akmeans.')
     except Exception as ex:
-        print('[algos] pre_akmeans(): ... could not load akmeans.')
+        logger.debug('[algos] pre_akmeans(): ... could not load akmeans.')
         errstr = helpers.indent(repr(ex), '[algos]    ')
-        print('[algos] pre_akmeans(): ... caught ex:\n %s ' % errstr)
-        print('[algos] pre_akmeans(): printing debug_smart_load')
-        print('---- <DEBUG SMART LOAD>---')
+        logger.debug('[algos] pre_akmeans(): ... caught ex:\n %s ' % errstr)
+        logger.debug('[algos] pre_akmeans(): printing debug_smart_load')
+        logger.debug('---- <DEBUG SMART LOAD>---')
         io.debug_smart_load(cache_dir, clusters_fname)
         io.debug_smart_load(cache_dir, datax2cl_fname)
-        print('----</DEBUG SMART LOAD>---')
+        logger.debug('----</DEBUG SMART LOAD>---')
         #print('[algos] Press Ctrl+C to stop k-means early (and save)')
         #signal.signal(signal.SIGINT, force_quit_akmeans) # set ctrl+c behavior
-        print('[algos] computing:')
-        print('[algos] ' + '_'.join([clusters_fname, uid]) + '.npy')
-        print('[algos] ' + '_'.join([datax2cl_fname, uid]) + '.npy')
-        print('[algos] pre_akmeans(): calling akmeans')
+        logger.debug('[algos] computing:')
+        logger.debug('[algos] ' + '_'.join([clusters_fname, uid]) + '.npy')
+        logger.debug('[algos] ' + '_'.join([datax2cl_fname, uid]) + '.npy')
+        logger.debug('[algos] pre_akmeans(): calling akmeans')
         (datax2_clusterx, clusters) = akmeans(data, num_clusters, max_iters,
                                               flann_params)
-        print('[algos] pre_akmeans(): finished running akmeans')
+        logger.debug('[algos] pre_akmeans(): finished running akmeans')
         io.smart_save(clusters,        cache_dir, clusters_fname, uid, '.npy')
         io.smart_save(datax2_clusterx, cache_dir, datax2cl_fname, uid, '.npy')
         #print('[algos] Removing Ctrl+C signal handler')
         #signal.signal(signal.SIGINT, signal.SIG_DFL) # reset ctrl+c behavior
-    print('[algos] pre_akmeans(): return')
+    logger.debug('[algos] pre_akmeans(): return')
     return (datax2_clusterx, clusters)
 
 
@@ -571,7 +574,7 @@ def precompute_flann(data, cache_dir=None, uid='', flann_params=None,
                      force_recompute=False):
     ''' Tries to load a cached flann index before doing anything'''
     _require_flann()
-    print('[algos] precompute_flann(%r): ' % uid)
+    logger.debug('[algos] precompute_flann(%r): ' % uid)
     cache_dir = '.' if cache_dir is None else cache_dir
     # Generate a unique filename for data and flann parameters
     fparams_uid = helpers.remove_chars(str(list(flann_params.values())), ', \'[]')
@@ -588,15 +591,15 @@ def precompute_flann(data, cache_dir=None, uid='', flann_params=None,
             #print('[algos] precompute_flann():
                 #trying to load: %r ' % flann_fname)
             flann.load_index(flann_fpath, data)
-            print('[algos]...flann cache hit')
+            logger.debug('[algos]...flann cache hit')
             load_success = True
         except Exception as ex:
-            print('[algos] precompute_flann(): ...cannot load index')
-            print('[algos] precompute_flann(): ...caught ex=\n%r' % (ex,))
+            logger.warning('[algos] precompute_flann(): ...cannot load index')
+            logger.debug('[algos] precompute_flann(): ...caught ex=\n%r' % (ex,))
     if not load_success:
         # Rebuild the index otherwise
         with helpers.Timer(msg='compute FLANN', newline=False):
             flann.build_index(data, **flann_params)
-        print('[algos] precompute_flann(): save_index(%r)' % flann_fname)
+        logger.debug('[algos] precompute_flann(): save_index(%r)' % flann_fname)
         flann.save_index(flann_fpath)
     return flann

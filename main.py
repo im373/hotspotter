@@ -1,90 +1,90 @@
-# HotSpotter port notes:
-# Updated application entry point for Python 3 startup behavior.
-# Kept GUI/bootstrap flow aligned with the converted PyQt5 stack.
-
 #!/usr/bin/env python3
-'''Hotspotter main script
-Runs hotspotter gui
+# HotSpotter main script.
+# Runs the HotSpotter GUI.
+# Import as few things as possible at module scope because multiprocessing workers may import this module again.
 
-!!! IMPORTANT DEVELOPER NOTICE !!!
-Import as few things as possible at the global level in this module. Import at
-the function level instead. The reason is multiprocesing will fork this module
-many times. Less imports means less parallel overhead.
-'''
 import multiprocessing
 
-
 def dependencies_for_myprogram():
-    # Let pyintaller find these modules
+    """Expose hidden imports to PyInstaller."""
     from scipy.sparse.csgraph import _validation  # NOQA
     from scipy.special import _ufuncs_cxx  # NOQA
 
-
 def postload_args_process(hs, back):
+    import logging
     from hscom import params
-    # --- Run Startup Commands ---
-    # Autocompute all queries
+
+    logger = logging.getLogger(__name__)
+
+    # Run startup commands.
     if params.args.autoquery:
         back.precompute_queries()
-    # Run a query
+
     qcid_list = params.args.query
     tx_list = params.args.txs
     qfx_list = params.args.qfxs
     cid_list = params.args.cids
+
     res = None
-    if len(qcid_list) > 0:
+
+    if qcid_list:
         qcid = qcid_list[0]
-        tx = tx_list[0] if len(tx_list) > 0 else None
-        # Run a query
+        tx = tx_list[0] if tx_list else None
+
         try:
             res = back.query(qcid, tx)
             back.select_cid(qcid, show=False)
-            if len(cid_list) > 0:
-                # Interact with the query
+
+            if cid_list:
                 cx = hs.cid2_cx(cid_list[0])
-                if len(qfx_list) > 0:
+
+                if qfx_list:
                     qfx = qfx_list[0]
                     mx = res.get_match_index(hs, cx, qfx)
-                    res.interact_chipres(hs, cx, fnum=4, mx=mx)
-                    res.show_nearest_descriptors(hs, qfx)
+                    res.interact_chipres(hs,cx,fnum=4,mx=mx,)
+                    res.show_nearest_descriptors(hs,qfx,)
                 else:
-                    res.interact_chipres(hs, cx, fnum=4)
-        except AssertionError as ex:
-            print(ex)
-    # Select on startup commands
+                    res.interact_chipres(hs,cx,fnum=4,)
+
+        except AssertionError:
+            logger.exception("Startup query failed")
+
     selgxs = params.args.selgxs
-    if len(selgxs) > 0:
+
+    if selgxs:
         back.select_gx(selgxs[0])
+
     selnxs = params.args.selnxs
-    if len(selnxs) > 0:
+
+    if selnxs:
         name = hs.nx2_name(selnxs[0])
         back.select_name(name)
+
     selcids = params.args.selcids
-    if len(selcids) > 0:
+
+    if selcids:
         selcxs = hs.cid2_cx(selcids)
         back.select_cx(selcxs[0])
+
     return locals()
 
 
-#==================
-# MAIN ENTRY POINT
-#==================
+def main():
+    from hscom.logging_utils import configure_logging
+    configure_logging(log_dir="logs", debug=False, quiet=False)
 
-if __name__ == '__main__':
-    # Necessary for windows parallelization
-    multiprocessing.freeze_support()
-    # Run Main Function
     from hsdev import test_api
-    from hsdev import dbgimport
-    print('main.py')
-    dbgimport.hsgui_printoff()
-    dbgimport.hsviz_printoff()
-    dbgimport.mf.print_off()
-    # Run main script with backend
+
     hs, back, app, is_root = test_api.main_init()
-    # --- Run Startup Commands ---
-    postload_locals = postload_args_process(hs, back)
-    res = postload_locals['res']
-    # Connect database to the back gui
-    #app.setActiveWindow(back.front)
-    test_api.main_loop(app, is_root, back)
+
+    postload_locals = postload_args_process(hs,back,)
+
+    res = postload_locals["res"]
+
+    test_api.main_loop(app,is_root,back,)
+    return 0
+
+
+if __name__ == "__main__":
+    multiprocessing.freeze_support()
+    raise SystemExit(main())

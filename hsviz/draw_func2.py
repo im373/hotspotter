@@ -9,18 +9,18 @@
 # show_<func_name> will always clear the current axes, but not fig: cla # Might # add annotates?
 # plot_<func_name> will not clear the axes or figure. More useful for graphs
 # draw_<func_name> same as plot for now. More useful for images
-from hscom import __common__
-(print, print_, print_on, print_off, rrr, profile,
- printDBG) = __common__.init(__name__, '[df2]', DEBUG=False, initmpl=True)
 # Python
+import logging
 from os.path import splitext, split, join, normpath, exists
 import colorsys
 import itertools
-import pylab
 import sys
 import textwrap
 import time
 import warnings
+# HotSpotter runtime setup
+from hscom.mpl_utils import configure_matplotlib
+configure_matplotlib()
 # Matplotlib / Qt
 import matplotlib
 import matplotlib as mpl  # NOQA
@@ -38,12 +38,18 @@ from PyQt5 import QtWidgets
 
 # Scientific
 import numpy as np
+import pylab
 import scipy.stats
 import cv2
 # HotSpotter
 from hscom import helpers as util
 from hscom import tools
+from hscom.dev_utils import make_reloader
 from hscom.Printable import DynStruct
+from hscom.profiling import profile
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[df2]')
 
 #================
 # GLOBALS
@@ -400,7 +406,7 @@ def get_monitor_geometries():
 def all_figures_tile(num_rc=None, wh=400, xy_off=(0, 0), wh_off=(0, 0),
                      row_first=True, no_tile=False, override1=False):
     'Lays out all figures in a grid. if wh is a scalar, a golden ratio is used'
-    print('[df2] all_figures_tile()')
+    logger.info("all_figures_tile()")
     # RCOS TODO:
     # I want this function to layout all the figures and qt windows within the
     # bounds of a rectangle. (taken from the get_monitor_geom, or specified by
@@ -472,7 +478,7 @@ def all_figures_tile(num_rc=None, wh=400, xy_off=(0, 0), wh_off=(0, 0),
 
     if num_rc is None:
         monitor_geometries = get_monitor_geometries()
-        printDBG('[df2] monitor_geometries = %r' % (monitor_geometries,))
+        logger.debug(f"monitor_geometries = {monitor_geometries!r}")
         geom = monitor_geometries[0]
         # Use all of monitor 0
         available_geom = (geom[0], geom[1], geom[2] - stdpxls['os_border_h'], geom[3])
@@ -480,22 +486,22 @@ def all_figures_tile(num_rc=None, wh=400, xy_off=(0, 0), wh_off=(0, 0),
         starty = available_geom[1]
         avail_width = available_geom[2] - available_geom[0]
         avail_height = available_geom[3] - available_geom[1]
-        printDBG('[df2] available_geom = %r' % (available_geom,))
-        printDBG('[df2] avail_width = %r' % (avail_width,))
-        printDBG('[df2] avail_height = %r' % (avail_height,))
+        logger.debug(f"available_geom = {available_geom!r}")
+        logger.debug(f"avail_width = {avail_width!r}")
+        logger.debug(f"avail_height = {avail_height!r}")
 
         nRows = int(avail_height // (effective_h))
         nCols = int(avail_width // (effective_w))
     else:
         nRows, nCols = num_rc
 
-    printDBG('[df2] Tile all figures: ')
-    printDBG('[df2]     wh = %r' % ((w, h),))
-    printDBG('[df2]     xy_offsets = %r' % ((x_off, y_off),))
-    printDBG('[df2]     wh_offsets = %r' % ((w_off, h_off),))
-    printDBG('[df2]     wh_effective = %r' % ((effective_w, effective_h),))
-    printDBG('[df2]     xy_pads = %r' % ((x_pad, y_pad),))
-    printDBG('[df2]     nRows, nCols = %r' % ((nRows, nCols),))
+    logger.debug("Tile all figures")
+    logger.debug(f"wh = {(w, h)!r}")
+    logger.debug(f"xy_offsets = {(x_off, y_off)!r}")
+    logger.debug(f"wh_offsets = {(w_off, h_off)!r}")
+    logger.debug(f"wh_effective = {(effective_w, effective_h)!r}")
+    logger.debug(f"xy_pads = {(x_pad, y_pad)!r}")
+    logger.debug(f"nRows, nCols = {(nRows, nCols)!r}")
 
     def position_window(ix, win):
         is_qt_mpl = isinstance(win, backend_qt.MainWindow)
@@ -511,13 +517,13 @@ def all_figures_tile(num_rc=None, wh=400, xy_off=(0, 0), wh_off=(0, 0),
             rowx = int(ix // nCols)
         x = startx + colx * (effective_w)
         y = starty + rowx * (effective_h)
-        printDBG('ix=%r) rowx=%r colx=%r, x=%r y=%r, w=%r, h=%r' %
-                 (ix, rowx, colx, x, y, w, h))
+        logger.debug(f"ix={ix!r}) rowx={rowx!r} colx={colx!r}, "
+                     f"x={x!r} y={y!r}, w={w!r}, h={h!r}")
         try:
             #(x, y, w1, h1) = win.getGeometry()
             win.setGeometry(x + x_pad, y + y_pad, w, h)
-        except Exception as ex:
-            print(ex)
+        except Exception:
+            logger.exception("Could not tile figure window")
     ioff = 0
     for i, win in enumerate(all_qt_wins):
         position_window(i, win)
@@ -577,7 +583,7 @@ def update():
 
 def present(*args, **kwargs):
     'execing present should cause IPython magic'
-    print('[df2] Presenting figures...')
+    logger.info("Presenting figures")
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         all_figures_tile(*args, **kwargs)
@@ -586,10 +592,12 @@ def present(*args, **kwargs):
     # Return an exec string
     execstr = util.ipython_execstr()
     execstr += textwrap.dedent('''
+    import logging
+    logger = logging.getLogger('hsviz.draw_func2')
     if not embedded:
         if not '--quiet' in sys.argv:
-            print('[df2] Presenting in normal shell.')
-            print('[df2] ... plt.show()')
+            logger.info('Presenting in normal shell')
+            logger.info('plt.show()')
         plt.show()
     ''')
     return execstr
@@ -661,10 +669,10 @@ def save_figure(fnum=None, fpath=None, usetitle=False, overwrite=True,
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', category=DeprecationWarning)
         if overwrite or not exists(fpath_clean):
-            print('[df2] save_figure() %r' % (fpath_clean,))
+            logger.info(f"save_figure() {fpath_clean!r}")
             fig.savefig(fpath_clean, dpi=DPI)
         else:
-            print('[df2] not overwriteing')
+            logger.info("not overwriting")
 
 
 def set_ticks(xticks, yticks):
@@ -722,7 +730,7 @@ def get_good_logyscale_kwargs(y_data):
     knee_indexes = np.where(nStdDevs > nStdDevs_thresh)[0]
     knee_mag = nStdDevs[knee_indexes]
     knee_points = dy_sortx[knee_indexes]
-    print('[df2] knee_points = %r' % (knee_points,))
+    logger.info(f"knee_points = {knee_points!r}")
     # Check to see that we have found a knee
     if len(knee_points) > 0:
         # Use linear scaling up the the knee points and
@@ -960,8 +968,8 @@ def convert_keypress_event_mpl_to_qt(mevent):
     TMP_mevent = mevent
     # Grab the key from the mpl.KeyPressEvent
     key = mevent.key
-    print('[df2] convert event mpl -> qt')
-    print('[df2] key=%r' % key)
+    logger.debug("convert event mpl -> qt")
+    logger.debug(f"key={key!r}")
     # dicts modified from Matplotlib's Qt backend
     mpl2qtkey = {'control': Qt.Key_Control, 'shift': Qt.Key_Shift,
                  'alt': Qt.Key_Alt, 'super': Qt.Key_Meta,
@@ -985,21 +993,21 @@ def convert_keypress_event_mpl_to_qt(mevent):
     if key.find(u'ctrl+') >= 0:
         modifiers = modifiers | Qt.ControlModifier
         key = key.replace(u'ctrl+', u'')
-        print('[df2] has ctrl modifier')
+        logger.debug("has ctrl modifier")
         text += 'Ctrl+'
     if key.find(u'alt+') >= 0:
         modifiers = modifiers | Qt.AltModifier
         key = key.replace(u'alt+', u'')
-        print('[df2] has alt modifier')
+        logger.debug("has alt modifier")
         text += 'Alt+'
     if key.find(u'super+') >= 0:
         modifiers = modifiers | Qt.MetaModifier
         key = key.replace(u'super+', u'')
-        print('[df2] has super modifier')
+        logger.debug("has super modifier")
         text += 'Super+'
     if key.isupper():
         modifiers = modifiers | Qt.ShiftModifier
-        print('[df2] has shift modifier')
+        logger.debug("has shift modifier")
         text += 'Shift+'
     # Try to extract the original key
     try:
@@ -1008,22 +1016,19 @@ def convert_keypress_event_mpl_to_qt(mevent):
         else:
             key_ = ord(key.upper())  # Qt works with uppercase keys
             text += key.upper()
-    except Exception as ex:
-        print('[df2] ERROR key=%r' % key)
-        print('[df2] ERROR %r' % ex)
+    except Exception:
+        logger.exception(f"Could not convert key={key!r}")
         raise
     autorep = False  # default false
     count   = 1  # default 1
     text = str(text)  # The text is somewhat arbitrary
     # Create the QEvent
-    print('----------------')
-    print('[df2] Create event')
-    print('[df2] type_ = %r' % type_)
-    print('[df2] text = %r' % text)
-    print('[df2] modifiers = %r' % modifiers)
-    print('[df2] autorep = %r' % autorep)
-    print('[df2] count = %r ' % count)
-    print('----------------')
+    logger.debug("Create Qt key event")
+    logger.debug(f"type_ = {type_!r}")
+    logger.debug(f"text = {text!r}")
+    logger.debug(f"modifiers = {modifiers!r}")
+    logger.debug(f"autorep = {autorep!r}")
+    logger.debug(f"count = {count!r}")
     qevent = QtGui.QKeyEvent(type_, key_, modifiers, text, autorep, count)
     return qevent
 
@@ -1053,12 +1058,12 @@ def test_build_qkeyevent():
 def on_key_press_event(event):
     'redirects keypress events to main window'
     global QT_WINS
-    print('[df2] %r' % event)
-    print('[df2] %r' % str(event.__dict__))
+    logger.debug(f"{event!r}")
+    logger.debug(f"{str(event.__dict__)!r}")
     for qtwin in QT_WINS:
         qevent = convert_keypress_event_mpl_to_qt(event)
         app = qtwin.backend.app
-        print('[df2] attempting to send qevent to qtwin')
+        logger.debug("attempting to send qevent to qtwin")
         app.sendEvent(qtwin, qevent)
         # TODO: FINISH ME
         #QtWidgets.QKeyEvent
@@ -1107,7 +1112,7 @@ def clf():
 
 
 def get_fig(fnum=None):
-    printDBG('[df2] get_fig(fnum=%r)' % fnum)
+    logger.debug(f"get_fig(fnum={fnum!r})")
     fig_kwargs = dict(figsize=FIGSIZE, dpi=DPI)
     if plotWidget is not None:
         return gcf()
@@ -1115,7 +1120,7 @@ def get_fig(fnum=None):
         try:
             fig = gcf()
         except Exception as ex:
-            printDBG('[df2] get_fig(): ex=%r' % ex)
+            logger.debug(f"get_fig() failed to create default figure: {ex!r}")
             fig = plt.figure(**fig_kwargs)
         fnum = fig.number
     else:
@@ -1125,7 +1130,7 @@ def get_fig(fnum=None):
             else:
                 fig = plt.figure(fnum, **fig_kwargs)
         except Exception as ex:
-            print(repr(ex))
+            logger.exception("Could not get Matplotlib figure")
             warnings.warn(repr(ex))
             fig = gcf()
     return fig
@@ -1158,7 +1163,7 @@ def figure(fnum=None, docla=False, title=None, pnum=(1, 1, 1), figtitle=None,
         fig.clf()
     # Get the subplot
     if docla or len(axes_list) == 0:
-        printDBG('[df2] *** NEW FIGURE %r.%r ***' % (fnum, pnum))
+        logger.debug(f"NEW FIGURE {fnum!r}.{pnum!r}")
         if not pnum is None:
             #ax = plt.subplot(*pnum)
             ax = fig.add_subplot(*pnum)
@@ -1166,7 +1171,7 @@ def figure(fnum=None, docla=False, title=None, pnum=(1, 1, 1), figtitle=None,
         else:
             ax = gca()
     else:
-        printDBG('[df2] *** OLD FIGURE %r.%r ***' % (fnum, pnum))
+        logger.debug(f"OLD FIGURE {fnum!r}.{pnum!r}")
         if not pnum is None:
             ax = plt.subplot(*pnum)  # fig.add_subplot fails here
             #ax = fig.add_subplot(*pnum)
@@ -1236,16 +1241,14 @@ def estimate_pdf(data, bw_factor):
     try:
         data_pdf = scipy.stats.gaussian_kde(data, bw_factor)
         data_pdf.covariance_factor = bw_factor
-    except Exception as ex:
-        print('[df2] ! Exception while estimating kernel density')
-        print('[df2] data=%r' % (data,))
-        print('[df2] ex=%r' % (ex,))
+    except Exception:
+        logger.exception(f"Exception while estimating kernel density; data={data!r}")
         raise
     return data_pdf
 
 
 def show_histogram(data, bins=None, **kwargs):
-    print('[df2] show_histogram()')
+    logger.info("show_histogram()")
     dmin = int(np.floor(data.min()))
     dmax = int(np.ceil(data.max()))
     if bins is None:
@@ -1268,9 +1271,9 @@ def plot_stems(x_data=None, y_data=None):
         x_data = np.arange(len(y_data))
         pass
     if len(x_data) != len(y_data):
-        print('[df2] WARNING plot_stems(): len(x_data)!=len(y_data)')
+        logger.warning("plot_stems(): len(x_data) != len(y_data)")
     if len(x_data) == 0:
-        print('[df2] WARNING plot_stems(): len(x_data)=len(y_data)=0')
+        logger.warning("plot_stems(): len(x_data) = len(y_data) = 0")
     x_data_ = np.array(x_data)
     y_data_ = np.array(y_data)
     x_data_sort = x_data_[y_data_.argsort()[::-1]]
@@ -1330,18 +1333,16 @@ def space_yticks(nTicks=9, spacing=32, ax=None):
 
 def small_xticks(ax=None):
     for tick in ax.xaxis.get_major_ticks():
-        if hasattr(tick, 'label1'):
-            tick.label1.set_fontsize(8)
-        elif hasattr(tick, 'label'):
-            tick.label.set_fontsize(8)
+        label = getattr(tick, 'label1', None) or getattr(tick, 'label', None)
+        if label is not None:
+            label.set_fontsize(8)
 
 
 def small_yticks(ax=None):
     for tick in ax.yaxis.get_major_ticks():
-        if hasattr(tick, 'label1'):
-            tick.label1.set_fontsize(8)
-        elif hasattr(tick, 'label'):
-            tick.label.set_fontsize(8)
+        label = getattr(tick, 'label1', None) or getattr(tick, 'label', None)
+        if label is not None:
+            label.set_fontsize(8)
 
 
 def plot_bars(y_data, nColorSplits=1):
@@ -1570,7 +1571,7 @@ def colorbar(scalars, colors):
     COLORBAR_SHRINK = .42  # 1
     COLORBAR_PAD = .01  # 1
     COLORBAR_ASPECT = np.abs(20 * height / (width))  # 1
-    printDBG('[df] COLORBAR_ASPECT = %r' % COLORBAR_ASPECT)
+    logger.debug(f"COLORBAR_ASPECT = {COLORBAR_ASPECT!r}")
 
     cb = plt.colorbar(sm, ax=ax, orientation=orientation, shrink=COLORBAR_SHRINK,
                       pad=COLORBAR_PAD, aspect=COLORBAR_ASPECT)
@@ -1584,10 +1585,9 @@ def colorbar(scalars, colors):
 
 def draw_lines2(kpts1, kpts2, fm=None, fs=None, kpts2_offset=(0, 0),
                 color_list=None, scale_factor=1, **kwargs):
-    printDBG('-------------')
-    printDBG('draw_lines2()')
-    printDBG(' * len(fm) = %r' % len(fm))
-    printDBG(' * scale_factor = %r' % scale_factor)
+    logger.debug("draw_lines2()")
+    logger.debug(f"len(fm) = {len(fm)!r}")
+    logger.debug(f"scale_factor = {scale_factor!r}")
     if not DISTINCT_COLORS:
         color_list = None
     # input data
@@ -1634,11 +1634,10 @@ def draw_kpts2(kpts, offset=(0, 0), ell=SHOW_ELLS, pts=False, pts_color=ORANGE,
                color_list=None, rect=None, arrow=False, scale_factor=1, **kwargs):
     if not DISTINCT_COLORS:
         color_list = None
-    printDBG('-------------')
-    printDBG('draw_kpts2():')
-    printDBG(' * ell=%r pts=%r' % (ell, pts))
-    printDBG(' * scale_factor=%r' % (scale_factor,))
-    printDBG(' * offset=%r' % (offset,))
+    logger.debug("draw_kpts2()")
+    logger.debug(f"ell={ell!r} pts={pts!r}")
+    logger.debug(f"scale_factor={scale_factor!r}")
+    logger.debug(f"offset={offset!r}")
     # get matplotlib info
     ax = gca()
     pltTrans = ax.transData
@@ -1648,7 +1647,7 @@ def draw_kpts2(kpts, offset=(0, 0), ell=SHOW_ELLS, pts=False, pts_color=ORANGE,
     kptsT = kpts.T
     x = kptsT[0, :] * scale_factor + offset[0]
     y = kptsT[1, :] * scale_factor + offset[1]
-    printDBG(' * drawing kpts.shape=%r' % (kpts.shape,))
+    logger.debug(f"drawing kpts.shape={kpts.shape!r}")
     if rect is None:
         rect = ell
         rect = False
@@ -1733,10 +1732,10 @@ def imshow(img, fnum=None, title=None, figtitle=None, pnum=None,
             imgBGR = img
             if imgBGR.dtype == np.float64:
                 if imgBGR.max() <= 1:
-                    printDBG('Drawing Float Color Image < 1')
+                    logger.debug("Drawing Float Color Image < 1")
                     imgBGR = np.array(imgBGR, dtype=np.float32)
                 else:
-                    printDBG('Drawing Float Color Image > 1')
+                    logger.debug("Drawing Float Color Image > 1")
                     imgBGR = np.array(imgBGR, dtype=np.uint8)
             imgRGB = cv2.cvtColor(imgBGR, cv2.COLOR_BGR2RGB)
             ax.imshow(imgRGB, **plt_imshow_kwargs)
@@ -1749,28 +1748,27 @@ def imshow(img, fnum=None, title=None, figtitle=None, pnum=None,
                 cmap = plt.get_cmap(cmap)
             if imgGRAY.dtype == np.float32 and False:
                 if imgGRAY.max() <= 1:
-                    printDBG('Drawing Float Grey Image < 1')
+                    logger.debug("Drawing Float Grey Image < 1")
                     imgGRAY = np.array(np.round(imgGRAY * 255), dtype=np.uint8)
                 else:
-                    printDBG('Drawing Float Grey Image > 1')
+                    logger.debug("Drawing Float Grey Image > 1")
                     imgGRAY = np.array(np.round(imgGRAY), dtype=np.uint8)
             ax.imshow(imgGRAY, cmap=cmap, **plt_imshow_kwargs)
         else:
             raise Exception('unknown image format')
-    except TypeError as te:
-        print('[df2] imshow ERROR %r' % (te,))
+    except TypeError:
+        logger.exception("imshow TypeError")
         raise
     except Exception as ex:
-        print('!!!!!!!!!!!!!!WARNING!!!!!!!!!!!')
-        print('[df2] type(img) = %r' % type(img))
+        logger.exception(f"imshow failed for image type {type(img)!r}")
         if not isinstance(img, np.ndarray):
-            print('!!!!!!!!!!!!!!ERRROR!!!!!!!!!!!')
+            logger.error("imshow received a non-ndarray image")
             pass
             #print('img = %r' % (img,))
-        print('[df2] img.dtype = %r' % (img.dtype,))
-        print('[df2] type(img) = %r' % (type(img),))
-        print('[df2] img.shape = %r' % (img.shape,))
-        print('[df2] imshow ERROR %r' % ex)
+        if hasattr(img, 'dtype'):
+            logger.error(f"img.dtype = {img.dtype!r}")
+        if hasattr(img, 'shape'):
+            logger.error(f"img.shape = {img.shape!r}")
         raise
     #plt.set_cmap('gray')
     ax.set_xticks([])
@@ -1874,7 +1872,7 @@ def show_chipmatch2(rchip1, rchip2, kpts1, kpts2, fm=None, fs=None, title=None,
     '''Draws two chips and the feature matches between them. feature matches
     kpts1 and kpts2 use the (x,y,a,c,d)
     '''
-    printDBG('[df2] draw_matches2() fnum=%r, pnum=%r' % (fnum, pnum))
+    logger.debug(f"draw_matches2() fnum={fnum!r}, pnum={pnum!r}")
     # get matching keypoints + offset
     (h1, w1) = rchip1.shape[0:2]  # get chip (h, w) dimensions
     (h2, w2) = rchip2.shape[0:2]

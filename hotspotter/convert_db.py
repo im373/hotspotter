@@ -3,11 +3,12 @@
 # Adjusted chip, feature, query, and table handling for current dependencies.
 
 
-from hscom import __common__
-(print, print_,
- print_on, print_off,
- rrr, profile) = __common__.init(__name__, '[convert]')
-import sys
+import logging
+from hscom.dev_utils import make_reloader
+from hscom.profiling import profile
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[convert]')
 from os.path import join, relpath, normpath, exists
 import collections
 import os
@@ -154,7 +155,7 @@ def convert_from_oxford_style(db_dir):
         corrupted_gname_set = set(corrupted_gname_list)
 
     # Recursively get relative path of all files in img_dpath
-    print('Loading Oxford Style Images from: ' + db_dir)
+    logger.info('Loading Oxford Style Images from: ' + db_dir)
     img_dpath  = join(db_dir, 'images')
     helpers.assertpath(img_dpath)
     gname_list_ = [join(relpath(root, img_dpath), fname).replace('\\', '/').replace('./', '')
@@ -162,21 +163,19 @@ def convert_from_oxford_style(db_dir):
                    for fname in iter(flist)]
     gname_list = [gname for gname in iter(gname_list_)
                   if not gname in corrupted_gname_set and helpers.matches_image(gname)]
-    print(' * num_images = %d ' % len(gname_list))
+    logger.info(' * num_images = %d ' % len(gname_list))
 
     # Read the Oxford Style Groundtruth files
-    print('Loading Oxford Style Names and Chips')
+    logger.info('Loading Oxford Style Names and Chips')
     gt_fname_list = os.listdir(oxford_gt_dpath)
     num_gt_files = len(gt_fname_list)
     query_chips  = []
     gname2_chips_raw = collections.defaultdict(list)
     name_set = set([])
-    print(' * num_gt_files = %d ' % num_gt_files)
-    sys.stdout.write('parsed: 0000/%4d' % (num_gt_files))
+    logger.info(' * num_gt_files = %d ' % num_gt_files)
     for gtx, gt_fname in enumerate(gt_fname_list):
-        sys.stdout.write(('\b' * 9) + '%4d/%4d' % (gtx + 1, num_gt_files))
-        if gtx % 10 - 1 == 0:
-            sys.stdout.flush()
+        if gtx % 10 == 0 or gtx + 1 == num_gt_files:
+            logger.info(f"parsed groundtruth: {gtx + 1:4d}/{num_gt_files:4d}")
         if gt_fname == 'corrupted_files.txt':
             continue
         #Get name, quality, and num from fname
@@ -192,8 +191,7 @@ def convert_from_oxford_style(db_dir):
         else:
             for (gname, roi) in iter(oxsty_chip_info_sublist):
                 gname2_chips_raw[gname].append((name, roi, quality))
-    sys.stdout.write('\n')
-    print(' * num_query images = %d ' % len(query_chips))
+    logger.info(' * num_query images = %d ' % len(query_chips))
     # Remove duplicates img.jpg : (*1.txt, *2.txt, ...) -> (*.txt)
     gname2_chips     = collections.defaultdict(list)
     multinamed_gname_list = []
@@ -209,15 +207,15 @@ def convert_from_oxford_style(db_dir):
     query_gname_list = [tup[0] for tup in query_chips]
     gname_with_groundtruth_list = list(gname2_chips.keys())
     gname_without_groundtruth_list = np.setdiff1d(gname_list, gname_with_groundtruth_list)
-    print(' * num_images = %d ' % len(gname_list))
-    print(' * images with groundtruth    = %d ' % len(gname_with_groundtruth_list))
-    print(' * images without groundtruth = %d ' % len(gname_without_groundtruth_list))
-    print(' * images with multi-groundtruth = %d ' % len(multinamed_gname_list))
+    logger.info(' * num_images = %d ' % len(gname_list))
+    logger.info(' * images with groundtruth    = %d ' % len(gname_with_groundtruth_list))
+    logger.info(' * images without groundtruth = %d ' % len(gname_without_groundtruth_list))
+    logger.info(' * images with multi-groundtruth = %d ' % len(multinamed_gname_list))
     #make sure all queries have ground truth and there are no duplicate queries
     assert len(query_gname_list) == len(np.intersect1d(query_gname_list, gname_with_groundtruth_list))
     assert len(query_gname_list) == len(set(query_gname_list))
     # build hotspotter tables
-    print('adding to table: ')
+    logger.info('adding to table: ')
     gx2_gname = gname_list
     nx2_name  = ['____', '____'] + list(name_set)
     nx2_nid   = [1, 1] + list(range(2, len(name_set) + 2))
@@ -244,7 +242,7 @@ def convert_from_oxford_style(db_dir):
         cx2_gx.append(gx)
         cx2_theta.append(0)
         prop_dict['oxnum'].append(num)
-        sys.stdout.write(('\b' * 10) + 'cid = %4d' % cid)
+        logger.debug(f"cid = {cid:4d}")
         return cid
 
     for gname, roi, name, num in query_chips:
@@ -264,9 +262,9 @@ def convert_from_oxford_style(db_dir):
             roi = [0, 0, w, h]
             add_to_hs_tables(gname, '____', roi, 'unknown')
         except Exception as ex:
-            print('Exception ex=%r' % ex)
-            print('Not adding gname=%r' % gname)
-            print('----')
+            logger.info('Exception ex=%r' % ex)
+            logger.info('Not adding gname=%r' % gname)
+            logger.info('----')
     cx2_nid = np.array(nx2_nid)[cx2_nx]
     cx2_gid = np.array(gx2_gid)[cx2_gx]
     #
@@ -280,29 +278,29 @@ def convert_from_oxford_style(db_dir):
 
 # Converts the name_num.jpg image format into a database
 def convert_named_chips(db_dir, img_dpath=None):
-    print('\n --- Convert Named Chips ---')
+    logger.info('\n --- Convert Named Chips ---')
     # --- Initialize ---
     gt_format = '{}_{:d}.jpg'
-    print('gt_format (name, num) = %r' % gt_format)
+    logger.info('gt_format (name, num) = %r' % gt_format)
     if img_dpath is None:
         img_dpath = db_dir + '/images'
-    print('Converting db_dir=%r and img_dpath=%r' % (db_dir, img_dpath))
+    logger.info('Converting db_dir=%r and img_dpath=%r' % (db_dir, img_dpath))
     # --- Build Image Table ---
-    helpers.print_('Building name table: ')
+    logger.info('Building name table: ')
     gx2_gname = helpers.list_images(img_dpath)
     gx2_gid   = list(range(1, len(gx2_gname) + 1))
-    print('There are %d images' % len(gx2_gname))
+    logger.info('There are %d images' % len(gx2_gname))
     # ---- Build Name Table ---
-    helpers.print_('Building name table: ')
+    logger.info('Building name table: ')
     name_set = set([])
     for gx, gname in enumerate(gx2_gname):
         name, num = parse.parse(gt_format, gname)
         name_set.add(name)
     nx2_name  = ['____', '____'] + list(name_set)
     nx2_nid   = [1, 1] + list(range(2, len(name_set) + 2))
-    print('There are %d names' % (len(nx2_name) - 2))
+    logger.info('There are %d names' % (len(nx2_name) - 2))
     # ---- Build Chip Table ---
-    print('[converdb] Building chip table: ')
+    logger.info('[converdb] Building chip table: ')
     cx2_cid     = []
     cx2_theta   = []
     cx2_roi     = []
@@ -329,7 +327,7 @@ def convert_named_chips(db_dir, img_dpath=None):
         cid = add_to_hs_tables(gname, name, roi)
     cx2_nid = np.array(nx2_nid)[cx2_nx]
     cx2_gid = np.array(gx2_gid)[cx2_gx]
-    print('There are %d chips' % (cid - 1))
+    logger.info('There are %d chips' % (cid - 1))
 
     # Write tables
     internal_dir = join(db_dir, ld2.RDIR_INTERNAL2)
@@ -344,12 +342,12 @@ def init_database_from_images(db_dir, img_dpath=None, gt_format=None,
     # --- Initialize ---
     if img_dpath is None:
         img_dpath = db_dir + '/images'
-    print('Converting db_dir=%r and img_dpath=%r' % (db_dir, img_dpath))
+    logger.info('Converting db_dir=%r and img_dpath=%r' % (db_dir, img_dpath))
     gx2_gid, gx2_gname = imagetables_from_img_dpath(img_dpath)
     name_set = groundtruth_from_imagenames(gx2_gname, gt_format)
     nx2_name, nx2_nid = nametables_from_nameset(name_set)
     # ---- Build Chip Table ---
-    helpers.print_('Building chip table: ')
+    logger.info('Building chip table: ')
     cx2_cid     = []
     cx2_theta   = []
     cx2_roi     = []
@@ -380,7 +378,7 @@ def init_database_from_images(db_dir, img_dpath=None, gt_format=None,
             cid = add_to_hs_tables(gname, name, roi)
     cx2_nid = np.array(nx2_nid)[cx2_nx]
     cx2_gid = np.array(gx2_gid)[cx2_gx]
-    print('There are %d chips' % (cid - 1))
+    logger.info('There are %d chips' % (cid - 1))
 
     # Write tables
     internal_dir      = join(db_dir, ld2.RDIR_INTERNAL2)
@@ -430,9 +428,9 @@ def wildid_xlsx_to_tables(db_dir):
         raise Exception('non-unique xlsx files')
     xlsx_fpath = normpath(xlsx_files[0])
     #'research/testdata/WILDEBEEST_MORRISON_B.xlsx'
-    print('[convert] Converting db_dir  = %r' % db_dir)
-    print('[convert] with img_dpath     = %r' % img_dpath)
-    print('[convert] Reading xlsx_fpath = %r' % (xlsx_fpath,))
+    logger.info('[convert] Converting db_dir  = %r' % db_dir)
+    logger.info('[convert] with img_dpath     = %r' % img_dpath)
+    logger.info('[convert] Reading xlsx_fpath = %r' % (xlsx_fpath,))
     column_labels, column_list = read_xlsx_file(xlsx_fpath)
     return wildid_to_tables(db_dir, img_dpath, column_labels, column_list)
 
@@ -446,9 +444,9 @@ def wildid_csv_to_tables(db_dir):
     if len(csv_files) != 1:
         raise Exception('non-unique csv files = %r' % csv_files)
     csv_fpath = normpath(csv_files[0])
-    print('[convert] Converting db_dir  = %r' % db_dir)
-    print('[convert] with img_dpath     = %r' % img_dpath)
-    print('[convert] Reading csv_fpath = %r' % (csv_fpath,))
+    logger.info('[convert] Converting db_dir  = %r' % db_dir)
+    logger.info('[convert] with img_dpath     = %r' % img_dpath)
+    logger.info('[convert] Reading csv_fpath = %r' % (csv_fpath,))
     column_labels, column_list = read_csv_file(csv_fpath)
     return wildid_to_tables(db_dir, img_dpath, column_labels, column_list)
 
@@ -460,10 +458,10 @@ def wildid_to_tables(db_dir, img_dpath, column_labels, column_list):
     #header = 'Converted from: '+repr(xlsx_fpath)
     #csv_string = ld2.make_csv_table(column_labels, column_list, header)
     # Get Image set
-    print('[convert] Building image table')
+    logger.info('[convert] Building image table')
     gx2_gid, gx2_gname = imagetables_from_img_dpath(img_dpath)
     # Get name set
-    print('[convert] Building name table')
+    logger.info('[convert] Building name table')
 
     def get_lbl_pos(column_labels, valid_labels):
         for lbl in valid_labels:
@@ -475,7 +473,7 @@ def wildid_to_tables(db_dir, img_dpath, column_labels, column_list):
     name_set = set(column_list[name_colx])
     nx2_name, nx2_nid = nametables_from_nameset(name_set)
     # Get chip set
-    print('[convert] build chip table')
+    logger.info('[convert] build chip table')
     # ---------
     # This format has multiple images per row
     chips_per_name = 2  # this is apparently always 2
@@ -550,7 +548,7 @@ def wildid_to_tables(db_dir, img_dpath, column_labels, column_list):
         for key, val in kwargs.items():
             prop_dict[key].append(val)
         cx2_theta.append(theta)
-        sys.stdout.write(('\b' * 10) + 'cid = %4d' % cid)
+        logger.debug(f"cid = {cid:4d}")
         return cid
     # ---------
     # Wildid parsing
@@ -570,9 +568,9 @@ def wildid_to_tables(db_dir, img_dpath, column_labels, column_list):
                 img_fpath = join(img_dpath, gname)
                 bad_rows += 1
                 if not exists(img_fpath):
-                    print('nonexistant image: %r' % gname)
+                    logger.info('nonexistant image: %r' % gname)
                 else:
-                    print('corrupted image: %r' % gname)
+                    logger.info('corrupted image: %r' % gname)
                 continue
             gnameroi = (gname, tuple(roi))
             if gnameroi in list(gnameroi_to_cid.keys()):
@@ -584,34 +582,34 @@ def wildid_to_tables(db_dir, img_dpath, column_labels, column_list):
             cid_tup.append(cid)
         pairwise_dict[tuple(cid_tup)] = pairwise_vals
 
-    print('bad_rows = %r ' % bad_rows)
-    print('num_rows = %r ' % num_rows)
-    print('chips_per_name = %r ' % chips_per_name)
-    print('cid = %r ' % cid)
+    logger.info('bad_rows = %r ' % bad_rows)
+    logger.info('num_rows = %r ' % num_rows)
+    logger.info('chips_per_name = %r ' % chips_per_name)
+    logger.info('cid = %r ' % cid)
 
-    print('num pairwise properties: %r' % len(pairwise_dict))
-    print('implementation of pairwise properties does not yet exist')
+    logger.info('num pairwise properties: %r' % len(pairwise_dict))
+    logger.info('implementation of pairwise properties does not yet exist')
 
     num_known_chips = len(cx2_cid)
-    print('[convert] Added %r known chips.' % num_known_chips)
+    logger.info('[convert] Added %r known chips.' % num_known_chips)
     # Add the rest of the nongroundtruthed chips
-    print('[convert] Adding unknown images to table')
+    logger.info('[convert] Adding unknown images to table')
 
     # Check that images were unique
     unique_gx = np.unique(np.array(cx2_gx))
-    print('len(cx2_gx)=%r'    % len(cx2_gx))
-    print('len(unique_gx)=%r' % len(unique_gx))
-    assert len(cx2_gx) == len(unique_gx), \
+    logger.info('len(cx2_gx)=%r'    % len(cx2_gx))
+    logger.info('len(unique_gx)=%r' % len(unique_gx))
+    assert len(cx2_gx) == len(unique_gx),\
         'There are images specified twice'
 
     # Check that cids were unique
     cx2_cid_arr = np.array(cx2_cid)
     valid_cids  = cx2_cid_arr[np.where(cx2_cid_arr > 0)[0]]
     unique_cids = np.unique(valid_cids)
-    print('len(cx2_cid)     = %r' % len(cx2_cid))
-    print('len(valid_cids)  = %r' % len(valid_cids))
-    print('len(unique_cids) = %r' % len(unique_cids))
-    assert len(valid_cids) == len(unique_cids), \
+    logger.info('len(cx2_cid)     = %r' % len(cx2_cid))
+    logger.info('len(valid_cids)  = %r' % len(valid_cids))
+    logger.info('len(unique_cids) = %r' % len(unique_cids))
+    assert len(valid_cids) == len(unique_cids),\
         'There are chipids specified twice'
 
     known_gx_set = set(cx2_gx)
@@ -626,10 +624,10 @@ def wildid_to_tables(db_dir, img_dpath, column_labels, column_list):
         if not roi is None:
             cid = wildid_add_to_hs_tables(gname, name, roi, **tbl_kwargs)
     num_unknown_chips = len(cx2_cid) - num_known_chips
-    print('[convert] Added %r more unknown chips.' % num_unknown_chips)
+    logger.info('[convert] Added %r more unknown chips.' % num_unknown_chips)
     cx2_nid = np.array(nx2_nid)[cx2_nx]
     cx2_gid = np.array(gx2_gid)[cx2_gx]
-    print('[convert] There are %d chips' % (cid - 1))
+    logger.info('[convert] There are %d chips' % (cid - 1))
     #
     # Write tables
     internal_dir      = join(db_dir, ld2.RDIR_INTERNAL2)
@@ -637,7 +635,7 @@ def wildid_to_tables(db_dir, img_dpath, column_labels, column_list):
     write_chip_table(internal_dir, cx2_cid, cx2_gid, cx2_nid, cx2_roi, cx2_theta, prop_dict)
     write_name_table(internal_dir, nx2_nid, nx2_name)
     write_image_table(internal_dir, gx2_gid, gx2_gname)
-    print('[convert] finished conversion')
+    logger.info('[convert] finished conversion')
 
 
 #------------------------
@@ -649,24 +647,24 @@ def roi_from_imgsize(img_fpath, silent=False):
         return roi
     except Exception as ex:
         if not silent:
-            print('Exception ex=%r' % ex)
-            print('Not adding img_fpath=%r' % img_fpath)
-            print('----')
+            logger.info('Exception ex=%r' % ex)
+            logger.info('Not adding img_fpath=%r' % img_fpath)
+            logger.info('----')
         return None
 
 
 def imagetables_from_img_dpath(img_dpath=None):
     gx2_gname = helpers.list_images(img_dpath)
     gx2_gid   = list(range(1, len(gx2_gname) + 1))
-    print('There are %d images' % len(gx2_gname))
+    logger.info('There are %d images' % len(gx2_gname))
     return gx2_gid, gx2_gname
 
 
 def groundtruth_from_imagenames(gx2_gname, gt_format):
     if gt_format is None:
-        print('There is no image ground truth')
+        logger.info('There is no image ground truth')
         return set([])
-    print('Parsing image names for groundtruth. gt_format=%r' % gt_format)
+    logger.info('Parsing image names for groundtruth. gt_format=%r' % gt_format)
     name_set = set([])
     for gx, gname in enumerate(gx2_gname):
         name, num = parse.parse(gt_format, gname)
@@ -677,7 +675,7 @@ def groundtruth_from_imagenames(gx2_gname, gt_format):
 def nametables_from_nameset(name_set):
     nx2_name  = ['____', '____'] + list(name_set)
     nx2_nid   = [1, 1] + list(range(2, len(name_set) + 2))
-    print('There are %d names' % (len(nx2_name) - 2))
+    logger.info('There are %d names' % (len(nx2_name) - 2))
     return nx2_name, nx2_nid
 
 
@@ -688,8 +686,8 @@ def diff_strings(str1, str2):
     'kinda hacky and specific to wildebeast'
     s1 = str1.splitlines(1)
     s2 = str2.splitlines(1)
-    print('len(str1) == len(str2) | %r == %r' % (len(str1), len(str2)))
-    print('len(s1)   == len(s2)   | %r == %r' % (len(s1), len(s2)))
+    logger.info('len(str1) == len(str2) | %r == %r' % (len(str1), len(str2)))
+    logger.info('len(s1)   == len(s2)   | %r == %r' % (len(s1), len(s2)))
     if len(s1) == len(s2):
         for linex, (line1, line2) in enumerate(zip(s1, s2)):
             line1 = line1.replace(' ', '')
@@ -697,21 +695,21 @@ def diff_strings(str1, str2):
             line1 = line1.replace('testA_', '')
             line2 = line2.replace(' ', '')
             if line1 != line2:
-                print('--- Line: %r ---' % linex)
-                sys.stdout.write(line1)
-                sys.stdout.write(line2)
-    print('')
+                logger.info('--- Line: %r ---' % linex)
+                logger.info(line1.rstrip())
+                logger.info(line2.rstrip())
+    logger.info('')
 
 
 def write_to_wrapper(csv_fpath, csv_string):
     if exists(csv_fpath) and DIFF_CHECK:
-        print('table already exists: %r' % csv_fpath)
+        logger.info('table already exists: %r' % csv_fpath)
         with open(csv_fpath) as file:
             csv_string2 = file.read()
             if csv_string2 == csv_string:
-                print('No difference!')
+                logger.info('No difference!')
             else:
-                print('difference!')
+                logger.info('difference!')
                 #print('--------')
                 #print(csv_string2)
                 #print('--------')
@@ -727,7 +725,7 @@ def write_to_wrapper(csv_fpath, csv_string):
 def write_chip_table(internal_dir, cx2_cid, cx2_gid, cx2_nid,
                      cx2_roi, cx2_theta, prop_dict=None):
     helpers.__PRINT_WRITES__ = True
-    print('Writing Chip Table')
+    logger.info('Writing Chip Table')
     # Make chip_table.csv
     header = '# chip table'
     column_labels = ['ChipID', 'ImgID', 'NameID', 'roi[tl_x  tl_y  w  h]', 'theta']

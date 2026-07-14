@@ -1,7 +1,10 @@
 
-from hscom import __common__
-print, print_, print_on, print_off, rrr, profile, printDBG =\
-    __common__.init(__name__, '[cov]', DEBUG=False)
+import logging
+from hscom.dev_utils import make_reloader
+from hscom.profiling import profile
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[cov]')
 # Standard
 
 from itertools import product as iprod

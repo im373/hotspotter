@@ -3,11 +3,9 @@
 # Centralized table display tweaks such as chip/name column widths.
 # Moved menu action creation/wiring out of generated MainSkel.
 # Loaded menu action source strings from hsgui.menu_strings for Qt translation.
+# Replaced hscom.__common__ logging hooks with module-level logging.
 
-
-from hscom import __common__
-(print, print_, print_on, print_off,
- rrr, profile, printDBG) = __common__.init(__name__, '[front]', DEBUG=False)
+import logging
 import sys
 # Qt
 from PyQt5 import QtCore
@@ -21,6 +19,8 @@ from . import menu_strings
 from .guitools import slot_
 from .guitools import frontblocking as blocking
 from hscom import tools
+
+logger = logging.getLogger(__name__)
 
 
 def _translate(context, text):
@@ -48,9 +48,181 @@ TABLE_COLUMN_WIDTH_FACTORS = {
 }
 
 
-def action_spec(name, i18n_key, slot_fn=None, shortcut=None, enabled=True):
+#=================
+# Decorators / Helpers
+#=================
+
+try:
+    _fromUtf8 = QtCore.QString.fromUtf8
+except AttributeError:
+    _fromUtf8 = lambda s: s
+
+def clicked(func):
+    def clicked_wrapper(front, item, *args, **kwargs):
+        if front.isItemEditable(item):
+            logger.debug("Ignoring click on editable column")
+            return
+        if item == front.prev_tbl_item:
+            return
+        front.prev_tbl_item = item
+        return func(front, item, *args, **kwargs)
+    clicked_wrapper.__name__ = func.__name__
+    # Hacky decorator
+    return clicked_wrapper
+
+
+def csv_sanatize(str_):
+    return str(str_).replace(',', ';;')
+
+
+def apply_table_column_widths(tblname, tbl, col_fancyheaders):
+    """Apply per-table display width preferences after headers are created."""
+    width_factors = TABLE_COLUMN_WIDTH_FACTORS.get(tblname, {})
+    if not width_factors:
+        return
+    default_width = tbl.horizontalHeader().defaultSectionSize()
+    for header, factor in width_factors.items():
+        if header in col_fancyheaders:
+            col = col_fancyheaders.index(header)
+            tbl.horizontalHeader().resizeSection(col, int(default_width * factor))
+
+
+#=================
+# Stream Stealer
+#=================
+
+
+class GUILoggingSender(QtCore.QObject):
+    write_ = QtCore.pyqtSignal(str)
+
+    def __init__(self, front):
+        super(GUILoggingSender, self).__init__()
+        self.write_.connect(front.gui_write)
+
+    def write_gui(self, msg):
+        self.write_.emit(str(msg))
+
+
+class GUILoggingHandler(logging.StreamHandler):
+    """
+    A handler class which sends messages to to a connected QSlot
+    """
+    def __init__(self, front):
+        super(GUILoggingHandler, self).__init__()
+        self.sender = GUILoggingSender(front)
+
+    def emit(self, record):
+        try:
+            msg = self.format(record) + '\n'
+            self.sender.write_.emit(msg)
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except:
+            self.handleError(record)
+
+
+def add_gui_logging_handler(handler):
+    formatter = logging.Formatter(
+        '%(asctime)s %(levelname)-8s %(name)s: %(message)s',
+        '%H:%M:%S',
+    )
+    handler.setLevel(logging.DEBUG)
+    handler.setFormatter(formatter)
+    logging.getLogger().addHandler(handler)
+
+
+class StreamStealer(QtCore.QObject):
+    write_ = QtCore.pyqtSignal(str)
+    flush_ =  QtCore.pyqtSignal()
+
+    def __init__(self, front, parent=None, share=False):
+        super(StreamStealer, self).__init__(parent)
+        # Define the Stream Stealer write function
+        if share:
+            self.write = self.write_shared
+        else:
+            self.write = self.write_gui
+        self.write_.connect(front.gui_write)
+        self.flush_.connect(front.gui_flush)
+        # Do the stealing
+        #stream_holder = sys
+        #try:
+            #__IPYTHON__
+            #print('[front] detected __IPYTHON__')
+            #from IPython.utils import io as iio
+            #stream_holder = iio.IOTerm(None, self)
+            #return
+        #except NameError:
+            #print('[front] did not detect __IPYTHON__')
+            #pass
+        #except Exception as ex:
+            #print(ex)
+            #raise
+
+        # Remember which stream you've stolen
+        self.iostream = sys.stdout
+        self.iostream2 = sys.stderr
+        # Redirect standard out to the StreamStealer object
+        sys.stderr = self
+        sys.stdout = self
+        #steam_holder.stdout
+
+    def write_shared(self, msg):
+        msg_ = str(str(msg))
+        self.iostream.write(msg_)
+        self.write_.emit(msg_)
+
+    def write_gui(self, msg):
+        self.write_.emit(str(msg))
+
+    def flush(self):
+        self.flush_.emit()
+
+
+def _steal_stdout(front):
+    from hscom import params
+    #front.ui.outputEdit.setPlainText(sys.stdout)
+    nosteal = params.args.nosteal
+    noshare = params.args.noshare
+    if '--cmd' in sys.argv:
+        nosteal = noshare = True
+    #from IPython.utils import io
+    #with io.capture_output() as captured:
+        #%run my_script.py
+    if NOSTEAL_OVERRIDE or (nosteal and noshare):
+        logger.debug("Not stealing stdout")
+        return
+    logger.debug("Stealing standard out")
+    if front.ostream is None:
+        # Connect a StreamStealer object to the GUI output window
+        if '--nologging' in sys.argv:
+            front.ostream = StreamStealer(front, share=not noshare)
+        else:
+            front.gui_logging_handler = GUILoggingHandler(front)
+            add_gui_logging_handler(front.gui_logging_handler)
+    else:
+        logger.debug("Stream already stolen")
+
+
+def _return_stdout(front):
+    #front.ui.outputEdit.setPlainText(sys.stdout)
+    logger.debug("Returning standard out")
+    if front.ostream is not None:
+        sys.stdout = front.ostream.iostream
+        sys.stderr = front.ostream.iostream2
+        front.ostream = None
+        return True
+    else:
+        logger.debug("Stream has not been stolen")
+        return False
+
+#=================
+# Menus
+#=================
+
+def action_spec(action_name, i18n_key, slot_fn=None, shortcut=None, enabled=True):
     return {
-        'name': name,
+        'name': action_name,
         'i18n_key': i18n_key,
         'slot_fn': slot_fn,
         'shortcut': shortcut,
@@ -121,187 +293,6 @@ def menu_action_specs(front):
     }
 
 
-#=================
-# Decorators / Helpers
-#=================
-
-try:
-    _fromUtf8 = QtCore.QString.fromUtf8
-except AttributeError:
-    _fromUtf8 = lambda s: s
-
-def clicked(func):
-    def clicked_wrapper(front, item, *args, **kwargs):
-        if front.isItemEditable(item):
-            front.print('[front] does not select when clicking editable column')
-            return
-        if item == front.prev_tbl_item:
-            return
-        front.prev_tbl_item = item
-        return func(front, item, *args, **kwargs)
-    clicked_wrapper.__name__ = func.__name__
-    # Hacky decorator
-    return clicked_wrapper
-
-
-def csv_sanatize(str_):
-    return str(str_).replace(',', ';;')
-
-
-def apply_table_column_widths(tblname, tbl, col_fancyheaders):
-    """Apply per-table display width preferences after headers are created."""
-    width_factors = TABLE_COLUMN_WIDTH_FACTORS.get(tblname, {})
-    if not width_factors:
-        return
-    default_width = tbl.horizontalHeader().defaultSectionSize()
-    for header, factor in width_factors.items():
-        if header in col_fancyheaders:
-            col = col_fancyheaders.index(header)
-            tbl.horizontalHeader().resizeSection(col, int(default_width * factor))
-
-
-#=================
-# Stream Stealer
-#=================
-import logging
-
-
-class GUILoggingSender(QtCore.QObject):
-    write_ = QtCore.pyqtSignal(str)
-
-    def __init__(self, front):
-        super(GUILoggingSender, self).__init__()
-        self.write_.connect(front.gui_write)
-
-    def write_gui(self, msg):
-        self.write_.emit(str(msg))
-
-
-class GUILoggingHandler(logging.StreamHandler):
-    """
-    A handler class which sends messages to to a connected QSlot
-    """
-    def __init__(self, front):
-        super(GUILoggingHandler, self).__init__()
-        self.sender = GUILoggingSender(front)
-
-    def emit(self, record):
-        try:
-            msg = self.format(record) + '\n'
-            self.sender.write_.emit(msg)
-        except (KeyboardInterrupt, SystemExit):
-            raise
-        except:
-            self.handleError(record)
-
-
-class StreamStealer(QtCore.QObject):
-    write_ = QtCore.pyqtSignal(str)
-    flush_ =  QtCore.pyqtSignal()
-
-    def __init__(self, front, parent=None, share=False):
-        super(StreamStealer, self).__init__(parent)
-        # Define the Stream Stealer write function
-        if share:
-            self.write = self.write_shared
-        else:
-            self.write = self.write_gui
-        self.write_.connect(front.gui_write)
-        self.flush_.connect(front.gui_flush)
-        # Do the stealing
-        #stream_holder = sys
-        #try:
-            #__IPYTHON__
-            #print('[front] detected __IPYTHON__')
-            #from IPython.utils import io as iio
-            #stream_holder = iio.IOTerm(None, self)
-            #return
-        #except NameError:
-            #print('[front] did not detect __IPYTHON__')
-            #pass
-        #except Exception as ex:
-            #print(ex)
-            #raise
-
-        # Remember which stream you've stolen
-        self.iostream = sys.stdout
-        self.iostream2 = sys.stderr
-        # Redirect standard out to the StreamStealer object
-        sys.stderr = self
-        sys.stdout = self
-        #steam_holder.stdout
-
-    def write_shared(self, msg):
-        msg_ = str(str(msg))
-        self.iostream.write(msg_)
-        self.write_.emit(msg_)
-
-    def write_gui(self, msg):
-        self.write_.emit(str(msg))
-
-    def flush(self):
-        self.flush_.emit()
-
-
-def _steal_stdout(front):
-    from hscom import params
-    #front.ui.outputEdit.setPlainText(sys.stdout)
-    nosteal = params.args.nosteal
-    noshare = params.args.noshare
-    if '--cmd' in sys.argv:
-        nosteal = noshare = True
-    #from IPython.utils import io
-    #with io.capture_output() as captured:
-        #%run my_script.py
-    if NOSTEAL_OVERRIDE or (nosteal and noshare):
-        print('[front] not stealing stdout.')
-        return
-    print('[front] stealing standard out')
-    if front.ostream is None:
-        # Connect a StreamStealer object to the GUI output window
-        if '--nologging' in sys.argv:
-            front.ostream = StreamStealer(front, share=not noshare)
-        else:
-            front.gui_logging_handler = GUILoggingHandler(front)
-            __common__.add_logging_handler(front.gui_logging_handler)
-    else:
-        print('[front] stream already stolen')
-
-
-def _return_stdout(front):
-    #front.ui.outputEdit.setPlainText(sys.stdout)
-    print('[front] returning standard out')
-    if front.ostream is not None:
-        sys.stdout = front.ostream.iostream
-        sys.stderr = front.ostream.iostream2
-        front.ostream = None
-        return True
-    else:
-        print('[front] stream has not been stolen')
-        return False
-
-
-#=================
-# Initialization
-#=================
-
-
-def init_ui(front):
-    ui = Ui_mainSkel()
-    ui.setupUi(front)
-    return ui
-
-
-#def popup(front, pos):
-    #for i in front.ui.gxs_TBL.selectionModel().selection().indexes():
-        #front.print(repr((i.row(), i.column())))
-    #menu = QtWidgets.QMenu()
-    #action1 = menu.addAction("action1")
-    #action2 = menu.addAction("action2")
-    #action3 = menu.addAction("action2")
-    #action = menu.exec_(front.ui.gxs_TBL.mapToGlobal(pos))
-    #front.print('action = %r ' % action)
-
 def new_menu_action(front, menu_name, name, text=None, shortcut=None,
                     tooltip=None, slot_fn=None, enabled=True):
     # Dynamically add new menu actions programatically
@@ -326,7 +317,7 @@ def new_menu_action(front, menu_name, name, text=None, shortcut=None,
     if tooltip is not None:
         action.setToolTip(tooltip)
     if slot_fn is not None:
-        printDBG('connecting %s' % name)
+        logger.debug(f"Connecting {name}")
         action.triggered.connect(slot_fn)
     return action
 
@@ -350,9 +341,30 @@ def create_menu_actions(front):
                             slot_fn=spec.get('slot_fn'),
                             enabled=spec.get('enabled', True))
 
+#=================
+# Initialization
+#=================
+
+
+def init_ui(front):
+    ui = Ui_mainSkel()
+    ui.setupUi(front)
+    return ui
+
+
+#def popup(front, pos):
+    #for i in front.ui.gxs_TBL.selectionModel().selection().indexes():
+        #print(repr((i.row(), i.column())))
+    #menu = QtWidgets.QMenu()
+    #action1 = menu.addAction("action1")
+    #action2 = menu.addAction("action2")
+    #action3 = menu.addAction("action2")
+    #action = menu.exec_(front.ui.gxs_TBL.mapToGlobal(pos))
+    #print('action = %r ' % action)
+
 
 def set_tabwidget_text(front, tblname, text):
-    printDBG('[front] set_tabwidget_text(%s, %s)' % (tblname, text))
+    logger.debug(f"Set tab widget text {tblname}={text}")
     tablename2_tabwidget = {
         'gxs': front.ui.image_view,
         'cxs': front.ui.chip_view,
@@ -380,7 +392,6 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
 
     def __init__(front, back):
         super(MainWindowFrontend, front).__init__()
-        #print('[*front] creating frontend')
         front.prev_tbl_item = None
         front.ostream = None
         front.gui_logging_handler = None
@@ -398,19 +409,9 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
     def return_stdout(front):
         return _return_stdout(front)
 
-    # TODO: this code is duplicated in back
-    def user_info(front, *args, **kwargs):
-        return guitools.user_info(front, *args, **kwargs)
-
-    def user_input(front, *args, **kwargs):
-        return guitools.user_input(front, *args, **kwargs)
-
-    def user_option(front, *args, **kwargs):
-        return guitools.user_option(front, *args, **kwargs)
 
     @slot_()
     def closeEvent(front, event):
-        #front.printSignal.emit('[*front] closeEvent')
         event.accept()
         front.quitSignal.emit()
 
@@ -445,10 +446,6 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
         ui.cxs_TBL.sortByColumn(0, QtCore.Qt.AscendingOrder)
         ui.res_TBL.sortByColumn(0, QtCore.Qt.AscendingOrder)
         ui.gxs_TBL.sortByColumn(0, QtCore.Qt.AscendingOrder)
-
-    def print(front, msg):
-        print('[*front*] ' + msg)
-        #front.printSignal.emit('[*front] ' + msg)
 
     @slot_(bool)
     def setEnabled(front, flag):
@@ -528,8 +525,8 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
         def set_header_context_menu(hheader):
             hheader.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
             opt2_callback = [
-                ('header', lambda: print('finishme')),
-                ('cancel', lambda: print('cancel')), ]
+                ('header', lambda: logger.debug("finishme")),
+                ('cancel', lambda: logger.debug("cancel")), ]
             popup_slot = guitools.popup_menu(tbl, opt2_callback)
             hheader.customContextMenuRequested.connect(popup_slot)
 
@@ -669,7 +666,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
 
     @slot_(QtWidgets.QTableWidgetItem)
     def img_tbl_changed(front, item):
-        front.print('img_tbl_changed()')
+        logger.debug("img_tbl_changed()")
         row, col = (item.row(), item.column())
         sel_gx = front.get_imgtbl_gx(row)
         header_lbl = front.get_imgtbl_header(col)
@@ -678,7 +675,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
 
     @slot_(QtWidgets.QTableWidgetItem)
     def chip_tbl_changed(front, item):
-        front.print('chip_tbl_changed()')
+        logger.debug("chip_tbl_changed()")
         row, col = (item.row(), item.column())
         sel_cid = front.get_chiptbl_cid(row)  # Get selected chipid
         new_val = csv_sanatize(item.text())   # sanatize for csv
@@ -687,7 +684,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
 
     @slot_(QtWidgets.QTableWidgetItem)
     def res_tbl_changed(front, item):
-        front.print('res_tbl_changed()')
+        logger.debug("res_tbl_changed()")
         row, col = (item.row(), item.column())
         sel_cid  = front.get_restbl_cid(row)  # The changed row's chip id
         new_val  = csv_sanatize(item.text())  # sanatize val for csv
@@ -696,7 +693,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
 
     @slot_(QtWidgets.QTableWidgetItem)
     def name_tbl_changed(front, item):
-        front.print('name_tbl_changed()')
+        logger.debug("name_tbl_changed()")
         row, col = (item.row(), item.column())
         sel_nx = front.get_nametbl_nx(row)    # The changed row's name index
         new_val  = csv_sanatize(item.text())  # sanatize val for csv
@@ -710,7 +707,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
     @clicked
     def img_tbl_clicked(front, item):
         row = item.row()
-        front.print('img_tbl_clicked(%r)' % (row))
+        logger.debug(f"img_tbl_clicked({row!r})")
         sel_gx = front.get_imgtbl_gx(row)
         front.selectGxSignal.emit(sel_gx)
 
@@ -718,7 +715,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
     @clicked
     def chip_tbl_clicked(front, item):
         row, col = (item.row(), item.column())
-        front.print('chip_tbl_clicked(%r, %r)' % (row, col))
+        logger.debug(f"chip_tbl_clicked({row!r}, {col!r})")
         sel_cid = front.get_chiptbl_cid(row)
         front.selectCidSignal.emit(sel_cid)
 
@@ -726,7 +723,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
     @clicked
     def res_tbl_clicked(front, item):
         row, col = (item.row(), item.column())
-        front.print('res_tbl_clicked(%r, %r)' % (row, col))
+        logger.debug(f"res_tbl_clicked({row!r}, {col!r})")
         sel_cid = front.get_restbl_cid(row)
         front.selectResSignal.emit(sel_cid)
 
@@ -734,7 +731,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
     @clicked
     def name_tbl_clicked(front, item):
         row, col = (item.row(), item.column())
-        front.print('name_tbl_clicked(%r, %r)' % (row, col))
+        logger.debug(f"name_tbl_clicked({row!r}, {col!r})")
         sel_name = front.get_nametbl_name(row)
         front.selectNameSignal.emit(sel_name)
 
@@ -745,11 +742,11 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
     @slot_(int)
     def change_view(front, new_state):
         tab_name = str(front.ui.tablesTabWidget.tabText(new_state))
-        front.print('change_view(%r)' % new_state)
+        logger.debug(f"change_view({new_state!r})")
         prevBlock = front.ui.tablesTabWidget.blockSignals(True)
         front.ui.tablesTabWidget.blockSignals(prevBlock)
         if tab_name.startswith('Query Results Table'):
-            print(front.back.hs.get_cache_uid())
+            logger.debug(f"Current cache uid: {front.back.hs.get_cache_uid()}")
 
     @slot_(str, str, list)
     def modal_useroption(front, msg, title, options):

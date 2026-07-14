@@ -1,11 +1,10 @@
 # HotSpotter port notes:
 # Updated Qt dialogs, slots, and matplotlib interaction helpers for PyQt5.
 # Added logging-friendly orientation/ROI interaction behavior.
+# Replaced hscom.__common__ logging hooks with module-level logging.
 
-from hscom import __common__
-(print, print_, print_on, print_off,
- rrr, profile) = __common__.init(__name__, '[guitools]')
 # Python
+import builtins
 import logging
 import math
 from os.path import split
@@ -21,6 +20,9 @@ from hscom import fileio as io
 from hscom import helpers
 from hscom import helpers as util
 from hsviz import draw_func2 as df2
+
+logger = logging.getLogger(__name__)
+profile = getattr(builtins, 'profile', lambda func: func)
 
 IS_INIT = False
 QAPP = None
@@ -39,8 +41,8 @@ def configure_matplotlib():
     import matplotlib
     mplbackend = matplotlib.get_backend()
     if multiprocessing.current_process().name == 'MainProcess':
-        print('[*guitools] current mplbackend is: %r' % mplbackend)
-        print('[*guitools] matplotlib.use(Qt5Agg)')
+        logger.info(f"Current matplotlib backend is {mplbackend!r}")
+        logger.info("Switching matplotlib backend to Qt5Agg")
     else:
         return
     matplotlib.rcParams['toolbar'] = 'toolbar2'
@@ -50,13 +52,14 @@ def configure_matplotlib():
         matplotlib.use('Qt5Agg', force=True)
         mplbackend = matplotlib.get_backend()
         if multiprocessing.current_process().name == 'MainProcess':
-            print('[*guitools] current mplbackend is: %r' % mplbackend)
+            logger.info(f"Current matplotlib backend is {mplbackend!r}")
         #matplotlib.rcParams['toolbar'] = 'None'
         #matplotlib.rcParams['interactive'] = True
 
 
 #---------------
 # SLOT DECORATORS
+#---------------
 
 
 def slot_(*types, **kwargs_):  # This is called at wrap time to get args
@@ -73,7 +76,7 @@ def slot_(*types, **kwargs_):  # This is called at wrap time to get args
     def pyqtSlotWrapper(func):
         func_name = func.__name__
         if initdbg:
-            print('[@guitools] Wrapping %r with slot_' % func.__name__)
+            logger.debug(f"Wrapping {func.__name__!r} with slot_")
 
         if rundbg:
             @QtCore.pyqtSlot(*types, name=func.__name__)
@@ -81,10 +84,10 @@ def slot_(*types, **kwargs_):  # This is called at wrap time to get args
                 argstr_list = list(map(str, args))
                 kwastr_list = ['%s=%s' % item for item in kwargs.items()]
                 argstr = ', '.join(argstr_list + kwastr_list)
-                print('[**slot_.Begining] %s(%s)' % (func_name, argstr))
+                logger.debug(f"Begin slot {func_name}({argstr})")
                 #with helpers.Indenter():
                 result = func(self, *args, **kwargs)
-                print('[**slot_.Finished] %s(%s)' % (func_name, argstr))
+                logger.debug(f"Finished slot {func_name}({argstr})")
                 return result
         else:
             @QtCore.pyqtSlot(*types, name=func.__name__)
@@ -114,15 +117,13 @@ def backblocking(func):
             result = func(back, *args, **kwargs)
         except Exception as ex:
             back.front.blockSignals(wasBlocked_)
-            print('Block wrapper caugt exception in %r' % func.__name__)
-            print('back = %r' % back)
+            logger.exception(f"Block wrapper caught exception in {func.__name__!r}")
+            logger.debug(f"back = {back!r}")
             VERBOSE = False
             if VERBOSE:
-                print('*args = %r' % (args,))
-                print('**kwargs = %r' % (kwargs,))
+                logger.debug(f"*args = {args!r}")
+                logger.debug(f"**kwargs = {kwargs!r}")
             #print('ex = %r' % ex)
-            import traceback
-            print(traceback.format_exc())
             #back.user_info('Error in blocking ex=%r' % ex)
             back.user_info('Error while blocking gui:\nex=%r' % ex)
             raise
@@ -145,12 +146,12 @@ def frontblocking(func):
             result = func(front, *args, **kwargs)
         except Exception as ex:
             front.blockSignals(wasBlocked_)
-            print('Block wrapper caught exception in %r' % func.__name__)
-            print('front = %r' % front)
+            logger.exception(f"Block wrapper caught exception in {func.__name__!r}")
+            logger.debug(f"front = {front!r}")
             VERBOSE = False
             if VERBOSE:
-                print('*args = %r' % (args,))
-                print('**kwargs = %r' % (kwargs,))
+                logger.debug(f"*args = {args!r}")
+                logger.debug(f"**kwargs = {kwargs!r}")
             #print('ex = %r' % ex)
             front.user_info('Error in blocking ex=%r' % ex)
             raise
@@ -180,8 +181,7 @@ def drawing(func):
 @profile
 def select_orientation():
     #from matplotlib.backend_bases import mplDeprecation
-    log = logging.getLogger('root').info
-    log('[*guitools] Define an orientation angle by clicking two points')
+    logger.info("Define an orientation angle by clicking two points")
     fig = None
     oldcbfn = None
     try:
@@ -190,18 +190,18 @@ def select_orientation():
         fig = df2.gcf()
         oldcbid, oldcbfn = df2.disconnect_callback(fig, 'button_press_event')
         fig.canvas.draw_idle()
-        log('[*guitools] waiting for 2 points from ginput')
+        logger.info("Waiting for 2 points from ginput")
         pts = np.asarray(fig.ginput(2))
-        log('[*guitools] ginput returned pts=%r' % (pts,))
+        logger.info(f"ginput returned pts={pts!r}")
         # if len(pts) != 2:
         #     print('[*guitools] orientation selection cancelled: pts=%r' % (pts,))
         #     return None
         refpt = pts[1] - pts[0]
         theta = math.atan2(refpt[1], refpt[0])
-        log('[*guitools] theta=%r refpt=%r' % (theta, refpt))
+        logger.info(f"Calculated theta={theta!r} refpt={refpt!r}")
         return theta
     except Exception as ex:
-        log('[*guitools] Annotate Orientation Failed %r' % ex)
+        logger.exception(f"Annotate Orientation Failed {ex!r}")
         return None
     finally:
         if fig is not None:
@@ -211,7 +211,7 @@ def select_orientation():
 @profile
 def select_roi():
     #from matplotlib.backend_bases import mplDeprecation
-    print('[*guitools] Define a Rectanglular ROI by clicking two points.')
+    logger.info("Define a rectangular ROI by clicking two points")
     fig = None
     oldcbfn = None
     try:
@@ -221,9 +221,9 @@ def select_roi():
         oldcbid, oldcbfn = df2.disconnect_callback(fig, 'button_press_event')
         fig.canvas.draw_idle()
         pts = fig.ginput(2)
-        print('[*guitools] ginput(2) = %r' % (pts,))
+        logger.info(f"ginput(2) = {pts!r}")
         if len(pts) != 2:
-            print('[*guitools] ROI selection cancelled: pts=%r' % (pts,))
+            logger.info(f"ROI selection cancelled: pts={pts!r}")
             return None
         [(x1, y1), (x2, y2)] = pts
         xm = min(x1, x2)
@@ -232,10 +232,10 @@ def select_roi():
         yM = max(y1, y2)
         xywh = list(map(int, list(map(round, (xm, ym, xM - xm, yM - ym)))))
         roi = np.array(xywh, dtype=np.int32)
-        print('[*guitools] roi = %r ' % (roi,))
+        logger.info(f"Selected ROI = {roi!r}")
         return roi
     except Exception as ex:
-        print('[*guitools] ROI selection Failed:\n%r' % (ex,))
+        logger.exception(f"ROI selection failed: {ex!r}")
         return None
     finally:
         if fig is not None:
@@ -302,9 +302,9 @@ def user_info(parent, msg, title='info'):
 @profile
 def _user_option(parent, msg, title='options', options=['No', 'Yes'], use_cache=False):
     'Prompts user with several options with ability to save decision'
-    print('[*guitools] _user_option:\n %r: %s' + title + ': ' + msg)
+    logger.debug(f"User option prompt title={title!r} msg={msg!r}")
     # Recall decision
-    print('[*guitools] asking user: %r %r' % (msg, title))
+    logger.debug(f"Asking user: {msg!r} {title!r}")
     cache_id = helpers.hashstr(title + msg)
     if use_cache:
         reply = io.global_cache_read(cache_id, default=None)
@@ -322,10 +322,10 @@ def _user_option(parent, msg, title='options', options=['No', 'Yes'], use_cache=
     try:
         reply = options[optx]
     except Exception as ex:
-        print('[*guitools] USER OPTION EXCEPTION !')
-        print('[*guitools] optx = %r' % optx)
-        print('[*guitools] options = %r' % options)
-        print('[*guitools] ex = %r' % ex)
+        logger.exception("User option selection failed")
+        logger.debug(f"optx = {optx!r}")
+        logger.debug(f"options = {options!r}")
+        logger.debug(f"ex = {ex!r}")
         raise
     # Remember decision
     if use_cache and dontPrompt.isChecked():
@@ -349,40 +349,40 @@ def getQtImageNameFilter():
 def select_images(caption='Select images:', directory=None):
     name_filter = getQtImageNameFilter()
     selected = select_files(caption, directory, name_filter)
-    print('selected = {!r}'.format(selected))
+    logger.info(f"Selected images = {selected!r}")
     return selected
 
 
 @profile
 def select_files(caption='Select Files:', directory=None, name_filter=None):
     'Selects one or more files from disk using a qt dialog'
-    print(caption)
+    logger.info(f"{caption}")
     if directory is None:
         directory = io.global_cache_read('select_directory')
     qdlg = QtWidgets.QFileDialog()
     qfile_list = qdlg.getOpenFileNames(caption=caption, directory=directory, filter=name_filter)
-    print('qfile_list = {!r}'.format(qfile_list))
+    logger.debug(f"qfile_list = {qfile_list!r}")
     if isinstance(qfile_list, tuple):
         qfile_list = qfile_list[0]
     if isinstance(qfile_list, str):
         file_list = [qfile_list]
     else:
         file_list = [str(fpath) for fpath in qfile_list]
-    print('Selected %d files' % len(file_list))
+    logger.info(f"Selected {len(file_list)} files")
     io.global_cache_write('select_directory', directory)
     return file_list
 
 
 @profile
 def select_directory(caption='Select Directory', directory=None):
-    print(caption)
+    logger.info(f"{caption}")
     if directory is None:
         directory = io.global_cache_read('select_directory')
     qdlg = QtWidgets.QFileDialog()
     qopt = QtWidgets.QFileDialog.ShowDirsOnly
     qdlg_kwargs = dict(caption=caption, options=qopt, directory=directory)
     dpath = str(qdlg.getExistingDirectory(**qdlg_kwargs))
-    print('Selected Directory: %r' % dpath)
+    logger.info(f"Selected directory: {dpath!r}")
     io.global_cache_write('select_directory', split(dpath)[0])
     return dpath
 
@@ -395,7 +395,7 @@ def show_open_db_dlg(parent=None):
         db_dir = io.global_cache_read('db_dir')
         if db_dir == '.':
             db_dir = None
-    print('[*guitools] cached db_dir=%r' % db_dir)
+    logger.debug(f"Cached db_dir={db_dir!r}")
     if parent is None:
         parent = QtWidgets.QDialog()
     opendb_ui = OpenDatabaseDialog.Ui_Dialog()
@@ -417,7 +417,7 @@ def init_qtapp():
     app = QtCore.QCoreApplication.instance()
     is_root = app is None
     if is_root:  # if not in qtconsole
-        print('[*guitools] Initializing QApplication')
+        logger.info("Initializing QApplication")
         app = QtWidgets.QApplication(sys.argv)
         QAPP = app
     try:
@@ -433,7 +433,7 @@ def init_qtapp():
 @util.indent_decor('[qt-exit]')
 @profile
 def exit_application():
-    print('[*guitools] exiting application')
+    logger.info("Exiting application")
     QtWidgets.qApp.quit()
 
 
@@ -441,25 +441,25 @@ def exit_application():
 @profile
 def run_main_loop(app, is_root=True, back=None, **kwargs):
     if back is not None:
-        print('[*guitools] setting active window')
+        logger.debug("Setting active window")
         app.setActiveWindow(back.front)
         back.timer = ping_python_interpreter(**kwargs)
     if is_root:
         exec_core_app_loop(app)
         #exec_core_event_loop(app)
     else:
-        print('[*guitools] using roots main loop')
+        logger.debug("Using root main loop")
 
 
 @profile
 def exec_core_event_loop(app):
     # This works but does not allow IPython injection
-    print('[*guitools] running core application loop.')
+    logger.info("Running core application loop")
     try:
         from IPython.lib.inputhook import enable_qt5
         enable_qt5()
         from IPython.lib.guisupport import start_event_loop_qt5
-        print('Starting ipython qt5 hook')
+        logger.info("Starting IPython Qt5 hook")
         start_event_loop_qt5(app)
     except ImportError:
         pass
@@ -469,7 +469,7 @@ def exec_core_event_loop(app):
 @profile
 def exec_core_app_loop(app):
     # This works but does not allow IPython injection
-    print('[*guitools] running core application loop.')
+    logger.info("Running core application loop")
     app.exec_()
     #sys.exit(app.exec_())
 
@@ -511,7 +511,7 @@ def enfore_scope(qobj, scoped_obj, scope_title='_scope_list'):
 @profile
 def popup_menu(widget, opt2_callback, parent=None):
     def popup_slot(pos):
-        print(pos)
+        logger.debug(f"Popup menu position: {pos!r}")
         menu = QtWidgets.QMenu()
         actions = [menu.addAction(opt, func) for opt, func in
                    iter(opt2_callback)]

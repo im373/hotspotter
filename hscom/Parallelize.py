@@ -1,42 +1,44 @@
 # HotSpotter port notes:
 # Updated shared compatibility helpers for Python 3, NumPy 2, and Windows paths.
-# Kept logging, preferences, file I/O, and argument handling aligned with modern runtimes.
+# Replaced hscom.__common__ hooks with logging/profiling/dev helpers.
 
 # http://docs.python.org/2/library/multiprocessing.html
 
-from . import __common__
-(print, print_, print_on, print_off,
- rrr, profile, printDBG) = __common__.init(__name__, '[parallel]', DEBUG=False)
 # Python
 
 from os.path import exists, dirname, split
+import logging
 import multiprocessing
 import os
 import sys
 # Hotspotter
 from . import helpers as util
+from .dev_utils import make_reloader
+from .profiling import profile
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[parallel]')
+printDBG = logger.debug
 
 
 @profile
 def _calculate(func, args):
-    printDBG('[parallel] * %s calculating...' % (multiprocessing.current_process().name,))
+    printDBG(f"* {multiprocessing.current_process().name} calculating...")
     result = func(*args)
     #arg_names = func.func_code.co_varnames[:func.func_code.co_argcount]
     #arg_list  = [n+'='+str(v) for n,v in zip(arg_names, args)]
     #arg_str = '\n    *** '+str('\n    *** '.join(arg_list))
-    printDBG('[parallel]  * %s finished:\n    ** %s' %
-            (multiprocessing.current_process().name,
-             func.__name__))
+    printDBG(f" * {multiprocessing.current_process().name} finished:\n    ** {func.__name__}")
     return result
 
 
 @profile
 def _worker(input, output):
-    printDBG('[parallel] START WORKER input=%r output=%r' % (input, output))
+    printDBG(f"START WORKER input={input!r} output={output!r}")
     for func, args in iter(input.get, 'STOP'):
-        printDBG('[parallel] worker will calculate %r' % (func))
+        printDBG(f"worker will calculate {func!r}")
         result = _calculate(func, args)
-        printDBG('[parallel] worker has calculated %r' % (func))
+        printDBG(f"worker has calculated {func!r}")
         output.put(result)
         #printDBG('[parallel] worker put result in queue.')
     #printDBG('[parallel] worker is done input=%r output=%r' % (input, output))
@@ -54,7 +56,7 @@ def parallel_compute(func=None, arg_list=[], num_procs=None, lazy=True, args=Non
                                common_args=common_args, output_dir=output_dir)
     nTasks = len(task_list)
     if nTasks == 0:
-        print('[parallel] ... No %s tasks left to compute!' % func.__name__)
+        logger.info(f"No {func.__name__} tasks left to compute")
         return None
     # Do not execute small tasks in parallel
     if nTasks < num_procs / 2 or nTasks == 1:
@@ -65,14 +67,14 @@ def parallel_compute(func=None, arg_list=[], num_procs=None, lazy=True, args=Non
         ret = parallelize_tasks(task_list, num_procs, task_lbl)
     except Exception as ex:
         sys.stdout.flush()
-        print('[parallel!] Problem while parallelizing task: %r' % ex)
-        print('[parallel!] task_list: ')
+        logger.exception(f"Problem while parallelizing task: {ex!r}")
+        logger.error("task_list:")
         for task in task_list:
-            print('  %r' % (task,))
+            logger.error(f"  {task!r}")
             break
-        print('[parallel!] common_args = %r' % common_args)
-        print('[parallel!] num_procs = %r ' % (num_procs,))
-        print('[parallel!] task_lbl = %r ' % (task_lbl,))
+        logger.error(f"common_args = {common_args!r}")
+        logger.error(f"num_procs = {num_procs!r}")
+        logger.error(f"task_lbl = {task_lbl!r}")
         sys.stdout.flush()
         raise
     return ret
@@ -121,7 +123,7 @@ def make_task_list(func, arg_list, lazy=True, common_args=[], output_dir=None):
         arg_list2 = [append_common(_args) for _args in zip(*arg_list) if not exists(_args[1])]
     task_list = [(func, _args) for _args in iter(arg_list2)]
     nSkip = len(list(zip(*arg_list))) - len(arg_list2)
-    print('[parallel] Already computed %d %s tasks' % (nSkip, func.__name__))
+    logger.info(f"Already computed {nSkip} {func.__name__} tasks")
     return task_list
 
 
@@ -161,7 +163,7 @@ def _compute_in_serial(task_list, task_lbl='', verbose=True):
         for (fn, args) in iter(task_list):
             result = fn(*args)
             result_list.append(result)
-        print('[parallel]  ... done')
+        logger.info("done")
     return result_list
 
 
@@ -179,28 +181,28 @@ def _compute_in_parallel(task_list, num_procs, task_lbl='', verbose=True):
     # start processes
     proc_list = []
     for i in range(num_procs):
-        printDBG('[parallel] creating process %r' % (i,))
+        printDBG(f"creating process {i!r}")
         proc = multiprocessing.Process(target=_worker, args=(task_queue, done_queue))
         proc.daemon = True
         proc.start()
         proc_list.append(proc)
     # wait for results
-    printDBG('[parallel] waiting for results')
+    printDBG("waiting for results")
     sys.stdout.flush()
     result_list = []
     if verbose:
         mark_progress, end_prog = util.progress_func(nTasks, lbl=task_lbl, spacing=num_procs)
         for count in range(len(task_list)):
             mark_progress(count)
-            printDBG('[parallel] done_queue.get()')
+            printDBG("done_queue.get()")
             result = done_queue.get()
             result_list.append(result)
         end_prog()
     else:
         for i in range(nTasks):
             done_queue.get()
-        print('[parallel]  ... done')
-    printDBG('[parallel] stopping children')
+        logger.info("done")
+    printDBG("stopping children")
     # stop children processes
     for i in range(num_procs):
         task_queue.put('STOP')

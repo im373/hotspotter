@@ -1,13 +1,18 @@
 
-from hscom import __common__
-(print, print_, print_on, print_off,
- rrr, profile) = __common__.init(__name__, '[dev_reload]')
+# HotSpotter port notes:
+# Replaced hscom.__common__ reload hooks with hscom.dev_utils.
+
+import logging
+
+from hscom.dev_utils import reload_module
+
+logger = logging.getLogger(__name__)
 
 
 def reload_all_modules():
-    print('===========================')
-    print('[dev] performing dev_reload')
-    print('---------------------------')
+    logger.info("===========================")
+    logger.info("[dev] performing dev_reload")
+    logger.info("---------------------------")
     from hotspotter import DataStructures as ds
     from hotspotter import algos
     from hotspotter import load_data2 as ld2
@@ -44,49 +49,19 @@ def reload_all_modules():
     from . import dev_consistency
     from . import dev_api
     from . import dev_reload
-    # Self
-    rrr()
-    # com
-    util.rrr()
-    io.rrr()
-    cplat.rrr()
-    parallel.rrr()
-    #prefs.rrr()
-    #Printable.rrr()
-    #argparse2.rrr()
-    latex_formater.rrr()
-    params.rrr()
-    tools.rrr()
-    # hotspotter
-    ld2.rrr()
-    ds.rrr()
-    mf.rrr()
-    nn_filters.rrr()
-    mc3.rrr()
-    vr2.rrr()
-    cc2.rrr()
-    rr2.rrr()
-    fc2.rrr()
-    algos.rrr()
-    # gui
-    guitools.rrr()
-    guifront.rrr()
-    guiback.rrr()
-    # viz
-    extract_patch.rrr()
-    viz.rrr()
-    interact.rrr()
-    df2.rrr()
-    allres_viz.rrr()
-    # dev
-    dev_stats.rrr()
-    dev_consistency.rrr()
-    dev_api.rrr()
-    dev_reload.rrr()
+    reload_targets = [
+        util, io, cplat, parallel, latex_formater, params, tools,
+        ld2, ds, mf, nn_filters, mc3, vr2, cc2, rr2, fc2, algos,
+        guitools, guifront, guiback,
+        extract_patch, viz, interact, df2, allres_viz,
+        dev_stats, dev_consistency, dev_api, dev_reload,
+    ]
+    for module in reload_targets:
+        reload_module(module)
 
-    print('---------------------------')
-    print('df2 reset')
+    logger.info("---------------------------")
+    logger.info("df2 reset")
     df2.reset()
-    print('---------------------------')
-    print('[dev] finished dev_reload()')
-    print('===========================')
+    logger.info("---------------------------")
+    logger.info("[dev] finished dev_reload()")
+    logger.info("===========================")

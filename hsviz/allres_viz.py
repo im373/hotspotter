@@ -2,15 +2,19 @@
 # Updated visualization code for modern matplotlib and Python 3 behavior.
 # Normalized keypoint/SIFT drawing paths for current numpy array shapes.
 
-from hscom import __common__
-(print, print_, print_on, print_off, rrr, profile, printDBG) = \
-    __common__.init(__name__, '[allres-viz]', DEBUG=False)
+import logging
 from os.path import join
 import numpy as np
 from hscom import helpers
 from hscom import helpers as util
+from hscom.dev_utils import make_reloader
+from hscom.profiling import profile
 from . import draw_func2 as df2
 import os
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[allres-viz]')
+
 # Global variables
 BROWSE = True
 DUMP = False
@@ -18,7 +22,7 @@ FIGNUM = 1
 
 
 def plot_rank_stem(allres, orgres_type='true'):
-    print('[viz] plotting rank stem')
+    logger.info("plotting rank stem")
     # Visualize rankings with the stem plot
     hs = allres.hs
     title = orgres_type + 'rankings stem plot\n' + allres.title_suffix
@@ -36,7 +40,7 @@ def plot_rank_stem(allres, orgres_type='true'):
 
 
 def plot_rank_histogram(allres, orgres_type):
-    print('[viz] plotting %r rank histogram' % orgres_type)
+    logger.info(f"plotting {orgres_type!r} rank histogram")
     ranks = allres.__dict__[orgres_type].ranks
     label = 'P(rank | ' + orgres_type + ' match)'
     title = orgres_type + ' match rankings histogram\n' + allres.title_suffix
@@ -49,10 +53,10 @@ def plot_rank_histogram(allres, orgres_type):
 
 
 def plot_score_pdf(allres, orgres_type, colorx=0.0, variation_truncate=False):
-    print('[viz] plotting ' + orgres_type + ' score pdf')
+    logger.info(f"plotting {orgres_type} score pdf")
     title  = orgres_type + ' match score frequencies\n' + allres.title_suffix
     scores = allres.__dict__[orgres_type].scores
-    print('[viz] len(scores) = %r ' % (len(scores),))
+    logger.info(f"len(scores) = {len(scores)!r}")
     label  = 'P(score | %r)' % orgres_type
     df2.figure(fnum=FIGNUM, doclf=True, title=title)
     df2.draw_pdf(scores, label=label, colorx=colorx)
@@ -66,7 +70,7 @@ def plot_score_pdf(allres, orgres_type, colorx=0.0, variation_truncate=False):
 
 
 def plot_score_matrix(allres):
-    print('[viz] plotting score matrix')
+    logger.info("plotting score matrix")
     score_matrix = allres.score_matrix
     title = 'Score Matrix\n' + allres.title_suffix
     # Find inliers
@@ -94,7 +98,7 @@ def plot_score_matrix(allres):
 
 # Dump logic
 def __browse():
-    print('[viz] Browsing Image')
+    logger.info("Browsing image")
     df2.show()
 
 
@@ -207,7 +211,7 @@ def show_descriptors_match_distances(orgres2_distance, fnum=1, db_name='', **kwa
     plot_type = helpers.get_arg('--plot-type', default='plot')
 
     # Remember min and max val for each distance type (l1, emd...)
-    distkey2_min = {distkey: np.uint64(-1) for distkey in disttype_list}
+    distkey2_min = {distkey: np.inf for distkey in disttype_list}
     distkey2_max = {distkey: 0 for distkey in disttype_list}
 
     def _distplot(dists, color, label, distkey, plot_type=plot_type):
@@ -249,7 +253,7 @@ def show_descriptors_match_distances(orgres2_distance, fnum=1, db_name='', **kwa
 
     for count, orgkey in enumerate(orgtype_list):
         for distkey in disttype_list:
-            printDBG('[allres-viz] plotting: %r' % ((orgkey, distkey),))
+            logger.debug(f"plotting {(orgkey, distkey)!r}")
             dists = orgres2_distance[orgkey][distkey]
             df2.figure(fnum=fnum, pnum=pnum_(px))
             color = color_list[px]

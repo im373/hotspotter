@@ -1,18 +1,21 @@
 # HotSpotter port notes:
 # Updated shared compatibility helpers for Python 3, NumPy 2, and Windows paths.
-# Kept logging, preferences, file I/O, and argument handling aligned with modern runtimes.
+# Replaced hscom.__common__ hooks with logging/profiling/dev helpers.
 
 '''Parameters module: DEPRICATE THIS
     stores a bunch of global variables used by the other modules
     It also reads from sys.argv'''
 
-from . import __common__
-(print, print_, print_on, print_off,
- rrr, profile) = __common__.init(__name__, '[params]')
 # Python
+import logging
 from os.path import exists, join
 from . import fileio as io
+from .dev_utils import make_reloader
+from .profiling import profile
 import sys
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[params]')
 
 '''
 print(' * __name__ = %s' % __name__)
@@ -122,29 +125,28 @@ def db_to_dbdir(db):
     if not exists(dbdir):
         import os
         from . import helpers as util
-        print('!!!!!!!!!!!!!!!!!!!!!')
-        print('[params] WARNING: db=%r not found in work_dir=%r' %
-              (db, work_dir))
+        logger.warning("!!!!!!!!!!!!!!!!!!!!!")
+        logger.warning(f"db={db!r} not found in work_dir={work_dir!r}")
         fname_list = os.listdir(work_dir)
         lower_list = [fname.lower() for fname in fname_list]
         index = util.listfind(lower_list, db.lower())
         if index is not None:
-            print('[params] WARNING: db capitalization seems to be off')
+            logger.warning("db capitalization seems to be off")
             if not '--strict' in sys.argv:
-                print('[params] attempting to fix it')
+                logger.warning("attempting to fix it")
                 db = fname_list[index]
                 dbdir = join(work_dir, db)
-                print('[params] dbdir=%r' % dbdir)
-                print('[params] db=%r' % db)
+                logger.warning(f"dbdir={dbdir!r}")
+                logger.warning(f"db={db!r}")
         if not exists(dbdir):
-            print('[params] Valid DBs:')
-            print('\n'.join(fname_list))
-            print('[params] dbdir=%r' % dbdir)
-            print('[params] db=%r' % db)
-            print('[params] work_dir=%r' % work_dir)
+            logger.error("Valid DBs:")
+            logger.error('\n'.join(fname_list))
+            logger.error(f"dbdir={dbdir!r}")
+            logger.error(f"db={db!r}")
+            logger.error(f"work_dir={work_dir!r}")
 
             raise AssertionError('[params] FATAL ERROR. Cannot load database')
-        print('!!!!!!!!!!!!!!!!!!!!!')
+        logger.warning("!!!!!!!!!!!!!!!!!!!!!")
     return dbdir
 
 

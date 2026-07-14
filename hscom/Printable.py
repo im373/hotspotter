@@ -1,12 +1,17 @@
 
-from . import __common__
-(print, print_, print_on, print_off,
- rrr, profile) = __common__.init(__name__, '[Printable]')
+# HotSpotter port notes:
+# Replaced hscom.__common__ hooks with logging/dev helpers.
+
 # Standard
+import logging
 import re
 import copy
 # Scientific
 import numpy as np
+from .dev_utils import make_reloader
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[Printable]')
 
 MAX_VALSTR = -1
 #100000
@@ -68,11 +73,11 @@ class AbstractPrintable(object):
                     valstr = valstr[0:pos1] + ' \n ~~~ \n ' + valstr[pos2: - 1]
                 attri_list.append((typestr, namestr, valstr))
             except Exception as ex:
-                print('[printable] ERROR %r' % ex)
-                print('[printable] ERROR key = %r' % key)
-                print('[printable] ERROR val = %r' % val)
+                logger.exception(f"Printable error: {ex!r}")
+                logger.error(f"key = {key!r}")
+                logger.error(f"val = {val!r}")
                 try:
-                    print('[printable] ERROR valstr = %r' % valstr)
+                    logger.error(f"valstr = {valstr!r}")
                 except Exception:
                     pass
                 raise
@@ -176,8 +181,8 @@ class DynStruct(AbstractPrintable):
             try:
                 val = getattr(self, key)
             except TypeError as ex:
-                print('[dyn] TYPE_ERROR: %r' % ex)
-                print('[dyn] key=%r' % key)
+                logger.exception(f"TYPE_ERROR: {ex!r}")
+                logger.error(f"key={key!r}")
                 raise
         return val
 

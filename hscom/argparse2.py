@@ -3,11 +3,14 @@
 # Kept logging, preferences, file I/O, and argument handling aligned with modern runtimes.
 
 
-import multiprocessing
 import argparse
+import logging
+import multiprocessing
 from . import cross_platform
 # seemlessly fix any path issues
 cross_platform.ensure_pythonpath()
+
+logger = logging.getLogger(__name__)
 
 #======================
 # Globals
@@ -259,9 +262,9 @@ def fix_args_with_cache(args):
         if args.dbdir in ['.', '', ' ']:
             args.dbdir = None
         elif not exists(args.dbdir):
-            print('[main] cached db_dir does not exist: %r' % (args.dbdir,))
+            logger.warning(f"Cached db_dir does not exist: {args.dbdir!r}")
             args.dbdir = None
-        print('[main] trying to read db_dir from cache: %r' % args.dbdir)
+        logger.debug(f"Trying to read db_dir from cache: {args.dbdir!r}")
     # --db has priority over --dbdir
     args = fix_args_shortnames(args)
     ARGS_ = args
@@ -287,8 +290,8 @@ def parse_arguments(defaultdb=None, **kwargs):
     args, unknown = parser2.parser.parse_known_args()
     #args, unknown = parser.parse_args()
     if DEBUG:
-        print('[argparse2] args=%r' % args)
-        print('[argparse2] unknown=%r' % unknown)
+        logger.debug(f"args={args!r}")
+        logger.debug(f"unknown={unknown!r}")
     if args.db == 'DEFAULT' and args.dbdir is None:
         args.db = defaultdb
     args.__dict__.update(**kwargs)
@@ -304,7 +307,7 @@ def parse_arguments(defaultdb=None, **kwargs):
 
 if __name__ == '__main__':
     multiprocessing.freeze_support()
-    print('\n\n====================')
-    print('__main__ == argparse2.py')
+    logger.info("====================")
+    logger.info("__main__ == argparse2.py")
     args = parse_arguments()
-    print(args)
+    logger.info(f"{args}")

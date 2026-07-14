@@ -8,9 +8,12 @@ Module: load_data
     This is the first script run in the loading pipeline.
 '''
 
-from hscom import __common__
-(print, print_, print_on, print_off,
- rrr, profile, printDBG) = __common__.init(__name__, '[ld3]', DEBUG=False)
+import logging
+from hscom.dev_utils import make_reloader
+from hscom.profiling import profile
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[ld3]')
 # Standard
 from os.path import join, exists, splitext
 import os
@@ -68,7 +71,7 @@ def detect_version(db_dir):
     Input: db_dir - the directory to the database
     Output:
     '''
-    printDBG('[ld3] detect_version(%r)' % db_dir)
+    logger.debug('[ld3] detect_version(%r)' % db_dir)
     hs_dirs = ds.HotspotterDirs(db_dir)
     # --- Directories ---
     db_dir       = hs_dirs.db_dir
@@ -97,7 +100,7 @@ def detect_version(db_dir):
 
     db_version = 'current'
     isCurrentVersion = all([has_dbdir, has_imgdir, has_chiptbl, has_nametbl, has_imgtbl])
-    printDBG('[ld3] isCurrentVersion=%r' % isCurrentVersion)
+    logger.debug('[ld3] isCurrentVersion=%r' % isCurrentVersion)
 
     if not isCurrentVersion:
         def assign_alternate(tblname, optional=False):
@@ -178,7 +181,7 @@ def detect_version(db_dir):
             'header_csvformat_re': header_csvformat_re,
             'tables_fnames':       (chip_table, name_table, image_table)
         }
-        print('[ld3] has %s database format' % db_version)
+        logger.info('[ld3] has %s database format' % db_version)
         return version_info
 
 

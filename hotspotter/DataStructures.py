@@ -3,9 +3,12 @@
 # Adjusted chip, feature, query, and table handling for current dependencies.
 
 
-from hscom import __common__
-(print, print_, print_on, print_off, rrr,
- profile, printDBG) = __common__.init(__name__, '[ds]', DEBUG=False)
+import logging
+from hscom.dev_utils import make_reloader
+from hscom.profiling import profile
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[ds]')
 # Standard
 from itertools import chain
 # Scientific
@@ -45,10 +48,10 @@ class QueryRequest(DynStruct):
 
     def unload_data(qreq):
         # Data TODO: Separate this
-        printDBG('[qreq] unload_data()')
+        logger.debug('[qreq] unload_data()')
         qreq._data_index  = None  # current index
         qreq._dftup2_index = {}  # cached indexes
-        printDBG('[qreq] unload_data(success)')
+        logger.debug('[qreq] unload_data(success)')
 
     def get_uid_list(qreq, *args, **kwargs):
         uid_list = qreq.cfg.get_uid_list(*args, **kwargs)
@@ -82,7 +85,7 @@ class QueryRequest(DynStruct):
 class NNIndex(object):
     'Nearest Neighbor (FLANN) Index Class'
     def __init__(nn_index, hs, cx_list):
-        print('[ds] building NNIndex object')
+        logger.debug('[ds] building NNIndex object')
         cx2_desc  = hs.feats.cx2_desc
         assert max(cx_list) < len(cx2_desc)
         # Make unique id for indexed descriptors
@@ -108,14 +111,14 @@ class NNIndex(object):
                 ax2_desc = np.vstack(cx2_desc[cx_list])
         except MemoryError as ex:
             with util.Indenter2('[mem error]'):
-                print(ex)
-                print('len(cx_list) = %r' % (len(cx_list),))
-                print('len(cx_list) = %r' % (len(cx_list),))
+                logger.exception('Out of memory while building NNIndex')
+                logger.debug('len(cx_list) = %r' % (len(cx_list),))
+                logger.debug('len(cx_list) = %r' % (len(cx_list),))
             raise
         except Exception as ex:
             with util.Indenter2('[unknown error]'):
-                print(ex)
-                print('cx_list = %r' % (cx_list,))
+                logger.exception('Failed to build NNIndex')
+                logger.debug('cx_list = %r' % (cx_list,))
             raise
         # Build/Load the flann index
         flann_params = {'algorithm': 'kdtree', 'trees': 4}
@@ -132,7 +135,7 @@ class NNIndex(object):
         nn_index.flann = flann
 
     def __getstate__(nn_index):
-        printDBG('get state NNIndex')
+        logger.debug('get state NNIndex')
         #if 'flann' in nn_index.__dict__ and nn_index.flann is not None:
             #nn_index.flann.delete_index()
             #nn_index.flann = None
@@ -140,7 +143,7 @@ class NNIndex(object):
         return None
 
     def __del__(nn_index):
-        printDBG('deleting NNIndex')
+        logger.debug('deleting NNIndex')
         if 'flann' in nn_index.__dict__ and nn_index.flann is not None:
             nn_index.flann.delete_index()
             nn_index.flann = None

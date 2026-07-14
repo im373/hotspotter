@@ -1,7 +1,10 @@
 
-from hscom import __common__
-print, print_, print_on, print_off, rrr, profile, printDBG =\
-    __common__.init(__name__, '[Config]', DEBUG=False)
+import logging
+from hscom.dev_utils import make_reloader
+from hscom.profiling import profile
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[Config]')
 from hscom.Preferences import Pref
 from hscom import helpers as util
 
@@ -63,7 +66,7 @@ class FilterConfig(ConfigBase):
         filt_cfg._valid_filters = []
         def addfilt(sign, filt, thresh, weight, depends=None):
             'dynamically adds filters'
-            printDBG('[addfilt] %r %r %r %r' % (sign, filt, thresh, weight))
+            logger.debug('[addfilt] %r %r %r %r' % (sign, filt, thresh, weight))
             filt_cfg._valid_filters.append(filt)
             filt_cfg[filt + '_thresh'] = thresh
             filt_cfg[filt + '_weight'] = weight

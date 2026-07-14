@@ -1,19 +1,23 @@
 # HotSpotter port notes:
 # Updated shared compatibility helpers for Python 3, NumPy 2, and Windows paths.
-# Kept logging, preferences, file I/O, and argument handling aligned with modern runtimes.
+# Replaced hscom.__common__ hooks with logging/profiling/dev helpers.
 
 '''
 This module tries to ensure that the system paths are correctly setup for
 hotspotter to run.
 '''
 
-from . import __common__
-(print, print_, print_on, print_off,
- rrr, profile, printDBG) = __common__.init(__name__, '[cplat]', DEBUG=False)
+import logging
 import sys
 from os.path import join, exists, normpath
 import os
 import subprocess
+from .dev_utils import make_reloader
+from .profiling import profile
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[cplat]')
+printDBG = logger.debug
 
 # Macports python directories
 ports_pyframework = '/opt/local/Library/Frameworks/Python.framework/Versions/3.11/'
@@ -41,7 +45,7 @@ def _cmd(*args, **kwargs):
             args = [args]
     if sudo is True and sys.platform != 'win32':
         args = ['sudo'] + args
-    print('[cplat] Running: %r' % (args,))
+    logger.info(f"Running command: {args!r}")
     PIPE = subprocess.PIPE
     proc = subprocess.Popen(args, stdout=PIPE, stderr=PIPE, shell=False)
     if detatch:
@@ -60,7 +64,8 @@ def _cmd(*args, **kwargs):
             append(line)
         out = '\n'.join(logged_list)
         (out_, err) = proc.communicate()
-        print(err)
+        if err:
+            logger.warning(f"Command stderr: {err!r}")
     else:
         # Surpress output
         (out, err) = proc.communicate()
@@ -70,7 +75,7 @@ def _cmd(*args, **kwargs):
 
 
 def startfile(fpath):
-    print('[cplat] startfile(%r)' % fpath)
+    logger.info(f"startfile({fpath!r})")
     if not exists(fpath):
         raise Exception('Cannot start nonexistant file: %r' % fpath)
     if sys.platform.startswith('linux'):
@@ -88,7 +93,7 @@ def startfile(fpath):
 
 def view_directory(dname=None):
     'view directory'
-    print('[cplat] view_directory(%r) ' % dname)
+    logger.info(f"view_directory({dname!r})")
     dname = os.getcwd() if dname is None else dname
     open_prog = {'win32': 'explorer.exe',
                  'linux2': 'nautilus',

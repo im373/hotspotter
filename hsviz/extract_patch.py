@@ -3,22 +3,19 @@
 # Normalized keypoint/SIFT drawing paths for current numpy array shapes.
 
 #exec(open('__init__.py').read())
-from hscom import __common__
-(print, print_, print_on, print_off,
- rrr, profile) = __common__.init(__name__, '[extract]')
+import logging
 # Science
 import cv2
-import importlib
 import numpy as np
 from numpy import sqrt
 # Hotspotter
+from hscom.dev_utils import make_reloader
+from hscom import helpers
+from hscom.profiling import profile
 from . import draw_func2 as df2
 
-
-def rrr():
-    import sys
-    print('[extract] Reloading: ' + __name__)
-    importlib.reload(sys.modules[__name__])
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[extract]')
 
 
 def svd(M):
@@ -147,11 +144,11 @@ def in_depth_ellipse2x2(rchip, kp):
     # INPUT
     #-----------------------
     # We will call perdoch's invA = invV
-    print('--------------------------------')
-    print('Let V = Perdoch.A')
-    print('Let Z = Perdoch.E')
-    print('--------------------------------')
-    print('Input from Perdoch\'s detector: ')
+    logger.info("--------------------------------")
+    logger.info("Let V = Perdoch.A")
+    logger.info("Let Z = Perdoch.E")
+    logger.info("--------------------------------")
+    logger.info("Input from Perdoch's detector: ")
 
     # We are given the keypoint in invA format
     x, y, ia11, ia21, ia22 = _kp5(kp)
@@ -165,15 +162,15 @@ def in_depth_ellipse2x2(rchip, kp):
     # </HACK>
     Z = (V.T).dot(V)
 
-    print('invV is a transform from points on a unit-circle to the ellipse')
-    helpers.horiz_print('invV = ', invV)
-    print('--------------------------------')
-    print('V is a transformation from points on the ellipse to a unit circle')
-    helpers.horiz_print('V = ', V)
-    print('--------------------------------')
-    print('Points on a matrix satisfy (x).T.dot(Z).dot(x) = 1')
-    print('where Z = (V.T).dot(V)')
-    helpers.horiz_print('Z = ', Z)
+    logger.info("invV is a transform from points on a unit-circle to the ellipse")
+    logger.info(f"{helpers.horiz_string(['invV = ', invV])}")
+    logger.info("--------------------------------")
+    logger.info("V is a transformation from points on the ellipse to a unit circle")
+    logger.info(f"{helpers.horiz_string(['V = ', V])}")
+    logger.info("--------------------------------")
+    logger.info("Points on a matrix satisfy (x).T.dot(Z).dot(x) = 1")
+    logger.info("where Z = (V.T).dot(V)")
+    logger.info(f"{helpers.horiz_string(['Z = ', Z])}")
 
     # Define points on a unit circle
     theta_list = np.linspace(0, tau, 50)
@@ -190,7 +187,7 @@ def in_depth_ellipse2x2(rchip, kp):
     checks2 = [x_.T.dot(Z).dot(x_) for x_ in ellipse_pts2]
     assert all([abs(1 - check) < 1E-11 for check in checks1])
     #assert all([abs(1 - check) < 1E-11 for check in checks2])
-    print('... all of our plotted points satisfy this')
+    logger.info("all of our plotted points satisfy this")
 
     #=======================
     # THE CONIC SECTION
@@ -208,49 +205,49 @@ def in_depth_ellipse2x2(rchip, kp):
     (D, E, F) = (0, 0, 1)
     B = B2 * 2
     assert B2 == B2_, 'matrix should by symmetric'
-    print('--------------------------------')
-    print('Now, using wikipedia\' matrix representation of a conic.')
+    logger.info("--------------------------------")
+    logger.info("Now, using wikipedia's matrix representation of a conic.")
     con = np.array((('    A', 'B / 2', 'D / 2'),
                     ('B / 2', '    C', 'E / 2'),
                     ('D / 2', 'E / 2', '    F')))
-    helpers.horiz_print('A matrix A_Q = ', con)
+    logger.info(f"{helpers.horiz_string(['A matrix A_Q = ', con])}")
 
     # A_Q is our conic section (aka ellipse matrix)
     A_Q = np.array(((    A, B / 2, D / 2),
                     (B / 2,     C, E / 2),
                     (D / 2, E / 2,     F)))
 
-    helpers.horiz_print('A_Q = ', A_Q)
+    logger.info(f"{helpers.horiz_string(['A_Q = ', A_Q])}")
 
     #-----------------------
     # DEGENERATE CONICS
     #-----------------------
-    print('----------------------------------')
-    print('As long as det(A_Q) != it is not degenerate.')
-    print('If the conic is not degenerate, we can use the 2x2 minor: A_33')
-    print('det(A_Q) = %s' % str(np.linalg.det(A_Q)))
+    logger.info("----------------------------------")
+    logger.info("As long as det(A_Q) != it is not degenerate.")
+    logger.info("If the conic is not degenerate, we can use the 2x2 minor: A_33")
+    logger.info(f"det(A_Q) = {np.linalg.det(A_Q)}")
     assert np.linalg.det(A_Q) != 0, 'degenerate conic'
     A_33 = np.array(((    A, B / 2),
                      (B / 2,     C)))
-    helpers.horiz_print('A_33 = ', A_33)
+    logger.info(f"{helpers.horiz_string(['A_33 = ', A_33])}")
 
     #-----------------------
     # CONIC CLASSIFICATION
     #-----------------------
-    print('----------------------------------')
-    print('The determinant of the minor classifies the type of conic it is')
-    print('(det == 0): parabola, (det < 0): hyperbola, (det > 0): ellipse')
-    print('det(A_33) = %s' % str(np.linalg.det(A_33)))
+    logger.info("----------------------------------")
+    logger.info("The determinant of the minor classifies the type of conic it is")
+    logger.info("(det == 0): parabola, (det < 0): hyperbola, (det > 0): ellipse")
+    logger.info(f"det(A_33) = {np.linalg.det(A_33)}")
     assert np.linalg.det(A_33) > 0, 'conic is not an ellipse'
-    print('... this is indeed an ellipse')
+    logger.info("this is indeed an ellipse")
 
     #-----------------------
     # CONIC CENTER
     #-----------------------
-    print('----------------------------------')
-    print('the centers of the ellipse are obtained by: ')
-    print('x_center = (B * E - (2 * C * D)) / (4 * A * C - B ** 2)')
-    print('y_center = (D * B - (2 * A * E)) / (4 * A * C - B ** 2)')
+    logger.info("----------------------------------")
+    logger.info("the centers of the ellipse are obtained by: ")
+    logger.info("x_center = (B * E - (2 * C * D)) / (4 * A * C - B ** 2)")
+    logger.info("y_center = (D * B - (2 * A * E)) / (4 * A * C - B ** 2)")
     # Centers are obtained by solving for where the gradient of the quadratic
     # becomes 0. Without going through the derivation the calculation is...
     # These should be 0, 0 if we are at the origin, or our original x, y
@@ -258,15 +255,15 @@ def in_depth_ellipse2x2(rchip, kp):
     # shits and giggles
     x_center = (B * E - (2 * C * D)) / (4 * A * C - B ** 2)
     y_center = (D * B - (2 * A * E)) / (4 * A * C - B ** 2)
-    helpers.horiz_print('x_center = ', x_center)
-    helpers.horiz_print('y_center = ', y_center)
+    logger.info(f"{helpers.horiz_string(['x_center = ', x_center])}")
+    logger.info(f"{helpers.horiz_string(['y_center = ', y_center])}")
 
     #-----------------------
     # MAJOR AND MINOR AXES
     #-----------------------
     # Now we are going to determine the major and minor axis
     # of this beast. It just the center augmented by the eigenvecs
-    print('----------------------------------')
+    logger.info("----------------------------------")
 
     # The angle between the major axis and our x axis is:
     l1, l2, v1, v2 = _2x2_eig(A_33)

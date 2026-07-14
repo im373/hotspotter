@@ -1,7 +1,10 @@
 
-from hscom import __common__
-(print, print_, print_on, print_off,
- rrr, profile) = __common__.init(__name__, '[sv2]')
+import logging
+from hscom.dev_utils import make_reloader
+from hscom.profiling import profile
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[sv2]')
 # Science
 import numpy as np
 import numpy.linalg as linalg
@@ -22,11 +25,6 @@ ctypedef np.float64_t FLOAT64
 #PYX MAP FLOAT_1D np.ndarray[FLOAT64, ndim=1]
 #PYX END
 SV_DTYPE = np.float64
-
-
-def printDBG(msg):
-    pass
-    #print(msg)
 
 
 @profile
@@ -53,15 +51,15 @@ def compute_homog(x1_mn, y1_mn, x2_mn, y2_mn):
         (u, s, v) = linalg.svd(Mbynine, full_matrices=False)
         #printDBG('[sv2] done')
     except MemoryError as ex:
-        print('[sv2] Caught MemErr %r during full SVD. Trying sparse SVD.' % (ex))
+        logger.info('[sv2] Caught MemErr %r during full SVD. Trying sparse SVD.' % (ex))
         MbynineSparse = sparse.lil_matrix(Mbynine)
         (u, s, v) = sparse_linalg.svds(MbynineSparse)
     except linalg.LinAlgError as ex:
-        print('[sv2] svd did not converge: %r' % ex)
+        logger.info('[sv2] svd did not converge: %r' % ex)
         return np.eye(3)
     except Exception as ex:
-        print('[sv2] svd error: %r' % ex)
-        print('[sv2] Mbynine.shape = %r' % (Mbynine.shape,))
+        logger.info('[sv2] svd error: %r' % ex)
+        logger.info('[sv2] Mbynine.shape = %r' % (Mbynine.shape,))
         raise
     # Rearange the nullspace into a homography
     h = v[-1]  # v = V.H # (transposed in matlab)
@@ -297,7 +295,7 @@ def homography_inliers(kpts1, kpts2, fm,
         # Computes ax = b # x = linalg.solve(a, b)
         H = linalg.solve(T2, H_prime).dot(T1)  # Unnormalize
     except linalg.LinAlgError as ex:
-        print('[sv2] Warning 285 %r' % ex)
+        logger.info('[sv2] Warning 285 %r' % ex)
         # raise
         return None
 

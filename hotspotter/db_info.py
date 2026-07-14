@@ -1,7 +1,10 @@
 
-from hscom import __common__
-(print, print_, print_on, print_off, rrr,
- profile) = __common__.init(__name__, '[dbinfo]')
+import logging
+from hscom.dev_utils import make_reloader
+from hscom.profiling import profile
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[dbinfo]')
 # Python
 import os
 import sys
@@ -55,7 +58,7 @@ class DatabaseStats(object):
         name_info_dict = get_db_names_info(hs)
         rss.stop()
         name_info = name_info_dict['info_str']
-        print(name_info)
+        logger.info(name_info)
 
 KNOWN_BASE_DIRS = [
     'Camera-Traps'
@@ -89,7 +92,7 @@ class DirectoryStats(object):
         self.db_types = []
 
     def build_self(self, root_dir):
-        print('root_dir=%r' % root_dir)
+        logger.info('root_dir=%r' % root_dir)
         # Do not build a data or db_dir
         if os.path.split(root_dir)[1] in KNOWN_DATA_DIRS:
             return
@@ -121,8 +124,8 @@ class DirectoryStats(object):
         elif isfile(path):
             self.file_list += [path]
         else:
-            print('path=%r' % path)
-            print('path is not addable')
+            logger.info('path=%r' % path)
+            logger.info('path is not addable')
             assert False
 
     def num_files_stats(self):
@@ -140,11 +143,11 @@ class DirectoryStats(object):
 
     def print_nondbdirs(self):
         for dir_ in self.dir_list:
-            print(' * ' + str(dir_))
+            logger.info(' * ' + str(dir_))
 
     def print_databases(self, indent):
         for db_stats in self.db_stats_list:
-            print(indent + db_stats.name())
+            logger.info(indent + db_stats.name())
         pass
 
     def print_db_stats(self):
@@ -155,12 +158,12 @@ class DirectoryStats(object):
 
 def print_database_stats(db_stats):
     'Prints a single dbstats object'
-    print('----')
+    logger.info('----')
     if db_stats.version == '(HEAD)':
         db_stats.print_name_info()
     elif 'images' in db_stats.version:
-        print(db_stats.db_dir)
-        print('num images: %d' % helpers.num_images_in_dir(db_stats.db_dir))
+        logger.info(db_stats.db_dir)
+        logger.info('num images: %d' % helpers.num_images_in_dir(db_stats.db_dir))
 
 
 #--------------------
@@ -324,11 +327,11 @@ def db_info(hs):
                 size = Image.open(img_fpath).size
                 ret.append(size)
             except Exception as ex:
-                print(repr(ex))
+                logger.info(repr(ex))
                 pass
         return ret
 
-    print('reading image sizes')
+    logger.info('reading image sizes')
     if len(cx2_roi) == 0:
         chip_size_list = []
     else:
@@ -353,7 +356,7 @@ def db_info(hs):
         (' * #Img in dir = %d' % len(img_list)),
         (' * Image Size Stats = %s' % (img_size_stats,)),
         (' * Chip Size Stats = %s' % (chip_size_stats,)), ])
-    print(info_str)
+    logger.info(info_str)
     return locals()
 
 
@@ -365,7 +368,7 @@ def get_keypoint_stats(hs):
     # Check cx2_kpts
     cx2_nFeats = list(map(len, cx2_kpts))
     kpts = np.vstack(cx2_kpts)
-    print('[dbinfo] --- LaTeX --- ')
+    logger.info('[dbinfo] --- LaTeX --- ')
     _printopts = np.get_printoptions()
     np.set_printoptions(precision=3)
     acd = kpts[:, 2:5].T
@@ -374,9 +377,9 @@ def get_keypoint_stats(hs):
     tex_scale_stats = pytex.latex_mystats(r'kpt scale', scales)
     tex_nKpts       = pytex.latex_scalar(r'\# kpts', len(kpts))
     tex_kpts_stats  = pytex.latex_mystats(r'\# kpts/chip', cx2_nFeats)
-    print(tex_nKpts)
-    print(tex_kpts_stats)
-    print(tex_scale_stats)
+    logger.info(tex_nKpts)
+    logger.info(tex_kpts_stats)
+    logger.info(tex_scale_stats)
     np.set_printoptions(**_printopts)
-    print('[dbinfo] ---/LaTeX --- ')
+    logger.info('[dbinfo] ---/LaTeX --- ')
     return (tex_nKpts, tex_kpts_stats, tex_scale_stats)

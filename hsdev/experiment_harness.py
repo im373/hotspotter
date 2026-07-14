@@ -3,6 +3,7 @@ from hscom import __common__
 (print, print_, print_on, print_off, rrr,
  profile, printDBG) = __common__.init(__name__, '[harn]', DEBUG=False)
 # Python
+import logging
 import sys
 import itertools
 import textwrap
@@ -297,9 +298,8 @@ def get_cfg_list(hs, test_cfg_name_list):
 @profile
 def test_configurations(hs, qcx_list, test_cfg_name_list, fnum=1):
     if __QUIET__:
-        mc3.print_off()
-        from hotspotter import HotSpotterAPI as api
-        api.print_off()
+        logging.getLogger(mc3.__name__).setLevel(logging.WARNING)
+        logging.getLogger('hotspotter.HotSpotterAPI').setLevel(logging.WARNING)
 
     # Test Each configuration
     if not __QUIET__:

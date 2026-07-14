@@ -3,9 +3,12 @@
 # Adjusted chip, feature, query, and table handling for current dependencies.
 
 
-from hscom import __common__
-(print, print_, print_on, print_off, rrr, profile,
- printDBG) = __common__.init(__name__, '[encounter]', DEBUG=False)
+import logging
+from hscom.dev_utils import make_reloader
+from hscom.profiling import profile
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[encounter]')
 # Python
 
 # Science
@@ -45,15 +48,15 @@ def compute_encounters(hs, seconds_thresh=15):
     valid_listx = [ix for ix, dt in enumerate(datetime_list) if dt is not None]
     nWithExif = len(valid_listx)
     nWithoutExif = nImgs - nWithExif
-    print('[encounter] %d / %d images with exif data' % (nWithExif, nImgs))
-    print('[encounter] %d / %d images without exif data' % (nWithoutExif, nImgs))
+    logger.info('[encounter] %d / %d images with exif data' % (nWithExif, nImgs))
+    logger.info('[encounter] %d / %d images without exif data' % (nWithoutExif, nImgs))
 
     # Convert datetime objects to unixtime scalars
     unixtime_list = [io.exiftime_to_unixtime(datetime_str) for datetime_str in datetime_list]
     unixtime_list = np.array(unixtime_list)
 
     # Agglomerative clustering of unixtimes
-    print('[encounter] clustering')
+    logger.info('[encounter] clustering')
     X_data = np.vstack([unixtime_list, np.zeros(len(unixtime_list))]).T
     gx2_clusterid = fclusterdata(X_data, seconds_thresh, criterion='distance')
 
@@ -64,7 +67,7 @@ def compute_encounters(hs, seconds_thresh=15):
 
     # Print images per encouter statistics
     clusterx2_nGxs = np.array(list(map(len, clusterx2_gxs)))
-    print('[encounter] image per encounter stats:\n %s'
+    logger.info('[encounter] image per encounter stats:\n %s'
           % util.pstats(clusterx2_nGxs, True))
 
     # Sort encounters by images per encounter
@@ -194,7 +197,7 @@ def viz_graph(graph):
 def viz_chipgraph(hs, graph, fnum=1, with_images=False):
     # Adapated from
     # https://gist.github.com/shobhit/3236373
-    print('[encounter] drawing chip graph')
+    logger.info('[encounter] drawing chip graph')
     df2.figure(fnum=fnum, pnum=(1, 1, 1))
     ax = df2.gca()
     #pos = netx.spring_layout(graph)
@@ -208,7 +211,7 @@ def viz_chipgraph(hs, graph, fnum=1, with_images=False):
 
 
 def draw_images_at_positions(img_list, pos_list):
-    print('[encounter] drawing %d images' % len(img_list))
+    logger.info('[encounter] drawing %d images' % len(img_list))
     # Thumb stack
     ax  = df2.gca()
     fig = df2.gcf()

@@ -3,10 +3,12 @@
 # Adjusted chip, feature, query, and table handling for current dependencies.
 
 
-from hscom import __common__
-(print, print_,
- print_on, print_off,
- rrr, profile, printDBG) = __common__.init(__name__, '[cc2]', DEBUG=False)
+import logging
+from hscom.dev_utils import make_reloader
+from hscom.profiling import profile
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[cc2]')
 # Python
 import warnings
 from os.path import join
@@ -36,7 +38,7 @@ def xywh_to_tlbr(roi, img_wh):
     (img_w, img_h) = img_wh
     if img_w == 0 or img_h == 0:
         msg = '[cc2.1] Your csv tables have an invalid ROI.'
-        print(msg)
+        logger.warning(msg)
         warnings.warn(msg)
         img_w = 1
         img_h = 1
@@ -99,7 +101,7 @@ def ensure_rgb(img):
         msg = ('[cc2] Caught Exception:\n   ex=%s\n' % str(ex) +
                '[cc2] img.shape=%r, img.dtype=%r\n' % (img.shape, img.dtype) +
                '[cc2] stats(img) = %s' % (util.printable_mystats(img)))
-        print(msg)
+        logger.exception(msg)
         raise Exception(msg)
 
 
@@ -324,7 +326,7 @@ def compute_uniform_area_chip_sizes(roi_list, sqrt_area=None):
                 return (int(round(wt)), int(round(ht)))
             except Exception:
                 msg = '[cc2.2] Your csv tables have an invalid ROI.'
-                print(msg)
+                logger.warning(msg)
                 warnings.warn(msg)
                 return (1, 1)
         chipsz_list = [_resz(float(w), float(h)) for (x, y, w, h) in roi_list]
@@ -343,7 +345,7 @@ def batch_extract_chips(gfpath_list, cfpath_list, roi_list, theta_list,
         list_size_list = list(map(len, (gfpath_list, cfpath_list, roi_list, theta_list)))
         assert all([list_size_list[0] == list_size for list_size in list_size_list])
     except AssertionError as ex:
-        print(ex)
+        logger.exception('Chip extraction input lists have inconsistent lengths')
         raise
     # Normalized Chip Sizes: ensure chips have about sqrt_area squared pixels
     if uniform_sqrt_area is not None:
@@ -368,24 +370,24 @@ def batch_extract_chips(gfpath_list, cfpath_list, roi_list, theta_list,
 @util.indent_decor('[cc2]')
 @profile
 def load_chips(hs, cx_list=None, force_compute=False, **kwargs):
-    print('=============================')
-    print('[cc2] Precomputing chips and loading chip paths: %r' % hs.get_db_name())
+    logger.debug('=============================')
+    logger.debug('[cc2] Precomputing chips and loading chip paths: %r' % hs.get_db_name())
     #----------------
     # COMPUTE SETUP
     #----------------
     chip_cfg = hs.prefs.chip_cfg
     chip_uid = chip_cfg.get_uid()
     if hs.cpaths.chip_uid != '' and hs.cpaths.chip_uid != chip_uid:
-        print('[cc2] Disagreement: OLD_chip_uid = %r' % hs.cpaths.chip_uid)
-        print('[cc2] Disagreement: NEW_chip_uid = %r' % chip_uid)
-        print('[cc2] Unloading all chip information')
+        logger.info('[cc2] Chip config changed; unloading cached chip information')
+        logger.debug('[cc2] Disagreement: OLD_chip_uid = %r' % hs.cpaths.chip_uid)
+        logger.debug('[cc2] Disagreement: NEW_chip_uid = %r' % chip_uid)
         hs.unload_all()
-    print('[cc2] chip_uid = %r' % chip_uid)
+    logger.debug('[cc2] chip_uid = %r' % chip_uid)
     # Get the list of chips paths to load
     cx_list = hs.get_valid_cxs() if cx_list is None else cx_list
     if not np.iterable(cx_list):
         cx_list = [cx_list]
-    print('[cc2] len(cx_list) = %r' % len(cx_list))
+    logger.debug('[cc2] len(cx_list) = %r' % len(cx_list))
     if len(cx_list) == 0:
         return  # HACK
     cx_list = np.array(cx_list)  # HACK
@@ -400,9 +402,9 @@ def load_chips(hs, cx_list=None, force_compute=False, **kwargs):
         roi_list   = hs.tables.cx2_roi[cx_list]
         #gname_list = hs.tables.gx2_gname[gx_list]
     except IndexError as ex:
-        print(repr(ex))
-        print(hs.tables)
-        print('cx_list=%r' % (cx_list,))
+        logger.exception('Invalid chip index while loading chips')
+        logger.debug(hs.tables)
+        logger.debug('cx_list=%r' % (cx_list,))
         raise
     # Get ChipConfig Parameters
     sqrt_area   = chip_cfg['chip_sqrt_area']
@@ -468,23 +470,22 @@ def load_chips(hs, cx_list=None, force_compute=False, **kwargs):
     except IOError as ex:
         import gc
         gc.collect()
-        print('[cc2] ex=%r' % ex)
-        print('path=%r' % last_path)
+        logger.exception('[cc2] Failed reading chip size')
+        logger.warning('path=%r' % last_path)
         if last_path is not None and util.checkpath(last_path, verbose=True):
             import time
             time.sleep(1)  # delays for 1 seconds
-            print('[cc2] file exists but cause IOError?')
-            print('[cc2] probably corrupted. Removing it')
+            logger.warning('[cc2] file exists but caused IOError; probably corrupted. Removing it')
             try:
                 util.remove_file(last_path)
             except OSError:
-                print('Something bad happened')
+                logger.exception('Failed to remove corrupted chip file')
                 raise
         raise
     #----------------------
     # UPDATE API VARIABLES
     #----------------------
-    print('[cc2] Done Precomputing chips and loading chip paths')
+    logger.debug('[cc2] Done Precomputing chips and loading chip paths')
 
     # Extend the datastructure if needed
     list_size = max(cx_list) + 1
@@ -499,4 +500,4 @@ def load_chips(hs, cx_list=None, force_compute=False, **kwargs):
     for lx, cx in enumerate(cx_list):
         hs.cpaths.cx2_rchip_size[cx] = rsize_list[lx]
     #hs.load_cx2_rchip_size()  # TODO: Loading rchip size should be handled more robustly
-    print('[cc2]=============================')
+    logger.debug('[cc2]=============================')

@@ -1,21 +1,18 @@
 # HotSpotter port notes:
 # Updated shared compatibility helpers for Python 3, NumPy 2, and Windows paths.
-# Kept logging, preferences, file I/O, and argument handling aligned with modern runtimes.
-
+# Removed legacy log handler setup; logging is configured through hscom.logging_utils.
+# Delegated profiling, dynamic reload, and Matplotlib setup to focused hscom modules.
 
 import builtins
-from os.path import exists, join
 import logging
-import logging.config
-import os
 import sys
-import multiprocessing
-import importlib
 
+from .dev_utils import make_reloader
+from .mpl_utils import configure_matplotlib
+from .profiling import profile
+from .helpers import DEPRICATED
 
 __MODULE_LIST__ = []
-__LOGGERS__ = {}
-__IN_MAIN_PROCESS__ = multiprocessing.current_process().name == 'MainProcess'
 
 
 def argv_flag(name, default):
@@ -33,29 +30,6 @@ __QUIET__      = argv_flag('--quiet', False)
 __AGGROFLUSH__ = argv_flag('--aggroflush', False)
 __DEBUG__      = argv_flag('--debug', False)
 __INDENT__     = argv_flag('--indent', True)
-__LOGGING__    = argv_flag('--logging', True)
-
-
-log_fname = 'hotspotter_logs_%04d.out'
-log_dir = 'logs'
-
-if not exists(log_dir):
-    os.makedirs(log_dir)
-
-count = 0
-log_fpath = join(log_dir, log_fname % count)
-while exists(log_fpath):
-    log_fpath = join(log_dir, log_fname % count)
-    count += 1
-
-try:
-    profile  # NoQA
-    if __DEBUG__:
-        builtins.print('[common] profiling with kernprof.')
-except NameError:
-    if __DEBUG__:
-        builtins.print('[common] not profiling.')
-    profile = lambda func: func
 
  #|  %(name)s            Name of the logger (logging channel)
  #|  %(levelno)s         Numeric logging level for the message (DEBUG, INFO,
@@ -82,105 +56,69 @@ except NameError:
  #|  %(message)s         The result of record.getMessage(), computed just as
  #|                      the record is emitted
 
-root_logger = None
-__STDOUT__ = sys.stdout
-HS_PRINT_FUNCTION = builtins.print
-HS_DBG_PRINT_FUNCTION = builtins.print
-HS_WRITE_FUNCTION = __STDOUT__.write
-HS_FLUSH_FUNCTION = __STDOUT__.flush
-
-
 def add_logging_handler(handler, default_format=True):
-    global root_logger
+    """Attach an extra handler to the application root logger.
+
+    The main entry point owns logging configuration through
+    hscom.logging_utils.configure_logging(). This helper remains only for
+    legacy GUI code that needs to mirror log records into a widget.
+    """
     if default_format:
         logformat = '[%(asctime)s]%(message)s'
         timeformat = '%H:%M:%S'
-        # create formatter and add it to the handlers
-        #logformat = '%Y-%m-%d %H:%M:%S'
-        #logformat = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         formatter = logging.Formatter(logformat, timeformat)
         handler.setLevel(logging.DEBUG)
         handler.setFormatter(formatter)
-        root_logger.addHandler(handler)
+    logging.getLogger().addHandler(handler)
 
-
+@DEPRICATED
 def create_logger():
-    global root_logger
-    global HS_PRINT_FUNCTION
-    global HS_DBG_PRINT_FUNCTION
-    global HS_WRITE_FUNCTION
-    if root_logger is None:
-        #logging.config.dictConfig(LOGGING)
-        msg = ('logging to log_fpath=%r' % log_fpath)
-        HS_PRINT_FUNCTION(msg)
-        root_logger = logging.getLogger('root')
-        root_logger.setLevel('DEBUG')
-        # create file handler which logs even debug messages
-        #fh = logging.handlers.WatchedFileHandler(log_fpath)
-        fh = logging.FileHandler(log_fpath)
-        ch = logging.StreamHandler(__STDOUT__)
-        add_logging_handler(fh)
-        add_logging_handler(ch)
-        root_logger.propagate = False
-        root_logger.setLevel(logging.DEBUG)
-        # print success
-        HS_WRITE_FUNCTION = lambda msg: root_logger.info(msg)
-        HS_PRINT_FUNCTION = lambda msg: root_logger.info(msg)
-        HS_DBG_PRINT_FUNCTION = lambda msg: root_logger.debug(msg)
-        HS_PRINT_FUNCTION('logger init')
-        HS_PRINT_FUNCTION(msg)
+    """Legacy no-op.
 
+    Logging is configured once by main.py via hscom.logging_utils.
+    """
+    return logging.getLogger()
 
+@DEPRICATED
 def get_modules():
     if __INDENT__:
         return __MODULE_LIST__
     else:
         return []
 
-
+@DEPRICATED
 def init(module_name, module_prefix='[???]', DEBUG=None, initmpl=False):
-    global root_logger
     # implicitly imports a set of standard functions into hotspotter modules
     # makes keeping track of printing much easier
     global __MODULE_LIST__
     module = sys.modules[module_name]
     __MODULE_LIST__.append(module)
-    if __IN_MAIN_PROCESS__ and __LOGGING__:
-        create_logger()
+    logger = logging.getLogger(module_name)
 
     if __DEBUG__:
         builtins.print('[common] import %s  # %s' % (module_name, module_prefix))
 
     # Define reloading function
-    def rrr():
-        'Dynamic module reloading'
-        global __DEBUG__
-        prev = __DEBUG__
-        __DEBUG__ = False
-        builtins.print(module_prefix + ' reloading ' + module_name)
-        importlib.reload(module)
-        __DEBUG__ = prev
+    rrr = make_reloader(module_name, module_prefix)
 
     # Define log_print
     if __DEBUG__:
         def log_print(msg):
-            HS_PRINT_FUNCTION(module_prefix + str(msg))
+            logger.info(f'{module_prefix}{msg}')
 
         def log_print_(msg):
-            HS_WRITE_FUNCTION(module_prefix + str(msg))
+            logger.info(f'{module_prefix}{str(msg).rstrip()}')
     else:
         if __AGGROFLUSH__:
             def log_print_(msg):
-                HS_WRITE_FUNCTION(msg)
-                HS_FLUSH_FUNCTION()
+                logger.info(f'{str(msg).rstrip()}')
         else:
             def log_print_(msg):
-                HS_WRITE_FUNCTION(msg)
+                logger.info(f'{str(msg).rstrip()}')
         def log_print(msg):
-            HS_PRINT_FUNCTION(msg)
+            logger.info(f'{msg}')
 
     def noprint(msg):
-        #logger.debug(module_prefix + ' DEBUG ' + msg)
         pass
 
     # Define print switches
@@ -208,47 +146,14 @@ def init(module_name, module_prefix='[???]', DEBUG=None, initmpl=False):
     # Define a printdebug function
     if DEBUG:
         def printDBG(msg):
-            HS_DBG_PRINT_FUNCTION(module_prefix + ' DEBUG ' + msg)
+            logger.debug(f'{module_prefix} DEBUG {msg}')
     else:
         def printDBG(msg):
-            #logger.debug(module_prefix + ' DEBUG ' + msg)
             pass
 
     # Initialize matplotlib if requested
-    if initmpl:
-        import matplotlib
-        import logging
-        backend = matplotlib.get_backend()
-        # Keep Matplotlib font discovery chatter out of normal runs.
-        logging.getLogger('matplotlib').setLevel(logging.WARNING)
-        logging.getLogger('matplotlib.font_manager').setLevel(logging.WARNING)
-        if hasattr(matplotlib, 'set_loglevel'):
-            try:
-                matplotlib.set_loglevel('warning')
-            except Exception:
-                pass
-        if __IN_MAIN_PROCESS__:
-            if not __QUIET__:
-                print('[common] ' + module_prefix + ' current backend is: %r' % backend)
-                print('[common] ' + module_prefix + ' matplotlib.use(Qt5Agg)')
-            if backend != 'Qt5Agg':
-                matplotlib.use('Qt5Agg', force=True)
-                backend = matplotlib.get_backend()
-                print(module_prefix + ' current backend is: %r' % backend)
-            if '--notoolbar' in sys.argv or '--devmode' in sys.argv:
-                toolbar = 'None'
-            else:
-                toolbar = 'toolbar2'
-            matplotlib.rcParams['toolbar'] = toolbar
-            matplotlib.rc('text', usetex=False)
-            mpl_keypress_shortcuts = [key for key in list(matplotlib.rcParams.keys()) if key.find('keymap') == 0]
-            for key in mpl_keypress_shortcuts:
-                matplotlib.rcParams[key] = ''
-            #matplotlib.rcParams['text'].usetex = False
-            #for key in mpl_keypress_shortcuts:
-                #print('%s = %s' % (key, matplotlib.rcParams[key]))
-            # Disable mpl shortcuts
-                #matplotlib.rcParams['toolbar'] = 'None'
-                #matplotlib.rcParams['interactive'] = True
+    # if initmpl:
+    #     toolbar = 'None' if ('--notoolbar' in sys.argv or '--devmode' in sys.argv) else 'toolbar2'
+    #     configure_matplotlib(toolbar=toolbar, quiet=__QUIET__)
 
     return print, print_, print_on, print_off, rrr, profile, printDBG
