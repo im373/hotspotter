@@ -13,7 +13,6 @@ from os.path import join, exists, normpath
 import os
 import subprocess
 from .dev_utils import make_reloader
-from .profiling import profile
 
 logger = logging.getLogger(__name__)
 rrr = make_reloader(__name__, '[cplat]')

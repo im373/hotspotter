@@ -10,7 +10,6 @@ Module: load_data
 
 import logging
 from hscom.dev_utils import make_reloader
-from hscom.profiling import profile
 
 logger = logging.getLogger(__name__)
 rrr = make_reloader(__name__, '[ld3]')

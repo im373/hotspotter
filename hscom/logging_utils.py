@@ -1,9 +1,42 @@
-# hscom/logging_utils.py
-
-import builtins
+import functools
+import inspect
 import logging
 import logging.config
 from pathlib import Path
+import textwrap
+import warnings
+
+
+logger = logging.getLogger(__name__)
+
+
+def DEPRECATED(func):
+    """Warn and log whenever a deprecated function is called."""
+    func_name = f'{func.__module__}.{func.__qualname__}'
+
+    try:
+        func_source = textwrap.dedent(inspect.getsource(func)).rstrip()
+    except (OSError, TypeError):
+        func_source = '<source unavailable>'
+
+    @functools.wraps(func)
+    def deprecated_wrapper(*args, **kwargs):
+        caller = inspect.stack()[1]
+        warn_msg = (
+            f'Deprecated call to {func_name} from '
+            f'{caller.filename}:{caller.lineno} in {caller.function}()'
+        )
+        log = logging.getLogger(func.__module__)
+        log.warning(warn_msg)
+        log.debug(f'Deprecated function source for {func_name}:\n{func_source}')
+        warnings.warn(warn_msg, category=DeprecationWarning, stacklevel=2)
+        return func(*args, **kwargs)
+
+    return deprecated_wrapper
+
+
+# Compatibility alias for legacy misspelling. New code should use DEPRECATED.
+DEPRICATED = DEPRECATED
 
 
 def configure_logging(

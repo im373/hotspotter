@@ -1,7 +1,11 @@
 
-from hscom import __common__
-(print, print_, print_on, print_off,
- rrr, profile) = __common__.init(__name__, '[dev_consist]')
+import logging
+
+from hscom.dev_utils import make_reloader
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[dev_consist]')
+print = logger.info
 # Standard
 from os.path import relpath
 # Science

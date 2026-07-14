@@ -1,7 +1,11 @@
 
-from hscom import __common__
-(print, print_, print_on, print_off, rrr,
- profile, printDBG) = __common__.init(__name__, '[dev_api]', DEBUG=False)
+import logging
+
+from hscom.dev_utils import make_reloader
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[dev_api]')
+printDBG = logger.debug
 from . import dev_stats
 from . import dev_consistency
 from . import dev_reload

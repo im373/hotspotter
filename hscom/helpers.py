@@ -41,10 +41,9 @@ import types
 import warnings
 # HotSpotter
 from .dev_utils import make_reloader
+from .logging_utils import DEPRECATED
 from . import tools
 from .Printable import printableVal
-from .profiling import profile
-#print('LOAD_MODULE: helpers.py')
 
 logger = logging.getLogger(__name__)
 rrr = make_reloader(__name__, '[util]')
@@ -53,24 +52,24 @@ rrr = make_reloader(__name__, '[util]')
 def _message_from_args(args):
     return ' '.join(str(arg) for arg in args)
 
-
+@DEPRECATED
 def print(*args, **kwargs):
     """Legacy module-local print shim, now routed through logging."""
     logger.debug(f"{_message_from_args(args)}")
 
-
+@DEPRECATED
 def print_(msg=''):
     logger.debug(f"{str(msg).rstrip()}")
 
-
+@DEPRECATED
 def print_on():
     """Compatibility no-op for legacy modules that toggled helper printing."""
 
-
+@DEPRECATED
 def print_off():
     """Compatibility no-op for legacy modules that toggled helper printing."""
 
-
+@DEPRECATED
 def printDBG(msg):
     logger.debug(f"{msg}")
 
@@ -86,20 +85,6 @@ __PRINT_WRITES__ = False
 __CHECKPATH_VERBOSE__ = False
 
 VERY_VERBOSE = False
-
-
-def DEPRICATED(func):
-    'deprication decorator'
-    warn_msg = f'Deprecated call to: {func.__name__}'
-
-    def __DEP_WRAPPER(*args, **kwargs):
-        logger.warning(warn_msg)
-        warnings.warn(warn_msg, category=DeprecationWarning)
-        return func(*args, **kwargs)
-    __DEP_WRAPPER.__name__ = func.__name__
-    __DEP_WRAPPER.__doc__ = func.__doc__
-    __DEP_WRAPPER.__dict__.update(func.__dict__)
-    return __DEP_WRAPPER
 
 
 def try_get_path(path_list):
@@ -239,12 +224,12 @@ def intersect_ordered(list1, list2):
     return new_list
 
 
-@DEPRICATED
+@DEPRECATED
 def array_index(array, item):
     return np.where(array == item)[0][0]
 
 
-@DEPRICATED
+@DEPRECATED
 def index_of(item, array):
     'index of [item] in [array]'
     return np.where(array == item)[0][0]
@@ -641,12 +626,12 @@ def cmd(command):
 
 
 # --- Path ---
-#@DEPRICATED
+#@DEPRECATED
 def filecheck(fpath):
     return exists(fpath)
 
 
-@DEPRICATED
+@DEPRECATED
 def dircheck(dpath, makedir=True):
     if not exists(dpath):
         if not makedir:
@@ -1517,7 +1502,7 @@ def execstr_timeitsetup(dict_, exclude_list=[]):
     return setup
 
 
-@DEPRICATED
+@DEPRECATED
 def dict_execstr(dict_, local_name=None):
     return execstr_dict(dict_, local_name)
 
@@ -1551,7 +1536,7 @@ def execstr_src(func):
     return execstr_func(func)
 
 
-@DEPRICATED
+@DEPRECATED
 def get_exec_src(func):
     return execstr_func(func)
 

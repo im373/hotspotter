@@ -8,9 +8,9 @@ import logging
 import sys
 
 from .dev_utils import make_reloader
+from .logging_utils import DEPRECATED
 from .mpl_utils import configure_matplotlib
 from .profiling import profile
-from .helpers import DEPRICATED
 
 __MODULE_LIST__ = []
 
@@ -71,7 +71,7 @@ def add_logging_handler(handler, default_format=True):
         handler.setFormatter(formatter)
     logging.getLogger().addHandler(handler)
 
-@DEPRICATED
+@DEPRECATED
 def create_logger():
     """Legacy no-op.
 
@@ -79,14 +79,14 @@ def create_logger():
     """
     return logging.getLogger()
 
-@DEPRICATED
+@DEPRECATED
 def get_modules():
     if __INDENT__:
         return __MODULE_LIST__
     else:
         return []
 
-@DEPRICATED
+@DEPRECATED
 def init(module_name, module_prefix='[???]', DEBUG=None, initmpl=False):
     # implicitly imports a set of standard functions into hotspotter modules
     # makes keeping track of printing much easier

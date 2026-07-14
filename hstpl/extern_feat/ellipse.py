@@ -18,9 +18,13 @@ import cv2
 import numpy as np
 import scipy as sp  # NOQA
 # Hotspotter
-from hscom import __common__
-print, print_, print_on, print_off, rrr, profile, printDBG =\
-    __common__.init(__name__, module_prefix='[ell]', DEBUG=False, initmpl=False)
+import logging
+from hscom.dev_utils import make_reloader
+from hscom.profiling import profile
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[ell]')
+printDBG = logger.debug
 
 
 def test_data():

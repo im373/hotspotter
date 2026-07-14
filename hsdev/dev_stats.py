@@ -1,7 +1,10 @@
 
-from hscom import __common__
-(print, print_, print_on, print_off, rrr,
- profile, printDBG) = __common__.init(__name__, '[dev_stats]', DEBUG=False)
+import logging
+
+from hscom.dev_utils import make_reloader
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[dev_stats]')
 # Standard
 import textwrap
 # HotSpotter
@@ -60,5 +63,5 @@ def dbstats(hs):
     ]
     tabular_body = hline.join(tabular_body_list)
     tabular = hline.join([tabular_head, tabular_body, tabular_tail])
-    print('[dev stats]')
-    print(tabular)
+    logger.info('[dev stats]')
+    logger.info(tabular)

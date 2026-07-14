@@ -1,13 +1,16 @@
 
-from hscom import __common__
-(print, print_, print_on, print_off, rrr,
- profile, printDBG) = __common__.init(__name__, '[harn]', DEBUG=False)
 # Python
 import logging
 import sys
 import itertools
 import textwrap
 from os.path import join
+from hscom.dev_utils import make_reloader
+from hscom.profiling import profile
+
+logger = logging.getLogger(__name__)
+rrr = make_reloader(__name__, '[harn]')
+printDBG = logger.debug
 
 # Scientific
 import numpy as np
