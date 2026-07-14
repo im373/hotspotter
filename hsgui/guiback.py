@@ -74,14 +74,12 @@ def _report_backend_exception(back, title, message, ex):
 
 # Creation function
 def make_main_window(app=None, hs=None):
-    #printDBG(r'[*back] make_main_window()')
     back = MainWindowBackend(app=app, hs=hs)
     if hs is None or not params.args.nogui:
         back.show()
         back.layout_figures()
         if app is not None:
             app.setActiveWindow(back.front)
-    #print('[*back] Finished creating main front\n')
     return back
 
 
@@ -333,7 +331,7 @@ class MainWindowBackend(QtCore.QObject):
         else:
             db_dir = back.hs.dirs.db_dir
             db_name = split(db_dir)[1]
-            title = 'Hotspotter - %r - %s' % (db_name, db_dir)
+            title = f'Hotspotter - {db_name} - {db_dir}'
         back.front.setWindowTitle(title)
 
     def connect_api(back, hs):
@@ -481,6 +479,7 @@ class MainWindowBackend(QtCore.QObject):
     def select_gx(back, gx, cx=None, show=True, **kwargs):
         # Table Click -> Image Table
         nodraw = kwargs.pop('nodraw', False)
+        kwargs.pop('dodraw', None) # TODO: temp fix query image select
         show_chip_splash = kwargs.pop('show_chip_splash', True)
         autoselect_chips = False
         if autoselect_chips and cx is None:
@@ -759,9 +758,11 @@ class MainWindowBackend(QtCore.QObject):
             return
         gx = back.hs.tables.cx2_gx[cx]
         if roi is None:
-            figtitle = 'Image View - ReSelect ROI (click two points)'
+            figtitle = 'Image View - ReSelect ROI (drag a yellow corner)'
             back.show_image(gx, [cx], figtitle=figtitle, **kwargs)
-            roi = guitools.select_roi()
+            current_roi = back.hs.tables.cx2_roi[cx]
+            current_theta = back.hs.tables.cx2_theta[cx]
+            roi = guitools.select_roi(current_roi, theta=current_theta)
             if roi is None:
                 logger.info("ROI selection failed. Not changing chip")
                 return

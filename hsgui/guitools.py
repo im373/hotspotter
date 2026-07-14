@@ -209,7 +209,9 @@ def select_orientation():
 
 
 @profile
-def select_roi():
+def select_roi(initial_roi=None, theta=0):
+    if initial_roi is not None:
+        return select_roi_drag(initial_roi, theta=theta)
     #from matplotlib.backend_bases import mplDeprecation
     logger.info("Define a rectangular ROI by clicking two points")
     fig = None
@@ -240,6 +242,148 @@ def select_roi():
     finally:
         if fig is not None:
             df2.connect_callback(fig, 'button_press_event', oldcbfn)
+
+## new reselect
+
+def _rotmat(theta):
+    cos_ = math.cos(theta)
+    sin_ = math.sin(theta)
+    return np.array([[cos_, -sin_], [sin_, cos_]], dtype=np.float64)
+
+
+def _roi_corners(roi, theta):
+    x, y, w, h = np.asarray(roi, dtype=np.float64)
+    center = np.array([x + w / 2.0, y + h / 2.0], dtype=np.float64)
+    local = np.array([[-w / 2.0, -h / 2.0],
+                      [ w / 2.0, -h / 2.0],
+                      [ w / 2.0,  h / 2.0],
+                      [-w / 2.0,  h / 2.0]], dtype=np.float64)
+    return center + local.dot(_rotmat(theta).T)
+
+
+def _roi_from_dragged_corner(anchor, dragged, theta):
+    rot = _rotmat(theta)
+    # draw_roi maps local rectangle points to image data as local.dot(rot.T).
+    # Project data points with dot(rot) so the dragged mouse position becomes
+    # the actual post-rotation corner after the ROI is redrawn.
+    anchor_local = np.asarray(anchor, dtype=np.float64).dot(rot)
+    dragged_local = np.asarray(dragged, dtype=np.float64).dot(rot)
+    min_xy = np.minimum(anchor_local, dragged_local)
+    max_xy = np.maximum(anchor_local, dragged_local)
+    local_center = (min_xy + max_xy) / 2.0
+    width, height = max_xy - min_xy
+    width = max(width, 1.0)
+    height = max(height, 1.0)
+    center = local_center.dot(rot.T)
+    roi = np.array([center[0] - width / 2.0,
+                    center[1] - height / 2.0,
+                    width,
+                    height])
+    return np.array(np.round(roi), dtype=np.int32)
+
+
+@profile
+def select_roi_drag(initial_roi, theta=0):
+    logger.info("Adjust ROI by dragging one of its corner handles")
+    fig = None
+    ax = None
+    oldcbfn = None
+    callback_ids = []
+    artists = []
+    state = {
+        'active_corner': None,
+        'anchor': None,
+        'roi': np.asarray(initial_roi, dtype=np.int32).copy(),
+        'done': False,
+        'cancelled': False,
+    }
+
+    def clear_artists():
+        while artists:
+            artist = artists.pop()
+            try:
+                artist.remove()
+            except ValueError:
+                pass
+
+    def draw_handles():
+        clear_artists()
+        corners = _roi_corners(state['roi'], theta)
+        closed = np.vstack([corners, corners[0]])
+        line, = ax.plot(closed[:, 0], closed[:, 1], color='yellow',
+                        linewidth=2, zorder=20)
+        handles = ax.scatter(corners[:, 0], corners[:, 1], s=80,
+                             c='yellow', edgecolors='black', zorder=21)
+        artists.extend([line, handles])
+        fig.canvas.draw_idle()
+
+    def nearest_corner(event):
+        corners = _roi_corners(state['roi'], theta)
+        display_pts = ax.transData.transform(corners)
+        mouse = np.array([event.x, event.y], dtype=np.float64)
+        dists = np.linalg.norm(display_pts - mouse, axis=1)
+        corner = int(np.argmin(dists))
+        return corner if dists[corner] <= 25 else None
+
+    def on_press(event):
+        if event.inaxes is not ax or event.xdata is None or event.ydata is None:
+            return
+        if event.button != 1:
+            state['cancelled'] = True
+            state['done'] = True
+            fig.canvas.stop_event_loop()
+            return
+        corner = nearest_corner(event)
+        if corner is None:
+            logger.info("Click closer to a yellow ROI corner handle")
+            return
+        state['active_corner'] = corner
+        state['anchor'] = _roi_corners(state['roi'], theta)[(corner + 2) % 4]
+
+    def on_motion(event):
+        if state['active_corner'] is None:
+            return
+        if event.inaxes is not ax or event.xdata is None or event.ydata is None:
+            return
+        dragged = np.array([event.xdata, event.ydata], dtype=np.float64)
+        state['roi'] = _roi_from_dragged_corner(state['anchor'], dragged, theta)
+        draw_handles()
+
+    def on_release(event):
+        if state['active_corner'] is None:
+            return
+        state['active_corner'] = None
+        state['done'] = True
+        logger.info(f"Selected ROI = {state['roi']!r}")
+        fig.canvas.stop_event_loop()
+
+    try:
+        sys.stdout.flush()
+        fig = df2.gcf()
+        ax = df2.gca()
+        oldcbid, oldcbfn = df2.disconnect_callback(fig, 'button_press_event')
+        draw_handles()
+        callback_ids = [
+            fig.canvas.mpl_connect('button_press_event', on_press),
+            fig.canvas.mpl_connect('motion_notify_event', on_motion),
+            fig.canvas.mpl_connect('button_release_event', on_release),
+        ]
+        logger.info("Drag a yellow ROI corner; right-click cancels")
+        fig.canvas.start_event_loop(timeout=0)
+        if state['cancelled']:
+            logger.info("ROI drag selection cancelled")
+            return None
+        return state['roi']
+    except Exception as ex:
+        logger.exception(f"ROI drag selection failed: {ex!r}")
+        return None
+    finally:
+        if fig is not None:
+            for callback_id in callback_ids:
+                fig.canvas.mpl_disconnect(callback_id)
+            clear_artists()
+            df2.connect_callback(fig, 'button_press_event', oldcbfn)
+            fig.canvas.draw_idle()
 
 
 def _addOptions(msgBox, options):
