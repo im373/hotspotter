@@ -65,8 +65,8 @@ def test_classifier(classifier, pos_test, neg_test):
 
     tp_rate = pos_output.sum() / len(pos_output)
     fp_rate = neg_output.sum() / len(neg_output)
-    logger.info('tp_rate = %r' % tp_rate)
-    logger.info('fp_rate = %r' % fp_rate)
+    logger.info('tp_rate = %r', tp_rate)
+    logger.info('fp_rate = %r', fp_rate)
 
 
 def train_random_forest(hs, train_data, train_lbl, pos_test, neg_test):

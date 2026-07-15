@@ -51,15 +51,15 @@ def compute_homog(x1_mn, y1_mn, x2_mn, y2_mn):
         (u, s, v) = linalg.svd(Mbynine, full_matrices=False)
         #printDBG('[sv2] done')
     except MemoryError as ex:
-        logger.info('[sv2] Caught MemErr %r during full SVD. Trying sparse SVD.' % (ex))
+        logger.info('[sv2] Caught MemErr %r during full SVD. Trying sparse SVD.', ex)
         MbynineSparse = sparse.lil_matrix(Mbynine)
         (u, s, v) = sparse_linalg.svds(MbynineSparse)
     except linalg.LinAlgError as ex:
-        logger.info('[sv2] svd did not converge: %r' % ex)
+        logger.info('[sv2] svd did not converge: %r', ex)
         return np.eye(3)
     except Exception as ex:
-        logger.info('[sv2] svd error: %r' % ex)
-        logger.info('[sv2] Mbynine.shape = %r' % (Mbynine.shape,))
+        logger.info('[sv2] svd error: %r', ex)
+        logger.info('[sv2] Mbynine.shape = %r', Mbynine.shape)
         raise
     # Rearange the nullspace into a homography
     h = v[-1]  # v = V.H # (transposed in matlab)
@@ -295,7 +295,7 @@ def homography_inliers(kpts1, kpts2, fm,
         # Computes ax = b # x = linalg.solve(a, b)
         H = linalg.solve(T2, H_prime).dot(T1)  # Unnormalize
     except linalg.LinAlgError as ex:
-        logger.info('[sv2] Warning 285 %r' % ex)
+        logger.info('[sv2] Warning 285 %r', ex)
         # raise
         return None
 

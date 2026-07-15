@@ -163,14 +163,14 @@ def in_depth_ellipse2x2(rchip, kp):
     Z = (V.T).dot(V)
 
     logger.info("invV is a transform from points on a unit-circle to the ellipse")
-    logger.info(f"{helpers.horiz_string(['invV = ', invV])}")
+    logger.info("%s", helpers.horiz_string(['invV = ', invV]))
     logger.info("--------------------------------")
     logger.info("V is a transformation from points on the ellipse to a unit circle")
-    logger.info(f"{helpers.horiz_string(['V = ', V])}")
+    logger.info("%s", helpers.horiz_string(['V = ', V]))
     logger.info("--------------------------------")
     logger.info("Points on a matrix satisfy (x).T.dot(Z).dot(x) = 1")
     logger.info("where Z = (V.T).dot(V)")
-    logger.info(f"{helpers.horiz_string(['Z = ', Z])}")
+    logger.info("%s", helpers.horiz_string(['Z = ', Z]))
 
     # Define points on a unit circle
     theta_list = np.linspace(0, tau, 50)
@@ -210,14 +210,14 @@ def in_depth_ellipse2x2(rchip, kp):
     con = np.array((('    A', 'B / 2', 'D / 2'),
                     ('B / 2', '    C', 'E / 2'),
                     ('D / 2', 'E / 2', '    F')))
-    logger.info(f"{helpers.horiz_string(['A matrix A_Q = ', con])}")
+    logger.info("%s", helpers.horiz_string(['A matrix A_Q = ', con]))
 
     # A_Q is our conic section (aka ellipse matrix)
     A_Q = np.array(((    A, B / 2, D / 2),
                     (B / 2,     C, E / 2),
                     (D / 2, E / 2,     F)))
 
-    logger.info(f"{helpers.horiz_string(['A_Q = ', A_Q])}")
+    logger.info("%s", helpers.horiz_string(['A_Q = ', A_Q]))
 
     #-----------------------
     # DEGENERATE CONICS
@@ -225,11 +225,11 @@ def in_depth_ellipse2x2(rchip, kp):
     logger.info("----------------------------------")
     logger.info("As long as det(A_Q) != it is not degenerate.")
     logger.info("If the conic is not degenerate, we can use the 2x2 minor: A_33")
-    logger.info(f"det(A_Q) = {np.linalg.det(A_Q)}")
+    logger.info("det(A_Q) = %s", np.linalg.det(A_Q))
     assert np.linalg.det(A_Q) != 0, 'degenerate conic'
     A_33 = np.array(((    A, B / 2),
                      (B / 2,     C)))
-    logger.info(f"{helpers.horiz_string(['A_33 = ', A_33])}")
+    logger.info("%s", helpers.horiz_string(['A_33 = ', A_33]))
 
     #-----------------------
     # CONIC CLASSIFICATION
@@ -237,7 +237,7 @@ def in_depth_ellipse2x2(rchip, kp):
     logger.info("----------------------------------")
     logger.info("The determinant of the minor classifies the type of conic it is")
     logger.info("(det == 0): parabola, (det < 0): hyperbola, (det > 0): ellipse")
-    logger.info(f"det(A_33) = {np.linalg.det(A_33)}")
+    logger.info("det(A_33) = %s", np.linalg.det(A_33))
     assert np.linalg.det(A_33) > 0, 'conic is not an ellipse'
     logger.info("this is indeed an ellipse")
 
@@ -255,8 +255,8 @@ def in_depth_ellipse2x2(rchip, kp):
     # shits and giggles
     x_center = (B * E - (2 * C * D)) / (4 * A * C - B ** 2)
     y_center = (D * B - (2 * A * E)) / (4 * A * C - B ** 2)
-    logger.info(f"{helpers.horiz_string(['x_center = ', x_center])}")
-    logger.info(f"{helpers.horiz_string(['y_center = ', y_center])}")
+    logger.info("%s", helpers.horiz_string(['x_center = ', x_center]))
+    logger.info("%s", helpers.horiz_string(['y_center = ', y_center]))
 
     #-----------------------
     # MAJOR AND MINOR AXES

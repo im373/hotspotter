@@ -35,10 +35,10 @@ vdist1 = vdist[:,0:1]
 vdist2 = vdist[:,0:2]
 vdist3 = vdist[:,0:3]
 vdist4 = vdist[:,0:4]
-logger.info(LNBNN_fn(vdist1, ndist) * 1000)
-logger.info(LNBNN_fn(vdist2, ndist) * 1000)
-logger.info(LNBNN_fn(vdist3, ndist) * 1000)
-logger.info(LNBNN_fn(vdist4, ndist) * 1000)
+logger.info("%s", LNBNN_fn(vdist1, ndist) * 1000)
+logger.info("%s", LNBNN_fn(vdist2, ndist) * 1000)
+logger.info("%s", LNBNN_fn(vdist3, ndist) * 1000)
+logger.info("%s", LNBNN_fn(vdist4, ndist) * 1000)
 '''
 
 

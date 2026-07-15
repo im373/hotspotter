@@ -26,13 +26,13 @@ def configure_matplotlib(
 
     in_main_process = multiprocessing.current_process().name == "MainProcess"
     if in_main_process and not quiet:
-        logger.debug(f"Current Matplotlib backend is {current_backend!r}. Using Matplotlib backend {backend}")
+        logger.debug("Current Matplotlib backend is %r. Using Matplotlib backend %s", current_backend, backend)
 
     if current_backend != backend:
         matplotlib.use(backend, force=True)
         current_backend = matplotlib.get_backend()
         if in_main_process and not quiet:
-            logger.debug(f"Current Matplotlib backend is {current_backend!r}")
+            logger.debug("Current Matplotlib backend is %r", current_backend)
 
     matplotlib.rcParams["toolbar"] = toolbar
     matplotlib.rc("text", usetex=False)

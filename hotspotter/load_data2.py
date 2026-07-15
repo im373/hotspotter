@@ -68,7 +68,7 @@ def load_csv_tables(db_dir, allow_new_dir=True):
     if 'vdd' in sys.argv:
         helpers.vd(db_dir)
     logger.debug('=============================')
-    logger.debug('[ld2] Loading hotspotter csv tables: %r' % db_dir)
+    logger.debug('[ld2] Loading hotspotter csv tables: %r', db_dir)
     hs_dirs = ds.HotspotterDirs(db_dir)
     hs_tables = ds.HotspotterTables()
     #exec(hs_dirs.execstr('hs_dirs'))
@@ -98,7 +98,7 @@ def load_csv_tables(db_dir, allow_new_dir=True):
     # TODO DETECT OLD FORMATS HERE
     db_version = 'current'
     isCurrentVersion = all([has_dbdir, has_imgdir, has_chiptbl, has_nametbl, has_imgtbl])
-    logger.debug('[ld2] isCurrentVersion=%r' % isCurrentVersion)
+    logger.debug('[ld2] isCurrentVersion=%r', isCurrentVersion)
     IS_VERSION_1_OR_2 = False
 
     if not isCurrentVersion:
@@ -124,7 +124,7 @@ def load_csv_tables(db_dir, allow_new_dir=True):
         if db_info.has_v2_gt(db_dir):
             IS_VERSION_1_OR_2 = True
             db_version = 'hotspotter-v2'
-            logger.info('[ld2] has %s database format' % db_version)
+            logger.info('[ld2] has %s database format', db_version)
             chip_csv_format = []
             header_csvformat_re = v12_csvformat_re
             chip_table  = assign_alternate('instance_table.csv')
@@ -134,7 +134,7 @@ def load_csv_tables(db_dir, allow_new_dir=True):
         elif db_info.has_v1_gt(db_dir):
             IS_VERSION_1_OR_2 = True
             db_version = 'hotspotter-v1'
-            logger.info('[ld2] has %s database format' % db_version)
+            logger.info('[ld2] has %s database format', db_version)
             chip_csv_format = []
             header_csvformat_re = v12_csvformat_re
             chip_table  = assign_alternate('animal_info_table.csv')
@@ -143,7 +143,7 @@ def load_csv_tables(db_dir, allow_new_dir=True):
         #
         elif db_info.has_ss_gt(db_dir):
             db_version = 'stripespotter'
-            logger.info('[ld2] has %s database format' % db_version)
+            logger.info('[ld2] has %s database format', db_version)
             chip_table = join(db_dir, 'SightingData.csv')
 
             chip_csv_format = ['imgindex', 'original_filepath', 'roi', 'animal_name']
@@ -167,7 +167,7 @@ def load_csv_tables(db_dir, allow_new_dir=True):
                     return hs_dirs, hs_tables, 'newdb'
                 else:
                     import traceback
-                    logger.error(traceback.format_exc())
+                    logger.error("%s", traceback.format_exc())
                     logger.error('[ld2] I AM IN A BAD STATE!')
                     errmsg  = ''
                     errmsg += ('\n\n!!!!!\n\n')
@@ -176,11 +176,11 @@ def load_csv_tables(db_dir, allow_new_dir=True):
                     for fname in os.listdir(internal_dir):
                         errmsg += ('   ! fname')
                     errmsg += ('\n\n!!!!!\n\n')
-                    logger.error(errmsg)
+                    logger.error("%s", errmsg)
                     raise Exception(errmsg)
     if not helpers.checkpath(chip_table):
         raise Exception('bad state chip_table=%r' % chip_table)
-    logger.debug('[ld2] detected %r' % db_version)
+    logger.debug('[ld2] detected %r', db_version)
     hs_dirs.ensure_dirs()
     logger.debug('-------------------------')
     logger.debug('[ld2] Loading database tables: ')
@@ -206,7 +206,7 @@ def load_csv_tables(db_dir, allow_new_dir=True):
     try:
         if name_table is None:
             raise IOError('name_table will be given in chip table.')
-        logger.debug('[ld2] Loading name table: %r' % name_table)
+        logger.debug('[ld2] Loading name table: %r', name_table)
         for line_num, csv_line in enumerate(helpers.read_text(name_table).splitlines(True)):
             csv_line = csv_line.strip('\n\r\t ')
             if len(csv_line) == 0 or csv_line.find('#') == 0:
@@ -216,18 +216,18 @@ def load_csv_tables(db_dir, allow_new_dir=True):
             name = csv_fields[1]
             add_name(name, nid)
         if VERBOSE_LOAD_DATA:
-            logger.debug('[ld2] * Loaded %r names (excluding unknown names)' % (len(nx2_name) - 2))
+            logger.debug('[ld2] * Loaded %r names (excluding unknown names)', len(nx2_name) - 2)
             logger.debug('[ld2] * Done loading name table')
     except IOError as ex:
-        logger.debug('IOError: %r' % ex)
+        logger.debug('IOError: %r', ex)
         logger.debug('[ld2.name] loading without name table')
         #raise
     except Exception as ex:
-        logger.exception('[ld2.name] ERROR %r' % ex)
+        logger.exception('[ld2.name] ERROR %r', ex)
         #print('[ld2.name] ERROR name_tbl parsing: %s' % (''.join(cid_lines)))
-        logger.debug('[ld2.name] ERROR on line number:  %r' % (line_num))
-        logger.debug('[ld2.name] ERROR on line:         %r' % (csv_line))
-        logger.debug('[ld2.name] ERROR on fields:       %r' % (csv_fields))
+        logger.debug('[ld2.name] ERROR on line number:  %r', line_num)
+        logger.debug('[ld2.name] ERROR on line:         %r', csv_line)
+        logger.debug('[ld2.name] ERROR on fields:       %r', csv_fields)
 
     # -------------------
     # --- READ IMAGES ---
@@ -251,7 +251,7 @@ def load_csv_tables(db_dir, allow_new_dir=True):
         if image_table is None:
             raise IOError('image_table will be given in chip table')
         if VERBOSE_LOAD_DATA:
-            logger.debug('[ld2] * Loading image table: %r' % image_table)
+            logger.debug('[ld2] * Loading image table: %r', image_table)
         gid_lines = helpers.read_text(image_table).splitlines(True)
         for line_num, csv_line in enumerate(gid_lines):
             csv_line = csv_line.strip('\n\r\t ')
@@ -274,10 +274,10 @@ def load_csv_tables(db_dir, allow_new_dir=True):
         nTableImgs = len(gx2_gname)
         fromTableNames = set(gx2_gname)
         if VERBOSE_LOAD_DATA:
-            logger.debug('[ld2] * table specified %r images' % nTableImgs)
+            logger.debug('[ld2] * table specified %r images', nTableImgs)
             # </LEGACY CODE>
             # Load Image Directory
-            logger.debug('[ld2] * Loading image directory: %r' % img_dir)
+            logger.debug('[ld2] * Loading image directory: %r', img_dir)
         nDirImgs = 0
         nDirImgsAlready = 0
         for fname in os.listdir(img_dir):
@@ -288,28 +288,28 @@ def load_csv_tables(db_dir, allow_new_dir=True):
                 add_image(fname, False, None)
                 nDirImgs += 1
         if VERBOSE_LOAD_DATA:
-            logger.debug('[ld2] * dir specified %r images' % nDirImgs)
-            logger.debug('[ld2] * %r were already specified in the table' % nDirImgsAlready)
-            logger.debug('[ld2] * Loaded %r images' % len(gx2_gname))
+            logger.debug('[ld2] * dir specified %r images', nDirImgs)
+            logger.debug('[ld2] * %r were already specified in the table', nDirImgsAlready)
+            logger.debug('[ld2] * Loaded %r images', len(gx2_gname))
             logger.debug('[ld2] * Done loading images')
     except IOError as ex:
-        logger.debug('IOError: %r' % ex)
+        logger.debug('IOError: %r', ex)
         logger.debug('[ld2.img] loading without image table')
         #if '--strict' in sys.argv:
             #raise
     except Exception as ex:
-        logger.exception('[ld2!.img] ERROR %r' % ex)
+        logger.exception('[ld2!.img] ERROR %r', ex)
         #print('[ld2.img] ERROR image_tbl parsing: %s' % (''.join(cid_lines)))
-        logger.debug('[ld2!.img] ERROR on line number:  %r' % (line_num))
-        logger.debug('[ld2!.img] ERROR on line:         %r' % (csv_line))
-        logger.debug('[ld2!.img] ERROR on fields:       %r' % (csv_fields))
+        logger.debug('[ld2!.img] ERROR on line number:  %r', line_num)
+        logger.debug('[ld2!.img] ERROR on line:         %r', csv_line)
+        logger.debug('[ld2!.img] ERROR on fields:       %r', csv_fields)
         raise
 
     try:
         # ------------------
         # --- READ CHIPS ---
         # ------------------
-        logger.debug('[ld2] Loading chip table: %r' % chip_table)
+        logger.debug('[ld2] Loading chip table: %r', chip_table)
         # Load Chip Table Header
         cid_lines = helpers.read_text(chip_table).splitlines(True)
         num_data   = -1
@@ -349,8 +349,8 @@ def load_csv_tables(db_dir, allow_new_dir=True):
         if IS_VERSION_1_OR_2 and len(chip_csv_format) == 0:
             chip_csv_format = v12_csv_format
         if VERBOSE_LOAD_DATA:
-            logger.debug('[ld2] * num_chips: %r' % num_data)
-            logger.debug('[ld2] * chip_csv_format: %r ' % chip_csv_format)
+            logger.debug('[ld2] * num_chips: %r', num_data)
+            logger.debug('[ld2] * chip_csv_format: %r ', chip_csv_format)
         #print('[ld2.chip] Header Columns: %s\n    ' % '\n   '.join(chip_csv_format))
 
         def tryindex(list, valid_items):
@@ -409,9 +409,8 @@ def load_csv_tables(db_dir, allow_new_dir=True):
 
         # Print header parsing status
         if VERBOSE_LOAD_DATA:
-            logger.debug('[ld2] * num_user_properties: %d' % (len(list(prop_dict.keys()))))
-            logger.debug('[ld2] * num_standard_properties: %d / %d' %
-                  (len(standard_xs), len(standard_xs_)))
+            logger.debug('[ld2] * num_user_properties: %d', len(list(prop_dict.keys())))
+            logger.debug('[ld2] * num_standard_properties: %d / %d', len(standard_xs), len(standard_xs_))
 
         #def parse_integer(csv_fields, field_x):
             #try:
@@ -485,7 +484,7 @@ def load_csv_tables(db_dir, allow_new_dir=True):
             # LEGACY HACK
             if len(roi) == 0:
                 # Entire image is the roi
-                logger.info('[ld2] Converting %s database' % db_version)
+                logger.info('[ld2] Converting %s database', db_version)
                 gpath = join(db_dir, RDIR_IMG, gname)
                 w, h = Image.open(gpath).size
                 roi = [1, 1, w, h]
@@ -508,16 +507,16 @@ def load_csv_tables(db_dir, allow_new_dir=True):
             cx2_roi.append(roi)
             cx2_theta.append(theta)
     except Exception as ex:
-        logger.exception('[chip.ld2] ERROR %r' % ex)
+        logger.exception('[chip.ld2] ERROR %r', ex)
         #print('[chip.ld2] ERROR parsing: %s' % (''.join(cid_lines)))
-        logger.debug('[chip.ld2] ERROR reading header:  %r' % (line_num))
-        logger.debug('[chip.ld2] ERROR on line number:  %r' % (line_num))
-        logger.debug('[chip.ld2] ERROR on line:         %r' % (csv_line))
-        logger.debug('[chip.ld2] ERROR on fields:       %r' % (csv_fields))
+        logger.debug('[chip.ld2] ERROR reading header:  %r', line_num)
+        logger.debug('[chip.ld2] ERROR on line number:  %r', line_num)
+        logger.debug('[chip.ld2] ERROR on line:         %r', csv_line)
+        logger.debug('[chip.ld2] ERROR on fields:       %r', csv_fields)
         raise
 
     if VERBOSE_LOAD_DATA:
-        logger.debug('[ld2] * Loaded: %r chips' % (len(cx2_cid)))
+        logger.debug('[ld2] * Loaded: %r chips', len(cx2_cid))
         logger.debug('[ld2] * Done loading chip table')
 
     # Return all information from load_tables
@@ -528,7 +527,7 @@ def load_csv_tables(db_dir, allow_new_dir=True):
                    cx2_cid, cx2_nx, cx2_gx,
                    cx2_roi, cx2_theta, prop_dict)
 
-    logger.debug('[ld2] Done Loading hotspotter csv tables: %r' % (db_dir))
+    logger.debug('[ld2] Done Loading hotspotter csv tables: %r', db_dir)
     if 'vcd' in sys.argv:
         helpers.vd(hs_dirs.computed_dir)
     return hs_dirs, hs_tables, db_version
@@ -545,11 +544,11 @@ def make_csv_table(column_labels=None, column_list=[], header='', column_type=No
     column_len = [len(col) for col in column_list]
     num_data = column_len[0]
     if num_data == 0:
-        logger.debug('[ld2.make_csv_table()] No data. (header=%r)' % (header,))
+        logger.debug('[ld2.make_csv_table()] No data. (header=%r)', header)
         return header
     if any([num_data != clen for clen in column_len]):
-        logger.debug('[lds] column_labels = %r ' % (column_labels,))
-        logger.debug('[lds] column_len = %r ' % (column_len,))
+        logger.debug('[lds] column_labels = %r ', column_labels)
+        logger.debug('[lds] column_len = %r ', column_len)
         logger.warning('[ld2] inconsistent column lengths')
         return header
 
@@ -572,9 +571,9 @@ def make_csv_table(column_labels=None, column_list=[], header='', column_type=No
                 return 'nan'
         except TypeError as ex:
             logger.debug('------')
-            logger.exception('[ld2] _toint(c) failed: %r ' % ex)
-            logger.debug('[ld2] c = %r ' % c)
-            logger.debug('[ld2] type(c) = %r ' % type(c))
+            logger.exception('[ld2] _toint(c) failed: %r ', ex)
+            logger.debug('[ld2] c = %r ', c)
+            logger.debug('[ld2] type(c) = %r ', type(c))
             logger.debug('------')
             raise
         return ('%d') % int(c)
@@ -617,7 +616,7 @@ def make_flat_table(hs, cx_list):
     try:
         cx2_roi   = hs.tables.cx2_roi[cx_list]
     except IndexError as ex:
-        logger.debug(ex)
+        logger.debug("%s", ex)
         cx2_roi = np.array([])
     cx2_theta = hs.tables.cx2_theta[cx_list]
     prop_dict = {propkey: [cx2_propval[cx] for cx in iter(cx_list)]
@@ -648,7 +647,7 @@ def make_chip_csv(hs, cx_list):
     try:
         cx2_roi   = hs.tables.cx2_roi[cx_list]
     except IndexError as ex:
-        logger.debug(ex)
+        logger.debug("%s", ex)
         cx2_roi = np.array([])
     cx2_theta = hs.tables.cx2_theta[cx_list]
     prop_dict = {propkey: [cx2_propval[cx] for cx in iter(cx_list)]
@@ -677,7 +676,7 @@ def make_image_csv(hs, gx_list):
     try:
         gx2_aif   = hs.tables.gx2_aif[gx_list]
     except Exception as ex:
-        logger.debug(ex)
+        logger.debug("%s", ex)
         gx2_aif = np.zeros(len(gx2_gid), dtype=np.uint32)
     # Make image_table.csv
     header = '# image table'

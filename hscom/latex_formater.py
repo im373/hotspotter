@@ -22,7 +22,7 @@ def render(text):
     #text = (r'\begin{document}' + '\n' +
             #text + '\n' +
             #r'\end{document}')
-    logger.info(f"Rendering LaTeX text:\n{text}")
+    logger.info("Rendering LaTeX text:\n%s", text)
 
     mpl.rc('text', usetex=True)
     mpl.rc('font', family='serif')

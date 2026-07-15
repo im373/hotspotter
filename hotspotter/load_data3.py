@@ -70,7 +70,7 @@ def detect_version(db_dir):
     Input: db_dir - the directory to the database
     Output:
     '''
-    logger.debug('[ld3] detect_version(%r)' % db_dir)
+    logger.debug('[ld3] detect_version(%r)', db_dir)
     hs_dirs = ds.HotspotterDirs(db_dir)
     # --- Directories ---
     db_dir       = hs_dirs.db_dir
@@ -99,7 +99,7 @@ def detect_version(db_dir):
 
     db_version = 'current'
     isCurrentVersion = all([has_dbdir, has_imgdir, has_chiptbl, has_nametbl, has_imgtbl])
-    logger.debug('[ld3] isCurrentVersion=%r' % isCurrentVersion)
+    logger.debug('[ld3] isCurrentVersion=%r', isCurrentVersion)
 
     if not isCurrentVersion:
         def assign_alternate(tblname, optional=False):
@@ -180,7 +180,7 @@ def detect_version(db_dir):
             'header_csvformat_re': header_csvformat_re,
             'tables_fnames':       (chip_table, name_table, image_table)
         }
-        logger.info('[ld3] has %s database format' % db_version)
+        logger.info('[ld3] has %s database format', db_version)
         return version_info
 
 

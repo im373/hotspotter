@@ -478,7 +478,7 @@ def all_figures_tile(num_rc=None, wh=400, xy_off=(0, 0), wh_off=(0, 0),
 
     if num_rc is None:
         monitor_geometries = get_monitor_geometries()
-        logger.debug(f"monitor_geometries = {monitor_geometries!r}")
+        logger.debug("monitor_geometries = %r", monitor_geometries)
         geom = monitor_geometries[0]
         # Use all of monitor 0
         available_geom = (geom[0], geom[1], geom[2] - stdpxls['os_border_h'], geom[3])
@@ -486,9 +486,9 @@ def all_figures_tile(num_rc=None, wh=400, xy_off=(0, 0), wh_off=(0, 0),
         starty = available_geom[1]
         avail_width = available_geom[2] - available_geom[0]
         avail_height = available_geom[3] - available_geom[1]
-        logger.debug(f"available_geom = {available_geom!r}")
-        logger.debug(f"avail_width = {avail_width!r}")
-        logger.debug(f"avail_height = {avail_height!r}")
+        logger.debug("available_geom = %r", available_geom)
+        logger.debug("avail_width = %r", avail_width)
+        logger.debug("avail_height = %r", avail_height)
 
         nRows = int(avail_height // (effective_h))
         nCols = int(avail_width // (effective_w))
@@ -496,12 +496,12 @@ def all_figures_tile(num_rc=None, wh=400, xy_off=(0, 0), wh_off=(0, 0),
         nRows, nCols = num_rc
 
     logger.debug("Tile all figures")
-    logger.debug(f"wh = {(w, h)!r}")
-    logger.debug(f"xy_offsets = {(x_off, y_off)!r}")
-    logger.debug(f"wh_offsets = {(w_off, h_off)!r}")
-    logger.debug(f"wh_effective = {(effective_w, effective_h)!r}")
-    logger.debug(f"xy_pads = {(x_pad, y_pad)!r}")
-    logger.debug(f"nRows, nCols = {(nRows, nCols)!r}")
+    logger.debug("wh = %r", (w, h))
+    logger.debug("xy_offsets = %r", (x_off, y_off))
+    logger.debug("wh_offsets = %r", (w_off, h_off))
+    logger.debug("wh_effective = %r", (effective_w, effective_h))
+    logger.debug("xy_pads = %r", (x_pad, y_pad))
+    logger.debug("nRows, nCols = %r", (nRows, nCols))
 
     def position_window(ix, win):
         is_qt_mpl = isinstance(win, backend_qt.MainWindow)
@@ -517,8 +517,7 @@ def all_figures_tile(num_rc=None, wh=400, xy_off=(0, 0), wh_off=(0, 0),
             rowx = int(ix // nCols)
         x = startx + colx * (effective_w)
         y = starty + rowx * (effective_h)
-        logger.debug(f"ix={ix!r}) rowx={rowx!r} colx={colx!r}, "
-                     f"x={x!r} y={y!r}, w={w!r}, h={h!r}")
+        logger.debug("ix=%r) rowx=%r colx=%r, " "x=%r y=%r, w=%r, h=%r", ix, rowx, colx, x, y, w, h)
         try:
             #(x, y, w1, h1) = win.getGeometry()
             win.setGeometry(x + x_pad, y + y_pad, w, h)
@@ -669,7 +668,7 @@ def save_figure(fnum=None, fpath=None, usetitle=False, overwrite=True,
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', category=DeprecationWarning)
         if overwrite or not exists(fpath_clean):
-            logger.info(f"save_figure() {fpath_clean!r}")
+            logger.info("save_figure() %r", fpath_clean)
             fig.savefig(fpath_clean, dpi=DPI)
         else:
             logger.info("not overwriting")
@@ -730,7 +729,7 @@ def get_good_logyscale_kwargs(y_data):
     knee_indexes = np.where(nStdDevs > nStdDevs_thresh)[0]
     knee_mag = nStdDevs[knee_indexes]
     knee_points = dy_sortx[knee_indexes]
-    logger.info(f"knee_points = {knee_points!r}")
+    logger.info("knee_points = %r", knee_points)
     # Check to see that we have found a knee
     if len(knee_points) > 0:
         # Use linear scaling up the the knee points and
@@ -969,7 +968,7 @@ def convert_keypress_event_mpl_to_qt(mevent):
     # Grab the key from the mpl.KeyPressEvent
     key = mevent.key
     logger.debug("convert event mpl -> qt")
-    logger.debug(f"key={key!r}")
+    logger.debug("key=%r", key)
     # dicts modified from Matplotlib's Qt backend
     mpl2qtkey = {'control': Qt.Key_Control, 'shift': Qt.Key_Shift,
                  'alt': Qt.Key_Alt, 'super': Qt.Key_Meta,
@@ -1017,18 +1016,18 @@ def convert_keypress_event_mpl_to_qt(mevent):
             key_ = ord(key.upper())  # Qt works with uppercase keys
             text += key.upper()
     except Exception:
-        logger.exception(f"Could not convert key={key!r}")
+        logger.exception("Could not convert key=%r", key)
         raise
     autorep = False  # default false
     count   = 1  # default 1
     text = str(text)  # The text is somewhat arbitrary
     # Create the QEvent
     logger.debug("Create Qt key event")
-    logger.debug(f"type_ = {type_!r}")
-    logger.debug(f"text = {text!r}")
-    logger.debug(f"modifiers = {modifiers!r}")
-    logger.debug(f"autorep = {autorep!r}")
-    logger.debug(f"count = {count!r}")
+    logger.debug("type_ = %r", type_)
+    logger.debug("text = %r", text)
+    logger.debug("modifiers = %r", modifiers)
+    logger.debug("autorep = %r", autorep)
+    logger.debug("count = %r", count)
     qevent = QtGui.QKeyEvent(type_, key_, modifiers, text, autorep, count)
     return qevent
 
@@ -1058,8 +1057,8 @@ def test_build_qkeyevent():
 def on_key_press_event(event):
     'redirects keypress events to main window'
     global QT_WINS
-    logger.debug(f"{event!r}")
-    logger.debug(f"{str(event.__dict__)!r}")
+    logger.debug("%r", event)
+    logger.debug("%r", str(event.__dict__))
     for qtwin in QT_WINS:
         qevent = convert_keypress_event_mpl_to_qt(event)
         app = qtwin.backend.app
@@ -1112,7 +1111,7 @@ def clf():
 
 
 def get_fig(fnum=None):
-    logger.debug(f"get_fig(fnum={fnum!r})")
+    logger.debug("get_fig(fnum=%r)", fnum)
     fig_kwargs = dict(figsize=FIGSIZE, dpi=DPI)
     if plotWidget is not None:
         return gcf()
@@ -1120,7 +1119,7 @@ def get_fig(fnum=None):
         try:
             fig = gcf()
         except Exception as ex:
-            logger.debug(f"get_fig() failed to create default figure: {ex!r}")
+            logger.debug("get_fig() failed to create default figure: %r", ex)
             fig = plt.figure(**fig_kwargs)
         fnum = fig.number
     else:
@@ -1163,7 +1162,7 @@ def figure(fnum=None, docla=False, title=None, pnum=(1, 1, 1), figtitle=None,
         fig.clf()
     # Get the subplot
     if docla or len(axes_list) == 0:
-        logger.debug(f"NEW FIGURE {fnum!r}.{pnum!r}")
+        logger.debug("NEW FIGURE %r.%r", fnum, pnum)
         if not pnum is None:
             #ax = plt.subplot(*pnum)
             ax = fig.add_subplot(*pnum)
@@ -1171,7 +1170,7 @@ def figure(fnum=None, docla=False, title=None, pnum=(1, 1, 1), figtitle=None,
         else:
             ax = gca()
     else:
-        logger.debug(f"OLD FIGURE {fnum!r}.{pnum!r}")
+        logger.debug("OLD FIGURE %r.%r", fnum, pnum)
         if not pnum is None:
             ax = plt.subplot(*pnum)  # fig.add_subplot fails here
             #ax = fig.add_subplot(*pnum)
@@ -1242,7 +1241,7 @@ def estimate_pdf(data, bw_factor):
         data_pdf = scipy.stats.gaussian_kde(data, bw_factor)
         data_pdf.covariance_factor = bw_factor
     except Exception:
-        logger.exception(f"Exception while estimating kernel density; data={data!r}")
+        logger.exception("Exception while estimating kernel density; data=%r", data)
         raise
     return data_pdf
 
@@ -1571,7 +1570,7 @@ def colorbar(scalars, colors):
     COLORBAR_SHRINK = .42  # 1
     COLORBAR_PAD = .01  # 1
     COLORBAR_ASPECT = np.abs(20 * height / (width))  # 1
-    logger.debug(f"COLORBAR_ASPECT = {COLORBAR_ASPECT!r}")
+    logger.debug("COLORBAR_ASPECT = %r", COLORBAR_ASPECT)
 
     cb = plt.colorbar(sm, ax=ax, orientation=orientation, shrink=COLORBAR_SHRINK,
                       pad=COLORBAR_PAD, aspect=COLORBAR_ASPECT)
@@ -1586,8 +1585,8 @@ def colorbar(scalars, colors):
 def draw_lines2(kpts1, kpts2, fm=None, fs=None, kpts2_offset=(0, 0),
                 color_list=None, scale_factor=1, **kwargs):
     logger.debug("draw_lines2()")
-    logger.debug(f"len(fm) = {len(fm)!r}")
-    logger.debug(f"scale_factor = {scale_factor!r}")
+    logger.debug("len(fm) = %r", len(fm))
+    logger.debug("scale_factor = %r", scale_factor)
     if not DISTINCT_COLORS:
         color_list = None
     # input data
@@ -1635,9 +1634,9 @@ def draw_kpts2(kpts, offset=(0, 0), ell=SHOW_ELLS, pts=False, pts_color=ORANGE,
     if not DISTINCT_COLORS:
         color_list = None
     logger.debug("draw_kpts2()")
-    logger.debug(f"ell={ell!r} pts={pts!r}")
-    logger.debug(f"scale_factor={scale_factor!r}")
-    logger.debug(f"offset={offset!r}")
+    logger.debug("ell=%r pts=%r", ell, pts)
+    logger.debug("scale_factor=%r", scale_factor)
+    logger.debug("offset=%r", offset)
     # get matplotlib info
     ax = gca()
     pltTrans = ax.transData
@@ -1647,7 +1646,7 @@ def draw_kpts2(kpts, offset=(0, 0), ell=SHOW_ELLS, pts=False, pts_color=ORANGE,
     kptsT = kpts.T
     x = kptsT[0, :] * scale_factor + offset[0]
     y = kptsT[1, :] * scale_factor + offset[1]
-    logger.debug(f"drawing kpts.shape={kpts.shape!r}")
+    logger.debug("drawing kpts.shape=%r", kpts.shape)
     if rect is None:
         rect = ell
         rect = False
@@ -1760,15 +1759,15 @@ def imshow(img, fnum=None, title=None, figtitle=None, pnum=None,
         logger.exception("imshow TypeError")
         raise
     except Exception as ex:
-        logger.exception(f"imshow failed for image type {type(img)!r}")
+        logger.exception("imshow failed for image type %r", type(img))
         if not isinstance(img, np.ndarray):
             logger.error("imshow received a non-ndarray image")
             pass
             #print('img = %r' % (img,))
         if hasattr(img, 'dtype'):
-            logger.error(f"img.dtype = {img.dtype!r}")
+            logger.error("img.dtype = %r", img.dtype)
         if hasattr(img, 'shape'):
-            logger.error(f"img.shape = {img.shape!r}")
+            logger.error("img.shape = %r", img.shape)
         raise
     #plt.set_cmap('gray')
     ax.set_xticks([])
@@ -1872,7 +1871,7 @@ def show_chipmatch2(rchip1, rchip2, kpts1, kpts2, fm=None, fs=None, title=None,
     '''Draws two chips and the feature matches between them. feature matches
     kpts1 and kpts2 use the (x,y,a,c,d)
     '''
-    logger.debug(f"draw_matches2() fnum={fnum!r}, pnum={pnum!r}")
+    logger.debug("draw_matches2() fnum=%r, pnum=%r", fnum, pnum)
     # get matching keypoints + offset
     (h1, w1) = rchip1.shape[0:2]  # get chip (h, w) dimensions
     (h2, w2) = rchip2.shape[0:2]

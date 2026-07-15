@@ -44,7 +44,7 @@ def _cmd(*args, **kwargs):
             args = [args]
     if sudo is True and sys.platform != 'win32':
         args = ['sudo'] + args
-    logger.info(f"Running command: {args!r}")
+    logger.info("Running command: %r", args)
     PIPE = subprocess.PIPE
     proc = subprocess.Popen(args, stdout=PIPE, stderr=PIPE, shell=False)
     if detatch:
@@ -64,7 +64,7 @@ def _cmd(*args, **kwargs):
         out = '\n'.join(logged_list)
         (out_, err) = proc.communicate()
         if err:
-            logger.warning(f"Command stderr: {err!r}")
+            logger.warning("Command stderr: %r", err)
     else:
         # Surpress output
         (out, err) = proc.communicate()
@@ -74,7 +74,7 @@ def _cmd(*args, **kwargs):
 
 
 def startfile(fpath):
-    logger.info(f"startfile({fpath!r})")
+    logger.info("startfile(%r)", fpath)
     if not exists(fpath):
         raise Exception('Cannot start nonexistant file: %r' % fpath)
     if sys.platform.startswith('linux'):
@@ -92,7 +92,7 @@ def startfile(fpath):
 
 def view_directory(dname=None):
     'view directory'
-    logger.info(f"view_directory({dname!r})")
+    logger.info("view_directory(%r)", dname)
     dname = os.getcwd() if dname is None else dname
     open_prog = {'win32': 'explorer.exe',
                  'linux2': 'nautilus',

@@ -44,10 +44,10 @@ def used_memory():
 
 
 def memstats():
-    logger.info(f"total = {util.byte_str2(total_memory())}")
-    logger.info(f"available = {util.byte_str2(available_memory())}")
-    logger.info(f"used = {util.byte_str2(used_memory())}")
-    logger.info(f"current = {util.byte_str2(current_memory_usage())}")
+    logger.info("total = %s", util.byte_str2(total_memory()))
+    logger.info("available = %s", util.byte_str2(available_memory()))
+    logger.info("used = %s", util.byte_str2(used_memory()))
+    logger.info("current = %s", util.byte_str2(current_memory_usage()))
 
 if __name__ == '__main__':
     memstats()

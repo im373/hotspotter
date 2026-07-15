@@ -57,7 +57,7 @@ class DatabaseStats(object):
         name_info_dict = get_db_names_info(hs)
         rss.stop()
         name_info = name_info_dict['info_str']
-        logger.info(name_info)
+        logger.info("%s", name_info)
 
 KNOWN_BASE_DIRS = [
     'Camera-Traps'
@@ -91,7 +91,7 @@ class DirectoryStats(object):
         self.db_types = []
 
     def build_self(self, root_dir):
-        logger.info('root_dir=%r' % root_dir)
+        logger.info('root_dir=%r', root_dir)
         # Do not build a data or db_dir
         if os.path.split(root_dir)[1] in KNOWN_DATA_DIRS:
             return
@@ -123,7 +123,7 @@ class DirectoryStats(object):
         elif isfile(path):
             self.file_list += [path]
         else:
-            logger.info('path=%r' % path)
+            logger.info('path=%r', path)
             logger.info('path is not addable')
             assert False
 
@@ -142,11 +142,11 @@ class DirectoryStats(object):
 
     def print_nondbdirs(self):
         for dir_ in self.dir_list:
-            logger.info(' * ' + str(dir_))
+            logger.info(" * %s", dir_)
 
     def print_databases(self, indent):
         for db_stats in self.db_stats_list:
-            logger.info(indent + db_stats.name())
+            logger.info("%s%s", indent, db_stats.name())
         pass
 
     def print_db_stats(self):
@@ -161,8 +161,8 @@ def print_database_stats(db_stats):
     if db_stats.version == '(HEAD)':
         db_stats.print_name_info()
     elif 'images' in db_stats.version:
-        logger.info(db_stats.db_dir)
-        logger.info('num images: %d' % helpers.num_images_in_dir(db_stats.db_dir))
+        logger.info("%s", db_stats.db_dir)
+        logger.info('num images: %d', helpers.num_images_in_dir(db_stats.db_dir))
 
 
 #--------------------
@@ -326,7 +326,7 @@ def db_info(hs):
                 size = Image.open(img_fpath).size
                 ret.append(size)
             except Exception as ex:
-                logger.info(repr(ex))
+                logger.info("%r", ex)
                 pass
         return ret
 
@@ -355,7 +355,7 @@ def db_info(hs):
         (' * #Img in dir = %d' % len(img_list)),
         (' * Image Size Stats = %s' % (img_size_stats,)),
         (' * Chip Size Stats = %s' % (chip_size_stats,)), ])
-    logger.info(info_str)
+    logger.info("%s", info_str)
     return locals()
 
 
@@ -376,9 +376,9 @@ def get_keypoint_stats(hs):
     tex_scale_stats = pytex.latex_mystats(r'kpt scale', scales)
     tex_nKpts       = pytex.latex_scalar(r'\# kpts', len(kpts))
     tex_kpts_stats  = pytex.latex_mystats(r'\# kpts/chip', cx2_nFeats)
-    logger.info(tex_nKpts)
-    logger.info(tex_kpts_stats)
-    logger.info(tex_scale_stats)
+    logger.info("%s", tex_nKpts)
+    logger.info("%s", tex_kpts_stats)
+    logger.info("%s", tex_scale_stats)
     np.set_printoptions(**_printopts)
     logger.info('[dbinfo] ---/LaTeX --- ')
     return (tex_nKpts, tex_kpts_stats, tex_scale_stats)

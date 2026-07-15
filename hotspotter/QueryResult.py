@@ -86,8 +86,8 @@ class QueryResult(DynStruct):
     @profile
     def save(res, hs):
         fpath = res.get_fpath(hs)
-        logger.debug('[qr] cache save: %r' % (fpath if params.args.verbose_cache
-                                       else split(fpath)[1],))
+        logger.debug('[qr] cache save: %r', fpath if params.args.verbose_cache
+                                       else split(fpath)[1])
         with open(fpath, 'wb') as file_:
             np.savez(file_, **res.__dict__.copy())
 
@@ -102,7 +102,7 @@ class QueryResult(DynStruct):
                 for _key in npz.files:
                     res.__dict__[_key] = npz[_key]
                 npz.close()
-            logger.debug('[qr] res.load() fpath=%r' % (split(fpath)[1],))
+            logger.debug('[qr] res.load() fpath=%r', split(fpath)[1])
             # These are nonarray items even if they are not lists
             # tolist seems to convert them back to their original
             # python representation
@@ -124,21 +124,21 @@ class QueryResult(DynStruct):
             else:
                 msg = ['[qr] QueryResult(qcx=%d) is corrupted' % (res.qcx)]
                 msg += ['\n%r' % (ex,)]
-                logger.warning(''.join(msg))
+                logger.warning("%s", ''.join(msg))
                 raise Exception(msg)
         except BadZipFile as ex:
-            logger.warning('[qr] Caught other BadZipFile: %r' % ex)
+            logger.warning('[qr] Caught other BadZipFile: %r', ex)
             msg = ['[qr] Attribute Error: QueryResult(qcx=%d) is corrupted' % (res.qcx)]
             msg += ['\n%r' % (ex,)]
-            logger.warning(''.join(msg))
+            logger.warning("%s", ''.join(msg))
             if exists(fpath):
-                logger.warning('[qr] Removing corrupted file: %r' % fpath)
+                logger.warning('[qr] Removing corrupted file: %r', fpath)
                 os.remove(fpath)
                 raise IOError(msg)
             else:
                 raise Exception(msg)
         except Exception as ex:
-            logger.exception('Caught other Exception while loading query result: %r' % ex)
+            logger.exception('Caught other Exception while loading query result: %r', ex)
             raise
         res.qcx = qcx_good
 

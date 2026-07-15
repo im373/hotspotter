@@ -31,7 +31,7 @@ def whiten_features(desc_list):
     offset = 0
     for cx in range(len(desc_list)):
         old_desc = desc_list[cx]
-        logger.debug('[fc2] * ' + util.info(old_desc, 'old_desc'))
+        logger.debug("[fc2] * %s", util.info(old_desc, 'old_desc'))
         offset = len(old_desc)
         new_desc = ax2_desc_white[index:(index + offset)]
         desc_list[cx] = new_desc
@@ -77,7 +77,7 @@ def sequential_feat_load(feat_cfg, feat_fpath_list):
             except IOError:
                 logger.debug('')
                 util.checkpath(feat_path, verbose=True)
-                logger.exception('IOError on feat_path=%r' % feat_path)
+                logger.exception('IOError on feat_path=%r', feat_path)
                 raise
             kpts = npz['arr_0']
             desc = npz['arr_1']
@@ -89,9 +89,9 @@ def sequential_feat_load(feat_cfg, feat_fpath_list):
         logger.debug('[fc2] Finished load of individual kpts and desc')
     except MemoryError:
         logger.exception('[fc2] Out of memory while loading features')
-        logger.error('[fc2] Trying to read: %r' % feat_path)
-        logger.debug('[fc2] len(kpts_list) = %d' % len(kpts_list))
-        logger.debug('[fc2] len(desc_list) = %d' % len(desc_list))
+        logger.error('[fc2] Trying to read: %r', feat_path)
+        logger.debug('[fc2] len(kpts_list) = %d', len(kpts_list))
+        logger.debug('[fc2] len(desc_list) = %d', len(desc_list))
         raise
     if feat_cfg.whiten:
         desc_list = whiten_features(desc_list)
@@ -110,7 +110,7 @@ def _load_features_individualy(hs, cx_list):
     feat_cfg = hs.prefs.feat_cfg
     feat_dir = hs.dirs.feat_dir
     feat_uid = feat_cfg.get_uid()
-    logger.debug('[fc2]  Loading ' + feat_uid + ' individually')
+    logger.debug("[fc2]  Loading %s individually", feat_uid)
     # Build feature paths
     rchip_fpath_list = [hs.cpaths.cx2_rchip_path[cx] for cx in iter(cx_list)]
     cid_list = hs.tables.cx2_cid[cx_list]
@@ -157,7 +157,7 @@ def load_features(hs, cx_list=None, **kwargs):
     # TODO: There needs to be a fast way to ensure that everything is
     # already loaded. Same for cc2.
     logger.debug('=============================')
-    logger.debug('[fc2] Precomputing and loading features: %r' % hs.get_db_name())
+    logger.debug('[fc2] Precomputing and loading features: %r', hs.get_db_name())
     #----------------
     # COMPUTE SETUP
     #----------------
@@ -167,16 +167,16 @@ def load_features(hs, cx_list=None, **kwargs):
     feat_uid = feat_cfg.get_uid()
     if hs.feats.feat_uid != '' and hs.feats.feat_uid != feat_uid:
         logger.info('[fc2] Feature config changed; unloading cached feature information')
-        logger.debug('[fc2] Disagreement: OLD_feat_uid = %r' % hs.feats.feat_uid)
-        logger.debug('[fc2] Disagreement: NEW_feat_uid = %r' % feat_uid)
+        logger.debug('[fc2] Disagreement: OLD_feat_uid = %r', hs.feats.feat_uid)
+        logger.debug('[fc2] Disagreement: NEW_feat_uid = %r', feat_uid)
         hs.unload_all()
         hs.load_chips(cx_list=cx_list)
-    logger.debug('[fc2] feat_uid = %r' % feat_uid)
+    logger.debug('[fc2] feat_uid = %r', feat_uid)
     # Get the list of chip features to load
     cx_list = hs.get_valid_cxs() if cx_list is None else cx_list
     if not np.iterable(cx_list):
         cx_list = [cx_list]
-    logger.debug('[fc2] len(cx_list) = %r' % len(cx_list))
+    logger.debug('[fc2] len(cx_list) = %r', len(cx_list))
     if len(cx_list) == 0:
         return  # HACK
     cx_list = np.array(cx_list)  # HACK
@@ -202,7 +202,7 @@ def clear_feature_cache(hs):
     feat_dir = hs.dirs.feat_dir
     cache_dir = hs.dirs.cache_dir
     feat_uid = feat_cfg.get_uid()
-    logger.info('[fc2] clearing feature cache: %r' % feat_dir)
+    logger.info('[fc2] clearing feature cache: %r', feat_dir)
     util.remove_files_in_dir(feat_dir, '*' + feat_uid + '*', verbose=True, dryrun=False)
     util.remove_files_in_dir(cache_dir, '*' + feat_uid + '*', verbose=True, dryrun=False)
     pass

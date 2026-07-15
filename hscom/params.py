@@ -126,7 +126,7 @@ def db_to_dbdir(db):
         import os
         from . import helpers as util
         logger.warning("!!!!!!!!!!!!!!!!!!!!!")
-        logger.warning(f"db={db!r} not found in work_dir={work_dir!r}")
+        logger.warning("db=%r not found in work_dir=%r", db, work_dir)
         fname_list = os.listdir(work_dir)
         lower_list = [fname.lower() for fname in fname_list]
         index = util.listfind(lower_list, db.lower())
@@ -136,14 +136,14 @@ def db_to_dbdir(db):
                 logger.warning("attempting to fix it")
                 db = fname_list[index]
                 dbdir = join(work_dir, db)
-                logger.warning(f"dbdir={dbdir!r}")
-                logger.warning(f"db={db!r}")
+                logger.warning("dbdir=%r", dbdir)
+                logger.warning("db=%r", db)
         if not exists(dbdir):
             logger.error("Valid DBs:")
-            logger.error('\n'.join(fname_list))
-            logger.error(f"dbdir={dbdir!r}")
-            logger.error(f"db={db!r}")
-            logger.error(f"work_dir={work_dir!r}")
+            logger.error("%s", '\n'.join(fname_list))
+            logger.error("dbdir=%r", dbdir)
+            logger.error("db=%r", db)
+            logger.error("work_dir=%r", work_dir)
 
             raise AssertionError('[params] FATAL ERROR. Cannot load database')
         logger.warning("!!!!!!!!!!!!!!!!!!!!!")

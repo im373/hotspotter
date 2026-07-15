@@ -27,8 +27,8 @@ def DEPRECATED(func):
             f'{caller.filename}:{caller.lineno} in {caller.function}()'
         )
         log = logging.getLogger(func.__module__)
-        log.warning(warn_msg)
-        log.debug(f'Deprecated function source for {func_name}:\n{func_source}')
+        log.warning("%s", warn_msg)
+        log.debug('Deprecated function source for %s:\n%s', func_name, func_source)
         warnings.warn(warn_msg, category=DeprecationWarning, stacklevel=2)
         return func(*args, **kwargs)
 
@@ -53,12 +53,16 @@ def configure_logging(
 
     log_path = log_dir / "hotspotter.log"
 
+
     if quiet:
         console_level = "WARNING"
+        file_level = "INFO"
     elif debug:
         console_level = "DEBUG"
+        file_level = "DEBUG"
     else:
         console_level = "INFO"
+        file_level = "INFO"
 
     config = {
         "version": 1,
@@ -88,7 +92,7 @@ def configure_logging(
 
             "file": {
                 "class": "logging.handlers.RotatingFileHandler",
-                "level": "DEBUG",
+                "level": file_level,
                 "formatter": "standard",
                 "filename": str(log_path),
                 "maxBytes": 5_000_000,

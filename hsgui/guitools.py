@@ -41,7 +41,7 @@ def configure_matplotlib():
     import matplotlib
     mplbackend = matplotlib.get_backend()
     if multiprocessing.current_process().name == 'MainProcess':
-        logger.info(f"Current matplotlib backend is {mplbackend!r}")
+        logger.info("Current matplotlib backend is %r", mplbackend)
         logger.info("Switching matplotlib backend to Qt5Agg")
     else:
         return
@@ -52,7 +52,7 @@ def configure_matplotlib():
         matplotlib.use('Qt5Agg', force=True)
         mplbackend = matplotlib.get_backend()
         if multiprocessing.current_process().name == 'MainProcess':
-            logger.info(f"Current matplotlib backend is {mplbackend!r}")
+            logger.info("Current matplotlib backend is %r", mplbackend)
         #matplotlib.rcParams['toolbar'] = 'None'
         #matplotlib.rcParams['interactive'] = True
 
@@ -76,7 +76,7 @@ def slot_(*types, **kwargs_):  # This is called at wrap time to get args
     def pyqtSlotWrapper(func):
         func_name = func.__name__
         if initdbg:
-            logger.debug(f"Wrapping {func.__name__!r} with slot_")
+            logger.debug("Wrapping %r with slot_", func.__name__)
 
         if rundbg:
             @QtCore.pyqtSlot(*types, name=func.__name__)
@@ -84,10 +84,10 @@ def slot_(*types, **kwargs_):  # This is called at wrap time to get args
                 argstr_list = list(map(str, args))
                 kwastr_list = ['%s=%s' % item for item in kwargs.items()]
                 argstr = ', '.join(argstr_list + kwastr_list)
-                logger.debug(f"Begin slot {func_name}({argstr})")
+                logger.debug("Begin slot %s(%s)", func_name, argstr)
                 #with helpers.Indenter():
                 result = func(self, *args, **kwargs)
-                logger.debug(f"Finished slot {func_name}({argstr})")
+                logger.debug("Finished slot %s(%s)", func_name, argstr)
                 return result
         else:
             @QtCore.pyqtSlot(*types, name=func.__name__)
@@ -117,12 +117,12 @@ def backblocking(func):
             result = func(back, *args, **kwargs)
         except Exception as ex:
             back.front.blockSignals(wasBlocked_)
-            logger.exception(f"Block wrapper caught exception in {func.__name__!r}")
-            logger.debug(f"back = {back!r}")
+            logger.exception("Block wrapper caught exception in %r", func.__name__)
+            logger.debug("back = %r", back)
             VERBOSE = False
             if VERBOSE:
-                logger.debug(f"*args = {args!r}")
-                logger.debug(f"**kwargs = {kwargs!r}")
+                logger.debug("*args = %r", args)
+                logger.debug("**kwargs = %r", kwargs)
             #print('ex = %r' % ex)
             #back.user_info('Error in blocking ex=%r' % ex)
             back.user_info('Error while blocking gui:\nex=%r' % ex)
@@ -146,12 +146,12 @@ def frontblocking(func):
             result = func(front, *args, **kwargs)
         except Exception as ex:
             front.blockSignals(wasBlocked_)
-            logger.exception(f"Block wrapper caught exception in {func.__name__!r}")
-            logger.debug(f"front = {front!r}")
+            logger.exception("Block wrapper caught exception in %r", func.__name__)
+            logger.debug("front = %r", front)
             VERBOSE = False
             if VERBOSE:
-                logger.debug(f"*args = {args!r}")
-                logger.debug(f"**kwargs = {kwargs!r}")
+                logger.debug("*args = %r", args)
+                logger.debug("**kwargs = %r", kwargs)
             #print('ex = %r' % ex)
             front.user_info('Error in blocking ex=%r' % ex)
             raise
@@ -192,16 +192,16 @@ def select_orientation():
         fig.canvas.draw_idle()
         logger.info("Waiting for 2 points from ginput")
         pts = np.asarray(fig.ginput(2))
-        logger.info(f"ginput returned pts={pts!r}")
+        logger.info("ginput returned pts=%r", pts)
         # if len(pts) != 2:
         #     print('[*guitools] orientation selection cancelled: pts=%r' % (pts,))
         #     return None
         refpt = pts[1] - pts[0]
         theta = math.atan2(refpt[1], refpt[0])
-        logger.info(f"Calculated theta={theta!r} refpt={refpt!r}")
+        logger.info("Calculated theta=%r refpt=%r", theta, refpt)
         return theta
     except Exception as ex:
-        logger.exception(f"Annotate Orientation Failed {ex!r}")
+        logger.exception("Annotate Orientation Failed %r", ex)
         return None
     finally:
         if fig is not None:
@@ -223,9 +223,9 @@ def select_roi(initial_roi=None, theta=0):
         oldcbid, oldcbfn = df2.disconnect_callback(fig, 'button_press_event')
         fig.canvas.draw_idle()
         pts = fig.ginput(2)
-        logger.info(f"ginput(2) = {pts!r}")
+        logger.info("ginput(2) = %r", pts)
         if len(pts) != 2:
-            logger.info(f"ROI selection cancelled: pts={pts!r}")
+            logger.info("ROI selection cancelled: pts=%r", pts)
             return None
         [(x1, y1), (x2, y2)] = pts
         xm = min(x1, x2)
@@ -234,10 +234,10 @@ def select_roi(initial_roi=None, theta=0):
         yM = max(y1, y2)
         xywh = list(map(int, list(map(round, (xm, ym, xM - xm, yM - ym)))))
         roi = np.array(xywh, dtype=np.int32)
-        logger.info(f"Selected ROI = {roi!r}")
+        logger.info("Selected ROI = %r", roi)
         return roi
     except Exception as ex:
-        logger.exception(f"ROI selection failed: {ex!r}")
+        logger.exception("ROI selection failed: %r", ex)
         return None
     finally:
         if fig is not None:
@@ -354,7 +354,7 @@ def select_roi_drag(initial_roi, theta=0):
             return
         state['active_corner'] = None
         state['done'] = True
-        logger.info(f"Selected ROI = {state['roi']!r}")
+        logger.info("Selected ROI = %r", state['roi'])
         fig.canvas.stop_event_loop()
 
     try:
@@ -375,7 +375,7 @@ def select_roi_drag(initial_roi, theta=0):
             return None
         return state['roi']
     except Exception as ex:
-        logger.exception(f"ROI drag selection failed: {ex!r}")
+        logger.exception("ROI drag selection failed: %r", ex)
         return None
     finally:
         if fig is not None:
@@ -446,9 +446,9 @@ def user_info(parent, msg, title='info'):
 @profile
 def _user_option(parent, msg, title='options', options=['No', 'Yes'], use_cache=False):
     'Prompts user with several options with ability to save decision'
-    logger.debug(f"User option prompt title={title!r} msg={msg!r}")
+    logger.debug("User option prompt title=%r msg=%r", title, msg)
     # Recall decision
-    logger.debug(f"Asking user: {msg!r} {title!r}")
+    logger.debug("Asking user: %r %r", msg, title)
     cache_id = helpers.hashstr(title + msg)
     if use_cache:
         reply = io.global_cache_read(cache_id, default=None)
@@ -467,9 +467,9 @@ def _user_option(parent, msg, title='options', options=['No', 'Yes'], use_cache=
         reply = options[optx]
     except Exception as ex:
         logger.exception("User option selection failed")
-        logger.debug(f"optx = {optx!r}")
-        logger.debug(f"options = {options!r}")
-        logger.debug(f"ex = {ex!r}")
+        logger.debug("optx = %r", optx)
+        logger.debug("options = %r", options)
+        logger.debug("ex = %r", ex)
         raise
     # Remember decision
     if use_cache and dontPrompt.isChecked():
@@ -493,40 +493,40 @@ def getQtImageNameFilter():
 def select_images(caption='Select images:', directory=None):
     name_filter = getQtImageNameFilter()
     selected = select_files(caption, directory, name_filter)
-    logger.info(f"Selected images = {selected!r}")
+    logger.info("Selected images = %r", selected)
     return selected
 
 
 @profile
 def select_files(caption='Select Files:', directory=None, name_filter=None):
     'Selects one or more files from disk using a qt dialog'
-    logger.info(f"{caption}")
+    logger.info("%s", caption)
     if directory is None:
         directory = io.global_cache_read('select_directory')
     qdlg = QtWidgets.QFileDialog()
     qfile_list = qdlg.getOpenFileNames(caption=caption, directory=directory, filter=name_filter)
-    logger.debug(f"qfile_list = {qfile_list!r}")
+    logger.debug("qfile_list = %r", qfile_list)
     if isinstance(qfile_list, tuple):
         qfile_list = qfile_list[0]
     if isinstance(qfile_list, str):
         file_list = [qfile_list]
     else:
         file_list = [str(fpath) for fpath in qfile_list]
-    logger.info(f"Selected {len(file_list)} files")
+    logger.info("Selected %s files", len(file_list))
     io.global_cache_write('select_directory', directory)
     return file_list
 
 
 @profile
 def select_directory(caption='Select Directory', directory=None):
-    logger.info(f"{caption}")
+    logger.info("%s", caption)
     if directory is None:
         directory = io.global_cache_read('select_directory')
     qdlg = QtWidgets.QFileDialog()
     qopt = QtWidgets.QFileDialog.ShowDirsOnly
     qdlg_kwargs = dict(caption=caption, options=qopt, directory=directory)
     dpath = str(qdlg.getExistingDirectory(**qdlg_kwargs))
-    logger.info(f"Selected directory: {dpath!r}")
+    logger.info("Selected directory: %r", dpath)
     io.global_cache_write('select_directory', split(dpath)[0])
     return dpath
 
@@ -539,7 +539,7 @@ def show_open_db_dlg(parent=None):
         db_dir = io.global_cache_read('db_dir')
         if db_dir == '.':
             db_dir = None
-    logger.debug(f"Cached db_dir={db_dir!r}")
+    logger.debug("Cached db_dir=%r", db_dir)
     if parent is None:
         parent = QtWidgets.QDialog()
     opendb_ui = OpenDatabaseDialog.Ui_Dialog()
@@ -655,7 +655,7 @@ def enfore_scope(qobj, scoped_obj, scope_title='_scope_list'):
 @profile
 def popup_menu(widget, opt2_callback, parent=None):
     def popup_slot(pos):
-        logger.debug(f"Popup menu position: {pos!r}")
+        logger.debug("Popup menu position: %r", pos)
         menu = QtWidgets.QMenu()
         actions = [menu.addAction(opt, func) for opt, func in
                    iter(opt2_callback)]

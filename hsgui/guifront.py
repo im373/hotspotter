@@ -317,7 +317,7 @@ def new_menu_action(front, menu_name, name, text=None, shortcut=None,
     if tooltip is not None:
         action.setToolTip(tooltip)
     if slot_fn is not None:
-        logger.debug(f"Connecting {name}")
+        logger.debug("Connecting %s", name)
         action.triggered.connect(slot_fn)
     return action
 
@@ -361,21 +361,6 @@ def init_ui(front):
     #action3 = menu.addAction("action2")
     #action = menu.exec_(front.ui.gxs_TBL.mapToGlobal(pos))
     #print('action = %r ' % action)
-
-
-def set_tabwidget_text(front, tblname, text):
-    logger.debug(f"Set tab widget text {tblname}={text}")
-    tablename2_tabwidget = {
-        'gxs': front.ui.image_view,
-        'cxs': front.ui.chip_view,
-        'nxs': front.ui.name_view,
-        'res': front.ui.result_view,
-    }
-    ui = front.ui
-    tab_widget = tablename2_tabwidget[tblname]
-    tab_index = ui.tablesTabWidget.indexOf(tab_widget)
-    tab_text = _translate("mainSkel", text)
-    ui.tablesTabWidget.setTabText(tab_index, tab_text)
 
 
 class MainWindowFrontend(QtWidgets.QMainWindow):
@@ -502,7 +487,17 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
         front._populate_table(tblname, tbl, col_fancyheaders, col_editable, row_list, datatup_list)
         
         # Set the tab text to show the number of items listed
-        set_tabwidget_text(front, tblname, f"{fancytab_dict[tblname]} ({len(row_list)})")
+        tablename2_tabwidget = {
+            'gxs': front.ui.image_view,
+            'cxs': front.ui.chip_view,
+            'nxs': front.ui.name_view,
+            'res': front.ui.result_view,
+        }
+        ui = front.ui
+        tab_widget = tablename2_tabwidget[tblname]
+        tab_index = ui.tablesTabWidget.indexOf(tab_widget)
+        tab_text = _translate("mainSkel", f"{fancytab_dict[tblname]} ({len(row_list)})")
+        ui.tablesTabWidget.setTabText(tab_index, tab_text)
 
     def _populate_table(front, tblname, tbl, col_fancyheaders, col_editable, row_list, datatup_list):
         # TODO: for chip table: delete metedata column
@@ -697,7 +692,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
     @clicked
     def img_tbl_clicked(front, item):
         row = item.row()
-        logger.debug(f"img_tbl_clicked({row!r})")
+        logger.debug("img_tbl_clicked(%r)", row)
         sel_gx = front.get_imgtbl_gx(row)
         front.selectGxSignal.emit(sel_gx)
 
@@ -705,7 +700,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
     @clicked
     def chip_tbl_clicked(front, item):
         row, col = (item.row(), item.column())
-        logger.debug(f"chip_tbl_clicked({row!r}, {col!r})")
+        logger.debug("chip_tbl_clicked(%r, %r)", row, col)
         sel_cid = front.get_chiptbl_cid(row)
         front.selectCidSignal.emit(sel_cid)
 
@@ -713,7 +708,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
     @clicked
     def res_tbl_clicked(front, item):
         row, col = (item.row(), item.column())
-        logger.debug(f"res_tbl_clicked({row!r}, {col!r})")
+        logger.debug("res_tbl_clicked(%r, %r)", row, col)
         sel_cid = front.get_restbl_cid(row)
         front.selectResSignal.emit(sel_cid)
 
@@ -721,7 +716,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
     @clicked
     def name_tbl_clicked(front, item):
         row, col = (item.row(), item.column())
-        logger.debug(f"name_tbl_clicked({row!r}, {col!r})")
+        logger.debug("name_tbl_clicked(%r, %r)", row, col)
         sel_name = front.get_nametbl_name(row)
         front.selectNameSignal.emit(sel_name)
 
@@ -732,11 +727,11 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
     @slot_(int)
     def change_view(front, new_state):
         tab_name = str(front.ui.tablesTabWidget.tabText(new_state))
-        logger.debug(f"change_view({new_state!r})")
+        logger.debug("change_view(%r)", new_state)
         prevBlock = front.ui.tablesTabWidget.blockSignals(True)
         front.ui.tablesTabWidget.blockSignals(prevBlock)
         if tab_name.startswith('Query Results Table'):
-            logger.debug(f"Current cache uid: {front.back.hs.get_cache_uid()}")
+            logger.debug("Current cache uid: %s", front.back.hs.get_cache_uid())
 
     @slot_(str, str, list)
     def modal_useroption(front, msg, title, options):

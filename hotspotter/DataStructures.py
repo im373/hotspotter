@@ -111,13 +111,13 @@ class NNIndex(object):
         except MemoryError as ex:
             with util.Indenter2('[mem error]'):
                 logger.exception('Out of memory while building NNIndex')
-                logger.debug('len(cx_list) = %r' % (len(cx_list),))
-                logger.debug('len(cx_list) = %r' % (len(cx_list),))
+                logger.debug('len(cx_list) = %r', len(cx_list))
+                logger.debug('len(cx_list) = %r', len(cx_list))
             raise
         except Exception as ex:
             with util.Indenter2('[unknown error]'):
                 logger.exception('Failed to build NNIndex')
-                logger.debug('cx_list = %r' % (cx_list,))
+                logger.debug('cx_list = %r', cx_list)
             raise
         # Build/Load the flann index
         flann_params = {'algorithm': 'kdtree', 'trees': 4}

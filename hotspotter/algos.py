@@ -92,7 +92,7 @@ def emd(hist1, hist2):
         from cv2 import cv
     except ImportError as ex:
         logger.warning('Cannot import cv. Is opencv 2.4.9?')
-        logger.debug(repr(ex))
+        logger.debug("%r", ex)
         return -1
 
     # Stack weights into the first column
@@ -129,7 +129,7 @@ def xywh_to_tlbr(roi, img_wh):
         img_w = 1
         img_h = 1
         msg = '[cc2.1] Your csv tables have an invalid ROI.'
-        logger.warning(msg)
+        logger.warning("%s", msg)
         #warnings.warn(msg)
         #ht = 1
         #wt = 1
@@ -195,7 +195,7 @@ def tune_flann(data, **kwargs):
     badchar_list = ',{}\': '
     for badchar in badchar_list:
         suffix = suffix.replace(badchar, '')
-    logger.debug(flann_atkwargs)
+    logger.debug("%s", flann_atkwargs)
     tuned_params = flann.build_index(data, **flann_atkwargs)
     helpers.myprint(tuned_params)
     out_file = 'flann_tuned' + suffix
@@ -331,8 +331,8 @@ def plot_clusters(data, datax2_clusterx, clusters, num_pca_dims=3,
     data_x = pca_data[:, 0]
     data_y = pca_data[:, 1]
     colors = np.array(df2.distinct_colors(K))
-    logger.debug(colors)
-    logger.debug(datax2_clusterx)
+    logger.debug("%s", colors)
+    logger.debug("%s", datax2_clusterx)
     data_colors = colors[np.array(datax2_clusterx, dtype=np.int32)]
     clus_x = pca_clusters[:, 0]
     clus_y = pca_clusters[:, 1]
@@ -366,8 +366,7 @@ def force_quit_akmeans(signal, frame):
                               function: %r
                               stacksize: %r
                               line_no: %r
-                              ''') %
-             (frame.f_code.co_name, frame.f_code.co_stacksize, frame.f_lineno))
+                              '''), frame.f_code.co_name, frame.f_code.co_stacksize, frame.f_lineno)
         #exec(df2.present())
         target_frame = frame
         target_frame_coname = '__akmeans_iterate'
@@ -375,11 +374,10 @@ def force_quit_akmeans(signal, frame):
             if target_frame.f_code.co_name == target_frame_coname:
                 break
             if target_frame.f_code.co_name == '<module>':
-                logger.debug('Traced back to module level. Missed frame: %r ' %
-                      target_frame_coname)
+                logger.debug('Traced back to module level. Missed frame: %r ', target_frame_coname)
                 break
             target_frame = target_frame.f_back
-            logger.debug('Is target frame?: ' + target_frame.f_code.co_name)
+            logger.debug("Is target frame?: %s", target_frame.f_code.co_name)
 
         fpath = target_frame.f_back.f_back.f_locals['fpath']
 
@@ -413,13 +411,10 @@ def __akmeans_iterate(data,
     num_clusters = clusters.shape[0]
     # Keep track of how many points have changed in each iteration
     xx2_unchanged = np.zeros(ave_unchanged_iterwin, dtype=np.int32) + len(data)
-    logger.debug('[algos] Running akmeans: data.shape=%r ; num_clusters=%r' %
-          (data.shape, num_clusters))
-    logger.debug('[algos] * max_iters = %r ' % max_iters)
-    logger.debug('[algos] * ave_unchanged_iterwin=%r ; ave_unchanged_thresh=%r' %
-          (ave_unchanged_thresh, ave_unchanged_iterwin))
-    logger.debug('[algos] Printing akmeans info in format:' +
-          'time (iterx, ave(#changed), #unchanged)')
+    logger.debug('[algos] Running akmeans: data.shape=%r ; num_clusters=%r', data.shape, num_clusters)
+    logger.debug('[algos] * max_iters = %r ', max_iters)
+    logger.debug('[algos] * ave_unchanged_iterwin=%r ; ave_unchanged_thresh=%r', ave_unchanged_thresh, ave_unchanged_iterwin)
+    logger.debug("[algos] Printing akmeans info in format:time (iterx, ave(#changed), #unchanged)")
     for xx in range(0, max_iters):
         # 1) Find each datapoints nearest cluster center
         tt = helpers.tic()
@@ -428,7 +423,7 @@ def __akmeans_iterate(data,
         (datax2_clusterx, _dist) = ann_flann_once(clusters, data, 1,
                                                   flann_params)
         ellapsed = helpers.toc(tt)
-        logger.debug('...toc(%.2fs)' % ellapsed)
+        logger.debug('...toc(%.2fs)', ellapsed)
         helpers.flush()
         # 2) Find new cluster datapoints
         datax_sort    = datax2_clusterx.argsort()  # NOQA
@@ -459,7 +454,7 @@ def __akmeans_iterate(data,
         xx2_unchanged[xx % ave_unchanged_iterwin] = num_changed
         ave_unchanged = xx2_unchanged.mean()
         #(iterx, ave(#changed), #unchanged)
-        logger.debug('  (%d, %.2f, %d)\n' % (xx, ave_unchanged, num_changed))
+        logger.debug('  (%d, %.2f, %d)\n', xx, ave_unchanged, num_changed)
         helpers.flush()
         if ave_unchanged < ave_unchanged_thresh:
             break
@@ -467,7 +462,7 @@ def __akmeans_iterate(data,
             datax2_clusterx_old = datax2_clusterx
             if xx % 5 == 0:
                 sys.stdout.flush()
-    logger.debug('[algos]  * AKMEANS: converged in %d/%d iters' % (xx + 1, max_iters))
+    logger.debug('[algos]  * AKMEANS: converged in %d/%d iters', xx + 1, max_iters)
     sys.stdout.flush()
     return (datax2_clusterx, clusters)
 
@@ -526,13 +521,13 @@ def precompute_akmeans(data, num_clusters, max_iters=100,
         # Hack to refine akmeans with a few more iterations
         if '--refine' in sys.argv or '--refine-exit' in sys.argv:
             max_iters_override = helpers.get_arg('--refine', type_=int)
-            logger.info('Overriding max_iters=%r' % max_iters_override)
+            logger.info('Overriding max_iters=%r', max_iters_override)
             if not max_iters_override is None:
                 max_iters = max_iters_override
             datax2_clusterx_old = datax2_clusterx
             logger.debug('[algos] refining:')
-            logger.debug('[algos] ' + '_'.join([clusters_fname, uid]) + '.npy')
-            logger.debug('[algos] ' + '_'.join([datax2cl_fname, uid]) + '.npy')
+            logger.debug("[algos] %s.npy", '_'.join([clusters_fname, uid]))
+            logger.debug("[algos] %s.npy", '_'.join([datax2cl_fname, uid]))
             (datax2_clusterx, clusters) = __akmeans_iterate(
                 data, clusters, datax2_clusterx_old, max_iters, flann_params,
                 0, 10)
@@ -546,7 +541,7 @@ def precompute_akmeans(data, num_clusters, max_iters=100,
     except Exception as ex:
         logger.debug('[algos] pre_akmeans(): ... could not load akmeans.')
         errstr = helpers.indent(repr(ex), '[algos]    ')
-        logger.debug('[algos] pre_akmeans(): ... caught ex:\n %s ' % errstr)
+        logger.debug('[algos] pre_akmeans(): ... caught ex:\n %s ', errstr)
         logger.debug('[algos] pre_akmeans(): printing debug_smart_load')
         logger.debug('---- <DEBUG SMART LOAD>---')
         io.debug_smart_load(cache_dir, clusters_fname)
@@ -555,8 +550,8 @@ def precompute_akmeans(data, num_clusters, max_iters=100,
         #print('[algos] Press Ctrl+C to stop k-means early (and save)')
         #signal.signal(signal.SIGINT, force_quit_akmeans) # set ctrl+c behavior
         logger.debug('[algos] computing:')
-        logger.debug('[algos] ' + '_'.join([clusters_fname, uid]) + '.npy')
-        logger.debug('[algos] ' + '_'.join([datax2cl_fname, uid]) + '.npy')
+        logger.debug("[algos] %s.npy", '_'.join([clusters_fname, uid]))
+        logger.debug("[algos] %s.npy", '_'.join([datax2cl_fname, uid]))
         logger.debug('[algos] pre_akmeans(): calling akmeans')
         (datax2_clusterx, clusters) = akmeans(data, num_clusters, max_iters,
                                               flann_params)
@@ -574,7 +569,7 @@ def precompute_flann(data, cache_dir=None, uid='', flann_params=None,
                      force_recompute=False):
     ''' Tries to load a cached flann index before doing anything'''
     _require_flann()
-    logger.debug('[algos] precompute_flann(%r): ' % uid)
+    logger.debug('[algos] precompute_flann(%r): ', uid)
     cache_dir = '.' if cache_dir is None else cache_dir
     # Generate a unique filename for data and flann parameters
     fparams_uid = helpers.remove_chars(str(list(flann_params.values())), ', \'[]')
@@ -595,11 +590,11 @@ def precompute_flann(data, cache_dir=None, uid='', flann_params=None,
             load_success = True
         except Exception as ex:
             logger.warning('[algos] precompute_flann(): ...cannot load index')
-            logger.debug('[algos] precompute_flann(): ...caught ex=\n%r' % (ex,))
+            logger.debug('[algos] precompute_flann(): ...caught ex=\n%r', ex)
     if not load_success:
         # Rebuild the index otherwise
         with helpers.Timer(msg='compute FLANN', newline=False):
             flann.build_index(data, **flann_params)
-        logger.debug('[algos] precompute_flann(): save_index(%r)' % flann_fname)
+        logger.debug('[algos] precompute_flann(): save_index(%r)', flann_fname)
         flann.save_index(flann_fpath)
     return flann

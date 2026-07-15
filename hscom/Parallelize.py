@@ -23,22 +23,26 @@ printDBG = logger.debug
 
 @profile
 def _calculate(func, args):
-    printDBG(f"* {multiprocessing.current_process().name} calculating...")
+    printDBG("* %s calculating...", multiprocessing.current_process().name)
     result = func(*args)
     #arg_names = func.func_code.co_varnames[:func.func_code.co_argcount]
     #arg_list  = [n+'='+str(v) for n,v in zip(arg_names, args)]
     #arg_str = '\n    *** '+str('\n    *** '.join(arg_list))
-    printDBG(f" * {multiprocessing.current_process().name} finished:\n    ** {func.__name__}")
+    printDBG(
+        " * %s finished:\n    ** %s",
+        multiprocessing.current_process().name,
+        func.__name__,
+    )
     return result
 
 
 @profile
 def _worker(input, output):
-    printDBG(f"START WORKER input={input!r} output={output!r}")
+    printDBG("START WORKER input=%r output=%r", input, output)
     for func, args in iter(input.get, 'STOP'):
-        printDBG(f"worker will calculate {func!r}")
+        printDBG("worker will calculate %r", func)
         result = _calculate(func, args)
-        printDBG(f"worker has calculated {func!r}")
+        printDBG("worker has calculated %r", func)
         output.put(result)
         #printDBG('[parallel] worker put result in queue.')
     #printDBG('[parallel] worker is done input=%r output=%r' % (input, output))
@@ -56,7 +60,7 @@ def parallel_compute(func=None, arg_list=[], num_procs=None, lazy=True, args=Non
                                common_args=common_args, output_dir=output_dir)
     nTasks = len(task_list)
     if nTasks == 0:
-        logger.info(f"No {func.__name__} tasks left to compute")
+        logger.info("No %s tasks left to compute", func.__name__)
         return None
     # Do not execute small tasks in parallel
     if nTasks < num_procs / 2 or nTasks == 1:
@@ -67,14 +71,14 @@ def parallel_compute(func=None, arg_list=[], num_procs=None, lazy=True, args=Non
         ret = parallelize_tasks(task_list, num_procs, task_lbl)
     except Exception as ex:
         sys.stdout.flush()
-        logger.exception(f"Problem while parallelizing task: {ex!r}")
+        logger.exception("Problem while parallelizing task: %r", ex)
         logger.error("task_list:")
         for task in task_list:
-            logger.error(f"  {task!r}")
+            logger.error("  %r", task)
             break
-        logger.error(f"common_args = {common_args!r}")
-        logger.error(f"num_procs = {num_procs!r}")
-        logger.error(f"task_lbl = {task_lbl!r}")
+        logger.error("common_args = %r", common_args)
+        logger.error("num_procs = %r", num_procs)
+        logger.error("task_lbl = %r", task_lbl)
         sys.stdout.flush()
         raise
     return ret
@@ -123,7 +127,7 @@ def make_task_list(func, arg_list, lazy=True, common_args=[], output_dir=None):
         arg_list2 = [append_common(_args) for _args in zip(*arg_list) if not exists(_args[1])]
     task_list = [(func, _args) for _args in iter(arg_list2)]
     nSkip = len(list(zip(*arg_list))) - len(arg_list2)
-    logger.info(f"Already computed {nSkip} {func.__name__} tasks")
+    logger.info("Already computed %s %s tasks", nSkip, func.__name__)
     return task_list
 
 
@@ -181,7 +185,7 @@ def _compute_in_parallel(task_list, num_procs, task_lbl='', verbose=True):
     # start processes
     proc_list = []
     for i in range(num_procs):
-        printDBG(f"creating process {i!r}")
+        printDBG("creating process %r", i)
         proc = multiprocessing.Process(target=_worker, args=(task_queue, done_queue))
         proc.daemon = True
         proc.start()

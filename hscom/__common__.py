@@ -105,19 +105,19 @@ def init(module_name, module_prefix='[???]', DEBUG=None, initmpl=False):
     # Define log_print
     if __DEBUG__:
         def log_print(msg):
-            logger.info(f'{module_prefix}{msg}')
+            logger.info('%s%s', module_prefix, msg)
 
         def log_print_(msg):
-            logger.info(f'{module_prefix}{str(msg).rstrip()}')
+            logger.info('%s%s', module_prefix, str(msg).rstrip())
     else:
         if __AGGROFLUSH__:
             def log_print_(msg):
-                logger.info(f'{str(msg).rstrip()}')
+                logger.info('%s', str(msg).rstrip())
         else:
             def log_print_(msg):
-                logger.info(f'{str(msg).rstrip()}')
+                logger.info('%s', str(msg).rstrip())
         def log_print(msg):
-            logger.info(f'{msg}')
+            logger.info('%s', msg)
 
     def noprint(msg):
         pass
@@ -147,7 +147,7 @@ def init(module_name, module_prefix='[???]', DEBUG=None, initmpl=False):
     # Define a printdebug function
     if DEBUG:
         def printDBG(msg):
-            logger.debug(f'{module_prefix} DEBUG {msg}')
+            logger.debug('%s DEBUG %s', module_prefix, msg)
     else:
         def printDBG(msg):
             pass

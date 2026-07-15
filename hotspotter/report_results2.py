@@ -134,7 +134,7 @@ class OrganizedResult(DynStruct):
 
     def printme3(self):
         for qcx, cx, score, rank in self.iter():
-            logger.info('%4d %4d %6.1f %4d' % (qcx, cx, score, rank))
+            logger.info('%4d %4d %6.1f %4d', qcx, cx, score, rank)
 
 
 def get_false_match_distances(allres):
@@ -268,8 +268,8 @@ def init_score_matrix(allres):
         try:
             res = qcx2_res[qcx]
         except IndexError:
-            logger.info('qcx = %r' % qcx)
-            logger.info('len(qcx2_res) = %r' % len(qcx2_res))
+            logger.info('qcx = %r', qcx)
+            logger.info('len(qcx2_res) = %r', len(qcx2_res))
             raise
         if res is None:
             continue
@@ -502,7 +502,7 @@ def build_rankres_str(allres):
 def __dump_text_report(allres, report_type):
     if not 'report_type' in vars():
         report_type = 'rankres_str'
-    logger.info('[rr2] Dumping textfile: ' + report_type)
+    logger.info("[rr2] Dumping textfile: %s", report_type)
     report_str = allres.__dict__[report_type]
     # Get directories
     result_dir    = allres.hs.dirs.result_dir
@@ -618,7 +618,7 @@ def dump_score_matrixes(allres):
     try:
         allres_viz.plot_score_matrix(allres)
     except Exception as ex:
-        logger.info('[dump_score_matixes] IMPLEMENTME: %r ' % ex)
+        logger.info('[dump_score_matixes] IMPLEMENTME: %r ', ex)
     pass
 
 
@@ -672,7 +672,7 @@ def dump_all_queries2(hs):
     from . import QueryResult as qr
     test_cxs = hs.test_sample_cx
     title_suffix = get_title_suffix(hs)
-    logger.info('[rr2] dumping all %r queries' % len(test_cxs))
+    logger.info('[rr2] dumping all %r queries', len(test_cxs))
     for qcx in test_cxs:
         res = qr.QueryResult(qcx)
         res.load(hs)
@@ -693,8 +693,8 @@ def dump_all_queries2(hs):
         fpath_clean = df2.sanatize_img_fpath(fpath)
         fpath_aug_clean = df2.sanatize_img_fpath(fpath_aug)
         logger.info('----')
-        logger.info(fpath_clean)
-        logger.info(fpath_clean)
+        logger.info("%s", fpath_clean)
+        logger.info("%s", fpath_clean)
         if not exists(fpath_aug_clean):
             viz.plot_cx2(hs, res, 'analysis', subdir=subdir, annotations=False, title_aug=title_aug)
         if not exists(fpath_clean):
@@ -704,7 +704,7 @@ def dump_all_queries2(hs):
 
 def dump_all_queries(allres):
     test_cxs = allres.qcx_list
-    logger.info('[rr2] dumping all %r queries' % len(test_cxs))
+    logger.info('[rr2] dumping all %r queries', len(test_cxs))
     for qcx in test_cxs:
         viz.show_chip(allres, qcx, 'analysis', subdir='allqueries',
                       annotations=False, title_aug=' noanote')
@@ -773,7 +773,7 @@ def dump_feature_pair_analysis(allres):
     cx2_kpts = hs.feats.cx2_kpts
 
     def measure_feat_pairs(allres, orgtype='top_true'):
-        logger.info('Measure ' + orgtype + ' pairs')
+        logger.info("Measure %s pairs", orgtype)
         orgres = allres.__dict__[orgtype]
         entropy_list = []
         scale_list = []
@@ -783,7 +783,7 @@ def dump_feature_pair_analysis(allres):
         rank_skips = []
         gt_skips = []
         for ix, (qcx, cx, score, rank) in enumerate(orgres.iter()):
-            logger.info(fmt_str % (ix + 1,))
+            logger.info(fmt_str, ix + 1)
             # Skip low ranks
             if rank > 5:
                 rank_skips.append(qcx)
@@ -799,7 +799,7 @@ def dump_feature_pair_analysis(allres):
             # Get their scores
             fs = res.cx2_fs[cx]
             # Get matching descriptors
-            logger.debug('\nfm.shape=%r' % (fm.shape,))
+            logger.debug('\nfm.shape=%r', fm.shape)
             desc1 = cx2_desc[qcx][fm[:, 0]]
             desc2 = cx2_desc[cx][fm[:, 1]]
             # Get matching keypoints
@@ -819,9 +819,9 @@ def dump_feature_pair_analysis(allres):
             entropy_list.append(entropy_tup)
             scale_list.append(scale_tup)
             score_list.append(fs)
-        logger.info('Skipped %d total.' % (len(rank_skips) + len(gt_skips),))
-        logger.info('Skipped %d for rank > 5, %d for no gt' % (len(rank_skips), len(gt_skips),))
-        logger.info(np.unique(list(map(len, entropy_list))))
+        logger.info('Skipped %d total.', len(rank_skips) + len(gt_skips))
+        logger.info('Skipped %d for rank > 5, %d for no gt', len(rank_skips), len(gt_skips))
+        logger.info("%s", np.unique(list(map(len, entropy_list))))
 
         def evstack(tup):
             return np.vstack(tup) if len(tup) > 0 else np.empty((0, 2))
@@ -832,7 +832,7 @@ def dump_feature_pair_analysis(allres):
         entropy_pairs = evstack(entropy_list)
         scale_pairs   = evstack(scale_list)
         scores        = ehstack(score_list)
-        logger.info('\n * Measured %d pairs' % len(entropy_pairs))
+        logger.info('\n * Measured %d pairs', len(entropy_pairs))
         return entropy_pairs, scale_pairs, scores
 
     tt_entropy, tt_scale, tt_scores = measure_feat_pairs(allres, 'top_true')
@@ -918,9 +918,9 @@ def report_all(hs, qcx2_res, qcx_list, **kwargs):
     except Exception as ex:
         import traceback
         logger.info('\n\n-----------------')
-        logger.info('report_all(hs, qcx2_res, **kwargs=%r' % (kwargs))
+        logger.info('report_all(hs, qcx2_res, **kwargs=%r', kwargs)
         logger.info('Caught Error in rr2.dump_all')
-        logger.info(repr(ex))
+        logger.info("%r", ex)
         exc_type, exc_value, exc_traceback = sys.exc_info()
         logger.info("*** print_tb:")
         traceback.print_tb(exc_traceback, limit=1, file=sys.stdout)
@@ -952,7 +952,7 @@ def print_result_summaries_list(topnum=5):
     sorted_rankres = []
     for result_fname in iter(result_file_list):
         if fnmatch.fnmatch(result_fname, 'rankres_str*.csv'):
-            logger.info(result_fname)
+            logger.info("%s", result_fname)
             with open(join(hs.dirs.result_dir, result_fname), 'r', encoding='utf-8-sig', errors='surrogateescape') as file:
 
                 metaline = file.readline()
@@ -982,24 +982,24 @@ def print_result_summaries_list(topnum=5):
                     sorted_rankres.append(top5line + metaline)
                 else:
                     sorted_rankres.append(top1line + metaline)
-                logger.info(toprint + '\n')
+                logger.info("%s\n", toprint)
 
     logger.info('\n(>^_^)>\n')
 
     sorted_mapscore = []
     for result_fname in iter(result_file_list):
         if fnmatch.fnmatch(result_fname, 'oxsty_map_csv*.csv'):
-            logger.info(result_fname)
+            logger.info("%s", result_fname)
             with open(join(hs.dirs.result_dir, result_fname), 'r', encoding='utf-8-sig', errors='surrogateescape') as file:
                 metaline = file.readline()
                 scoreline = file.readline()
                 toprint = metaline + scoreline
 
                 sorted_mapscore.append(scoreline + metaline)
-                logger.info(toprint)
+                logger.info("%s", toprint)
 
-    logger.info('\n'.join(sorted(sorted_rankres)))
-    logger.info('\n'.join(sorted(sorted_mapscore)))
+    logger.info("%s", '\n'.join(sorted(sorted_rankres)))
+    logger.info("%s", '\n'.join(sorted(sorted_mapscore)))
 
     logger.info('\n^(^_^)^\n')
 
@@ -1015,8 +1015,8 @@ def _get_orgres2_distances(allres, orgres_list=None):
         try:
             orgres2_distance[orgres] = dist_fn(orgres)
         except Exception as ex:
-            logger.info(ex)
-            logger.info('failed dist orgres=%r' % orgres)
+            logger.info("%s", ex)
+            logger.info('failed dist orgres=%r', orgres)
     return orgres2_distance
 
 
@@ -1026,10 +1026,10 @@ def get_orgres_match_distances(allres, orgtype_='false'):
     qcxs = allres[orgtype_].qcxs
     cxs  = allres[orgtype_].cxs
     match_list = list(zip(qcxs, cxs))
-    logger.debug('[rr2] getting orgtype_=%r distances between sifts' % orgtype_)
+    logger.debug('[rr2] getting orgtype_=%r distances between sifts', orgtype_)
     adesc1, adesc2 = get_matching_descriptors(allres, match_list)
-    logger.debug('[rr2]  * adesc1.shape = %r' % (adesc1.shape,))
-    logger.debug('[rr2]  * adesc2.shape = %r' % (adesc2.shape,))
+    logger.debug('[rr2]  * adesc1.shape = %r', adesc1.shape)
+    logger.debug('[rr2]  * adesc2.shape = %r', adesc2.shape)
     #dist_list = ['L1', 'L2', 'hist_isect', 'emd']
     #dist_list = ['L1', 'L2', 'hist_isect']
     dist_list = ['L2', 'hist_isect']
@@ -1080,7 +1080,7 @@ def load_qcx2_res(hs, qcx_list, nocache=False):
     qcxs_uid  = util.hashstr_arr(qcx_list, lbl='_qcxs')
     qres_uid  = hs_uid + query_uid + qcxs_uid
     cache_dir = join(hs.dirs.cache_dir, 'query_results_bigcache')
-    logger.info('[rr2] load_qcx2_res(): %r' % qres_uid)
+    logger.info('[rr2] load_qcx2_res(): %r', qres_uid)
     io_kwargs = dict(dpath=cache_dir, fname='query_results', uid=qres_uid, ext='.cPkl')
     # Return cache if available
     if not params.args.nocache_query and (not nocache):
@@ -1099,7 +1099,7 @@ def load_qcx2_res(hs, qcx_list, nocache=False):
     qcx_max = max(qcx_list) + 1
     qcx2_res = [hs.query(qcx) if qcx in qcx_set else None for qcx in range(qcx_max)]
     # Save to the cache
-    logger.info('[rr2] Saving query_results to bigcache: %r' % qres_uid)
+    logger.info('[rr2] Saving query_results to bigcache: %r', qres_uid)
     util.ensuredir(cache_dir)
     io.smart_save(qcx2_res, **io_kwargs)
     return qcx2_res

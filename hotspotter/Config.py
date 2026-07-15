@@ -65,7 +65,7 @@ class FilterConfig(ConfigBase):
         filt_cfg._valid_filters = []
         def addfilt(sign, filt, thresh, weight, depends=None):
             'dynamically adds filters'
-            logger.debug('[addfilt] %r %r %r %r' % (sign, filt, thresh, weight))
+            logger.debug('[addfilt] %r %r %r %r', sign, filt, thresh, weight)
             filt_cfg._valid_filters.append(filt)
             filt_cfg[filt + '_thresh'] = thresh
             filt_cfg[filt + '_weight'] = weight

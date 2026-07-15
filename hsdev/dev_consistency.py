@@ -23,11 +23,15 @@ def check_keypoint_consistency(hs):
     bad_cxs = [cx for cx, kpts in enumerate(cx2_kpts) if kpts is None]
     passed = True
     if len(bad_cxs) > 0:
-        print('[dev_consist] cx2_kpts has %d None positions:' % len(bad_cxs))
-        print('[dev_consist] bad_cxs = %r' % bad_cxs)
+        print('[dev_consist] cx2_kpts has %d None positions:', len(bad_cxs))
+        print('[dev_consist] bad_cxs = %r', bad_cxs)
         passed = False
     if len(cx2_kpts) != len(cx2_cid):
-        print('[dev_consist] len(cx2_kpts) != len(cx2_cid): %r != %r' % (len(cx2_kpts), len(cx2_cid)))
+        print(
+            '[dev_consist] len(cx2_kpts) != len(cx2_cid): %r != %r',
+            len(cx2_kpts),
+            len(cx2_cid),
+        )
         passed = False
     if passed:
         print('[dev_consist] cx2_kpts is OK')
@@ -52,7 +56,11 @@ def detect_duplicate_images(hs):
             gx_list = np.array(hs.gname2_gx(gname_list))
             dup_gxs.append(gx_list)
             nDuplicates += len(dup_gxs)
-    print('[dev_consist] There are %d duplicate sets, and %d duplicate images' % (len(dup_gxs), nDuplicates))
+    print(
+        '[dev_consist] There are %d duplicate sets, and %d duplicate images',
+        len(dup_gxs),
+        nDuplicates,
+    )
 
     # Detect which images can be autotrashed
     keep_gxs = []
@@ -66,15 +74,15 @@ def detect_duplicate_images(hs):
         populated_gxs = gx_list[nonzeros]
         nonpopulated_gxs = gx_list[True - nonzeros]
         print('-----')
-        print('[dev_consist] Nonpopulated gxs = %r'  % (nonpopulated_gxs.tolist(),))
-        print('[dev_consist] Populated gxs = %r ' % (populated_gxs.tolist(),))
+        print('[dev_consist] Nonpopulated gxs = %r', nonpopulated_gxs.tolist())
+        print('[dev_consist] Populated gxs = %r ', populated_gxs.tolist())
         if not np.any(nonzeros):
             # There are no chips in these duplicates
             keep = gx_list[0]
             remove = np.setdiff1d(gx_list, [keep])
             keep_gxs.append(keep)
             remove_gxs.append(remove)
-            print('[dev_consist] No chips. Can safely remove: %r' % (gx_list,))
+            print('[dev_consist] No chips. Can safely remove: %r', gx_list)
             continue
         sorted_nCxs_list = nCxs_list[nonzeros]
         # Check to see if we only one image was populated
@@ -102,7 +110,12 @@ def detect_duplicate_images(hs):
             else:
                 conflict_gxs.append(gx_list)
 
-    print('[dev_consist] %d can be kept. %d can be removed. %d conflicting sets' % (len(keep_gxs), len(remove_gxs), len(conflict_gxs),))
+    print(
+        '[dev_consist] %d can be kept. %d can be removed. %d conflicting sets',
+        len(keep_gxs),
+        len(remove_gxs),
+        len(conflict_gxs),
+    )
 
 
 def check_qcx2_res(hs, qcx2_res):
@@ -119,7 +132,7 @@ def check_qcx2_res(hs, qcx2_res):
         res_list = [res for res in qcx2_res if res is not None]
     else:
         msg = ('[consist] UNKNOWN TYPE type(qcx2_res) = %r' % type(qcx2_res))
-        print(msg)
+        print('%s', msg)
         raise AssertionError(msg)
     print('[consist] structure is consistent')
 
@@ -153,7 +166,7 @@ def check_qcx2_res(hs, qcx2_res):
     assert len(np.unique(test_vars['qcx_list'])) == len(test_vars['qcx_list'])
 
     if len(np.unique(test_vars['nMatches'])) < len(test_vars['nMatches']) / 10:
-        print('[consist] nMatches = %r' % (test_vars['nMatches'],))
+        print('[consist] nMatches = %r', test_vars['nMatches'])
 
     print('[consist] passed entropy test')
 
@@ -161,8 +174,8 @@ def check_qcx2_res(hs, qcx2_res):
 def dbg_check_query_result(hs, res, strict=False):
     print('[qr] Debugging result')
     fpath = res.get_fpath(hs)
-    print(res)
-    print('fpath=%r' % fpath)
+    print('%s', res)
+    print('fpath=%r', fpath)
 
     qcx = res.qcx
     chip_str = 'q%s' % hs.cidstr(qcx)
@@ -181,7 +194,7 @@ def dbg_check_query_result(hs, res, strict=False):
     nKpts = len(kpts)
     if fx_maxmin.max() >= nKpts:
         msg = ('DBG ERROR: ' + chip_str + ' nKpts=%d max_kpts=%d' % (nKpts, fx_maxmin.max()))
-        print(msg)
+        print('%s', msg)
         if strict:
             raise AssertionError(msg)
     assert fx_maxmin.min() >= 0
@@ -189,7 +202,7 @@ def dbg_check_query_result(hs, res, strict=False):
 
 def dbg_qreq(qreq):
     print('ERROR in dbg_qreq()')
-    print('[q1] len(qreq._dftup2_index)=%r' % len(qreq._dftup2_index))
-    print('[q1] qreq_dftup2_index._dftup2_index=%r' % len(qreq._dftup2_index))
-    print('[q1] qreq._dftup2_index.keys()=%r' % list(qreq._dftup2_index.keys()))
-    print('[q1] qreq._data_index=%r' % qreq._data_index)
+    print('[q1] len(qreq._dftup2_index)=%r', len(qreq._dftup2_index))
+    print('[q1] qreq_dftup2_index._dftup2_index=%r', len(qreq._dftup2_index))
+    print('[q1] qreq._dftup2_index.keys()=%r', list(qreq._dftup2_index.keys()))
+    print('[q1] qreq._data_index=%r', qreq._data_index)

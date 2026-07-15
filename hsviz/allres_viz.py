@@ -40,7 +40,7 @@ def plot_rank_stem(allres, orgres_type='true'):
 
 
 def plot_rank_histogram(allres, orgres_type):
-    logger.info(f"plotting {orgres_type!r} rank histogram")
+    logger.info("plotting %r rank histogram", orgres_type)
     ranks = allres.__dict__[orgres_type].ranks
     label = 'P(rank | ' + orgres_type + ' match)'
     title = orgres_type + ' match rankings histogram\n' + allres.title_suffix
@@ -53,10 +53,10 @@ def plot_rank_histogram(allres, orgres_type):
 
 
 def plot_score_pdf(allres, orgres_type, colorx=0.0, variation_truncate=False):
-    logger.info(f"plotting {orgres_type} score pdf")
+    logger.info("plotting %s score pdf", orgres_type)
     title  = orgres_type + ' match score frequencies\n' + allres.title_suffix
     scores = allres.__dict__[orgres_type].scores
-    logger.info(f"len(scores) = {len(scores)!r}")
+    logger.info("len(scores) = %r", len(scores))
     label  = 'P(score | %r)' % orgres_type
     df2.figure(fnum=FIGNUM, doclf=True, title=title)
     df2.draw_pdf(scores, label=label, colorx=colorx)
@@ -253,7 +253,7 @@ def show_descriptors_match_distances(orgres2_distance, fnum=1, db_name='', **kwa
 
     for count, orgkey in enumerate(orgtype_list):
         for distkey in disttype_list:
-            logger.debug(f"plotting {(orgkey, distkey)!r}")
+            logger.debug("plotting %r", (orgkey, distkey))
             dists = orgres2_distance[orgkey][distkey]
             df2.figure(fnum=fnum, pnum=pnum_(px))
             color = color_list[px]

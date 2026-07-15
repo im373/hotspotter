@@ -36,10 +36,10 @@ VALID_FLOAT_TYPES = (float,
 DEBUG = False
 
 if DEBUG:
-    def printDBG(msg):
-        logger.debug(f"{msg}")
+    def printDBG(msg, *args):
+        logger.debug(msg, *args)
 else:
-    def printDBG(msg):
+    def printDBG(msg, *args):
         pass
 
 
@@ -89,7 +89,7 @@ def debug_exception(func):
         try:
             return func(*args, **kwargs)
         except Exception as ex:
-            logger.exception(f"ERROR: {func.__name__}({args!r}, {kwargs!r})")
+            logger.exception("ERROR: %s(%r, %r)", func.__name__, args, kwargs)
             raise
     ex_wrapper.__name__ = func.__name__
     return ex_wrapper
@@ -103,23 +103,27 @@ class lru_cache(object):
         cache.__name__ = None
 
     def clear_cache(cache):
-        printDBG(f"clearing {cache.__name__!r} lru_cache")
+        printDBG("clearing %r lru_cache", cache.__name__)
         cache.cache_.clear()
 
     def __call__(cache, func):
         def wrapped(self, *args):  # wrap a class
             try:
                 value = cache.cache_[args]
-                printDBG(f"{func.__name__}({args!r}) ...lrucache hit")
+                printDBG("%s(%r) ...lrucache hit", func.__name__, args)
                 return value
             except KeyError:
-                printDBG(f"{func.__name__}({args!r}) ...lrucache miss")
+                printDBG("%s(%r) ...lrucache miss", func.__name__, args)
 
             value = func(self, *args)
             cache.cache_[args] = value
             return value
         cache.__name__ = func.__name__
-        printDBG(f"wrapping {cache.__name__!r} with max_size={cache.max_size!r} lru_cache")
+        printDBG(
+            "wrapping %r with max_size=%r lru_cache",
+            cache.__name__,
+            cache.max_size,
+        )
         wrapped.__name__ = func.__name__
         wrapped.clear_cache = cache.clear_cache
         return wrapped
@@ -129,8 +133,8 @@ def assert_int(var, lbl='var'):
     try:
         assert is_int(var), 'type(%s)=%r is not int' % (lbl, get_type(var))
     except AssertionError:
-        logger.error(f"{lbl} = {var!r}")
-        logger.error(f"VALID_INT_TYPES: {VALID_INT_TYPES!r}")
+        logger.error("%s = %r", lbl, var)
+        logger.error("VALID_INT_TYPES: %r", VALID_INT_TYPES)
         raise
 
 if sys.platform == 'win32':

@@ -73,11 +73,11 @@ class AbstractPrintable(object):
                     valstr = valstr[0:pos1] + ' \n ~~~ \n ' + valstr[pos2: - 1]
                 attri_list.append((typestr, namestr, valstr))
             except Exception as ex:
-                logger.exception(f"Printable error: {ex!r}")
-                logger.error(f"key = {key!r}")
-                logger.error(f"val = {val!r}")
+                logger.exception("Printable error: %r", ex)
+                logger.error("key = %r", key)
+                logger.error("val = %r", val)
                 try:
-                    logger.error(f"valstr = {valstr!r}")
+                    logger.error("valstr = %r", valstr)
                 except Exception:
                     pass
                 raise
@@ -181,8 +181,8 @@ class DynStruct(AbstractPrintable):
             try:
                 val = getattr(self, key)
             except TypeError as ex:
-                logger.exception(f"TYPE_ERROR: {ex!r}")
-                logger.error(f"key={key!r}")
+                logger.exception("TYPE_ERROR: %r", ex)
+                logger.error("key=%r", key)
                 raise
         return val
 

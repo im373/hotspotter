@@ -27,10 +27,10 @@ def im(img, fnum=0):
 
 
 def resize_img_and_roi(img_fpath, roi_, new_size=None, sqrt_area=400.0):
-    logger.debug('[segm] imread(%r) ' % img_fpath)
+    logger.debug('[segm] imread(%r) ', img_fpath)
     full_img = io.imread(img_fpath)
     (full_h, full_w) = full_img.shape[:2]                 # Image Shape
-    logger.debug('[segm] full_img.shape=%r' % (full_img.shape,))
+    logger.debug('[segm] full_img.shape=%r', full_img.shape)
     (rw_, rh_) = roi_[2:]
     # Ensure that we know the new chip size
     if new_size is None:
@@ -46,9 +46,9 @@ def resize_img_and_roi(img_fpath, roi_, new_size=None, sqrt_area=400.0):
     # Get Scale Factors
     fx = new_size_[0] / rw_
     fy = new_size_[1] / rh_
-    logger.debug('[segm] fx=%r fy=%r' % (fx, fy))
+    logger.debug('[segm] fx=%r fy=%r', fx, fy)
     dsize = (int(round(fx * full_w)), int(round(fy * full_h)))
-    logger.debug('[segm] dsize=%r' % (dsize,))
+    logger.debug('[segm] dsize=%r', dsize)
     # Resize the image
     img_resz = cv2.resize(full_img, dsize, interpolation=cv2.INTER_LANCZOS4)
     # Get new ROI in resized image
@@ -168,7 +168,7 @@ def grabcut(rgb_chip):
 
 def segment(img_fpath, roi_, new_size=None):
     'Runs grabcut'
-    logger.debug('[segm] segment(img_fpath=%r, roi=%r)>' % (img_fpath, roi_))
+    logger.debug('[segm] segment(img_fpath=%r, roi=%r)>', img_fpath, roi_)
     num_iters = 5
     bgd_model = np.zeros((1, 13 * 5), np.float64)
     fgd_model = np.zeros((1, 13 * 5), np.float64)
@@ -179,13 +179,13 @@ def segment(img_fpath, roi_, new_size=None):
     img_resz, roi_resz = resize_img_and_roi(img_fpath, roi_, new_size=new_size)
     # WH Unsafe
     (img_h, img_w) = img_resz.shape[:2]                       # Image Shape
-    logger.debug(' * img_resz.shape=%r' % ((img_h, img_w),))
+    logger.debug(' * img_resz.shape=%r', (img_h, img_w))
     # WH Safe
     tlbr = algos.xywh_to_tlbr(roi_resz, (img_w, img_h))  # Rectangle ROI
     (x1, y1, x2, y2) = tlbr
     rect = tuple(roi_resz)                               # Initialize: rect
-    logger.debug(' * rect=%r' % (rect,))
-    logger.debug(' * tlbr=%r' % (tlbr,))
+    logger.debug(' * rect=%r', rect)
+    logger.debug(' * tlbr=%r', tlbr)
     # WH Unsafe
     _mask = np.zeros((img_h, img_w), dtype=np.uint8)  # Initialize: mask
     _mask[y1:y2, x1:x2] = cv2.GC_PR_FGD             # Set ROI to cv2.GC_PR_FGD

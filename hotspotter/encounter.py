@@ -47,8 +47,8 @@ def compute_encounters(hs, seconds_thresh=15):
     valid_listx = [ix for ix, dt in enumerate(datetime_list) if dt is not None]
     nWithExif = len(valid_listx)
     nWithoutExif = nImgs - nWithExif
-    logger.info('[encounter] %d / %d images with exif data' % (nWithExif, nImgs))
-    logger.info('[encounter] %d / %d images without exif data' % (nWithoutExif, nImgs))
+    logger.info('[encounter] %d / %d images with exif data', nWithExif, nImgs)
+    logger.info('[encounter] %d / %d images without exif data', nWithoutExif, nImgs)
 
     # Convert datetime objects to unixtime scalars
     unixtime_list = [io.exiftime_to_unixtime(datetime_str) for datetime_str in datetime_list]
@@ -66,8 +66,7 @@ def compute_encounters(hs, seconds_thresh=15):
 
     # Print images per encouter statistics
     clusterx2_nGxs = np.array(list(map(len, clusterx2_gxs)))
-    logger.info('[encounter] image per encounter stats:\n %s'
-          % util.pstats(clusterx2_nGxs, True))
+    logger.info('[encounter] image per encounter stats:\n %s', util.pstats(clusterx2_nGxs, True))
 
     # Sort encounters by images per encounter
     ex2_clusterx = clusterx2_nGxs.argsort()
@@ -210,7 +209,7 @@ def viz_chipgraph(hs, graph, fnum=1, with_images=False):
 
 
 def draw_images_at_positions(img_list, pos_list):
-    logger.info('[encounter] drawing %d images' % len(img_list))
+    logger.info('[encounter] drawing %d images', len(img_list))
     # Thumb stack
     ax  = df2.gca()
     fig = df2.gcf()

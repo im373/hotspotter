@@ -30,12 +30,10 @@ PrefNode = DynStruct
 VERY_VERBOSE = False
 
 
-def printDBG(msg):
-    logger.debug(f"{msg}")
-
-def pref_trace(msg):
+def pref_trace(msg, *args):
+    """Log high-volume preference internals only when explicitly requested."""
     if VERY_VERBOSE:
-        logger.debug(f"{msg}")
+        logger.debug(msg, *args)
 
 
 # ---
@@ -86,7 +84,7 @@ def report_thread_error(fn):
             ret = fn(*args, **kwargs)
             return ret
         except Exception as ex:
-            logger.exception(f"Thread raised exception: {ex}")
+            logger.exception("Thread raised exception: %s", ex)
             sys.stdout.flush()
             et, ei, tb = sys.exc_info()
             raise
@@ -180,8 +178,7 @@ class Pref(PrefNode):
         self._intern = PrefInternal(name, doc, default, hidden, fpath, depeq, choices)
         self._tree = PrefTree(parent)
         if default is PrefNode:
-            printDBG('----------')
-            printDBG('new Pref(default=PrefNode)')
+            pref_trace("Created branch preference %r", name)
 
     # -------------------
     # Attribute Setters
@@ -199,7 +196,7 @@ class Pref(PrefNode):
         return choice_obj.get_tuple()
 
     def __overwrite_child_attr(self, name, attr):
-        pref_trace(f"overwrite_attr: {self._intern.name}.{name} = {attr!r}")
+        pref_trace("overwrite_attr: %s.%s = %r", self._intern.name, name, attr)
         # get child node to "overwrite"
         row = self._tree.child_names.index(name)
         child = self._tree.child_list[row]
@@ -227,7 +224,7 @@ class Pref(PrefNode):
         if isinstance(attr, Pref):
             # Child attribute already has a Pref wrapping
 
-            pref_trace(f"new_attr: {self._intern.name}.{name} = {attr.value()!r}")
+            pref_trace("new_attr: %s.%s = %r", self._intern.name, name, attr.value())
             new_childx = len(self._tree.child_names)
             # Children know about parents
             attr._tree.parent = self     # Give child parent
@@ -334,31 +331,32 @@ class Pref(PrefNode):
         'Saves prefs to disk in dict format'
         if self._intern.fpath in ['', None]:
             if self._tree.parent is not None:
-                printDBG('[save] Can my parent save me?')  # ...to disk
+                pref_trace("Delegating save for %s to its parent", self.full_name())
                 return self._tree.parent.save()
-            printDBG('[save] I cannot be saved. I have no parents.')
+            pref_trace("Cannot save %s: no preference file configured", self.full_name())
             return False
         with open(self._intern.fpath, 'wb') as f:
-            logger.info(f"Saving preferences to {self._intern.fpath}")
+            logger.info("Saving preferences to %s", self._intern.fpath)
             pref_dict = self.to_dict()
             pickle.dump(pref_dict, f)
         return True
 
     def load(self):
-        #printDBG('[pref.load()]')
         'Read pref dict stored on disk. Overwriting current values.'
         if not os.path.exists(self._intern.fpath):
             msg = '[pref] fpath=%r does not exist' % (self._intern.fpath)
-            printDBG(msg)
+            pref_trace("%s", msg)
             return msg
         with open(self._intern.fpath, 'rb') as f:
             try:
-                printDBG(f"load: {self._intern.fpath!r}")
+                logger.debug("Loading preferences from %r", self._intern.fpath)
                 pref_dict = pickle.load(f)
             except EOFError as ex:
-                msg = ('[pref] WARN: fpath=%r did not load correctly.' +
-                       'ex=%r' % (self._intern.fpath, ex))
-                printDBG(msg)
+                msg = 'Preference file %r did not load correctly: %r' % (
+                    self._intern.fpath,
+                    ex,
+                )
+                logger.warning("%s", msg)
                 warnings.warn(msg)
                 return False
         if not tools.is_dict(pref_dict):
@@ -403,7 +401,13 @@ class Pref(PrefNode):
 
     def pref_update(self, key, new_val):
         'Changes a prefeters value and saves it to disk'
-        logger.info(f"Update and save pref from: {key}={str(self[key])!r}, to: {key}={str(new_val)!r}")
+        logger.info(
+            "Update and save pref from: %s=%r, to: %s=%r",
+            key,
+            self[key],
+            key,
+            new_val,
+        )
         self.__setattr__(key, new_val)
         return self.save()
 
@@ -430,15 +434,23 @@ class Pref(PrefNode):
         return self._tree.aschildx
 
     def qt_get_child(self, row):
-        if row < 0 or row >= self.qt_row_count():
-            logger.debug(f"Preference child row out of range: row={row}, rows={self.qt_row_count()}")
+        row_count = self.qt_row_count()
+        if row < 0 or row >= row_count:
+            logger.debug(
+                "Preference child row out of range: row=%s, rows=%s",
+                row,
+                row_count,
+            )
             return None
         row_offset = (np.array(self._tree.hidden_children) <= row).sum()
         child_index = row + row_offset
         if child_index < 0 or child_index >= len(self._tree.child_list):
             logger.debug(
                 "Preference child index out of range: "
-                f"row={row}, child_index={child_index}, children={len(self._tree.child_list)}"
+                "row=%s, child_index=%s, children=%s",
+                row,
+                child_index,
+                len(self._tree.child_list),
             )
             return None
         return self._tree.child_list[child_index]
@@ -472,13 +484,13 @@ class Pref(PrefNode):
 
     def qt_set_leaf_data(self, qvar):
         'Sets backend data using Qt editor values'
-        pref_trace(f"qt_set_leaf_data: qvar={qvar!r}")
-        pref_trace(f"qt_set_leaf_data: qvar={str(qvar)}")
-        pref_trace(f"qt_set_leaf_data: qvar={_qt_to_string(qvar)}")
+        pref_trace("qt_set_leaf_data: qvar=%r", qvar)
+        pref_trace("qt_set_leaf_data: qvar=%s", qvar)
+        pref_trace("qt_set_leaf_data: qvar=%s", _qt_to_string(qvar))
 
-        pref_trace(f"qt_set_leaf_data: _intern.name={self._intern.name!r}")
-        pref_trace(f"qt_set_leaf_data: _intern.type_={self._intern.type()!r}")
-        pref_trace(f"qt_set_leaf_data: _intern.value={self._intern.value!r}")
+        pref_trace("qt_set_leaf_data: _intern.name=%r", self._intern.name)
+        pref_trace("qt_set_leaf_data: _intern.type_=%r", self._intern.type())
+        pref_trace("qt_set_leaf_data: _intern.value=%r", self._intern.value)
 
         if self._tree.parent is None:
             raise Exception('[Pref.qtleaf] Cannot set root preference')
@@ -523,11 +535,11 @@ class Pref(PrefNode):
                 elif new_val.upper() == 'FALSE':
                     new_val = False
              # save to disk after modifying data
-            pref_trace(f"qt_set_leaf_data: new_val={new_val!r}")
-            pref_trace(f"qt_set_leaf_data: type(new_val)={type(new_val)!r}")
+            pref_trace("qt_set_leaf_data: new_val=%r", new_val)
+            pref_trace("qt_set_leaf_data: type(new_val)=%r", type(new_val))
             old_val = self.value()
             if old_val == new_val:
-                pref_trace(f"qt_set_leaf_data: unchanged {self._intern.name}={old_val!r}")
+                pref_trace("qt_set_leaf_data: unchanged %s=%r", self._intern.name, old_val)
                 return False
             # TODO Add ability to set a callback function when certain
             # preferences are changed.
@@ -723,9 +735,9 @@ class EditPrefWidget(QtWidgets.QWidget):
     @QtCore.pyqtSlot(Pref, name='populatePrefTreeSlot')
     def populatePrefTreeSlot(self, pref_struct):
         'Populates the Preference Tree Model'
-        printDBG(f"Bulding Preference Model of: {pref_struct!r}")
+        pref_trace("Building preference model for %r", pref_struct)
         #Creates a QStandardItemModel that you can connect to a QTreeView
         self.pref_model = QPreferenceModel(pref_struct)
-        printDBG(f"Built: {self.pref_model!r}")
+        pref_trace("Built preference model %r", self.pref_model)
         self.ui.prefTreeView.setModel(self.pref_model)
         self.ui.prefTreeView.header().resizeSection(0, 250)

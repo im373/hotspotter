@@ -39,7 +39,7 @@ def prep_query_request(qreq=None, query_cfg=None, qcxs=None, dcxs=None, **kwargs
     # Builds or modifies a query request object
     def loggedif(msg, condition):
         # helper function for logging if statment results
-        logger.debug(msg + '... ' + ['no', 'yes'][condition])
+        logger.debug("%s... %s", msg, ['no', 'yes'][condition])
         return condition
     if not loggedif('(1) given qreq?', qreq is not None):
         qreq = ds.QueryRequest()
@@ -79,8 +79,8 @@ def pre_cache_checks(hs, qreq):
     # Load any needed features or chips into memory
     if hs.feats.feat_uid != feat_uid:
         logger.info('[mc3] Feature config changed; unloading query data')
-        logger.debug('[mc3] feat_uid = %r' % feat_uid)
-        logger.debug('[mc3] hs.feats.feat_uid = %r' % hs.feats.feat_uid)
+        logger.debug('[mc3] feat_uid = %r', feat_uid)
+        logger.debug('[mc3] hs.feats.feat_uid = %r', hs.feats.feat_uid)
         hs.unload_cxdata('all')
     return qreq
 
@@ -97,10 +97,10 @@ def pre_exec_checks(hs, qreq):
     dftup_uid = dcxs_uid + feat_uid
     if not dftup_uid in qreq._dftup2_index:
         logger.debug('qreq._dftup2_index[dcxs_uid]... nn_index cache miss')
-        logger.debug('dftup_uid = %r' % (dftup_uid,))
-        logger.debug('len(qreq._dftup2_index) = %r' % len(qreq._dftup2_index))
-        logger.debug('type(qreq._dftup2_index) = %r' % type(qreq._dftup2_index))
-        logger.debug('qreq = %r' % qreq)
+        logger.debug('dftup_uid = %r', dftup_uid)
+        logger.debug('len(qreq._dftup2_index) = %r', len(qreq._dftup2_index))
+        logger.debug('type(qreq._dftup2_index) = %r', type(qreq._dftup2_index))
+        logger.debug('qreq = %r', qreq)
         cx_list = np.unique(np.hstack((qreq._dcxs, qreq._qcxs)))
         hs.refresh_features(cx_list)
         # Compute the FLANN Index

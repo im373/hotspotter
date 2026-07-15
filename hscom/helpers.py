@@ -54,11 +54,11 @@ def _message_from_args(args):
 
 def print(*args, **kwargs):
     """Legacy module-local print shim, now routed through logging."""
-    logger.debug(f"{_message_from_args(args)}")
+    logger.debug("%s", _message_from_args(args))
 
 @DEPRECATED
 def print_(msg=''):
-    logger.debug(f"{str(msg).rstrip()}")
+    logger.debug("%s", str(msg).rstrip())
 
 @DEPRECATED
 def print_on():
@@ -70,7 +70,7 @@ def print_off():
 
 @DEPRECATED
 def printDBG(msg):
-    logger.debug(f"{msg}")
+    logger.debug("%s", msg)
 
 # --- Globals ---
 
@@ -446,10 +446,10 @@ def simple_progres_func(verbosity, msg, progchar='.'):
         pass
 
     def mark_progress1(*args):
-        logger.debug(progchar)
+        logger.debug("%s", progchar)
 
     def mark_progress2(*args):
-        logger.debug(msg % args)
+        logger.debug(msg, *args)
 
     if verbosity == 0:
         mark_progress = mark_progress0
@@ -468,7 +468,7 @@ def progress_func(max_val=0, lbl='Progress: ', mark_after=-1,
     parameter. Progress is logged at DEBUG level so normal GUI runs stay quiet.'''
 
     def log_progress(message):
-        logger.debug(message)
+        logger.debug("%s", message)
 
     # Tell the user we are about to make progress
     if progress_type in ['simple', 'fmtstr'] and max_val < mark_after:
@@ -1254,7 +1254,7 @@ def toc(tt):
     (msg, start_time) = tt
     ellapsed = (time.time() - start_time)
     if not msg is None:
-        logger.debug(f"...toc({ellapsed:.4f}s, {str(msg)!r})")
+        logger.debug("...toc(%.4fs, %r)", ellapsed, str(msg))
     return ellapsed
 
 
@@ -1315,10 +1315,10 @@ class Indenter2(object):
         self.lbl = lbl
 
     def start(self):
-        logger.debug(f"Entering indented context {self.lbl}")
+        logger.debug("Entering indented context %s", self.lbl)
 
     def stop(self):
-        logger.debug(f"Leaving indented context {self.lbl}")
+        logger.debug("Leaving indented context %s", self.lbl)
 
     def __enter__(self):
         self.start()
@@ -1674,7 +1674,7 @@ def print_list(list):
 
 def printWARN(warn_msg, category=UserWarning):
     warn_msg = 'Probably not a big issue, but you should know...: ' + warn_msg
-    logger.warning(warn_msg)
+    logger.warning("%s", warn_msg)
     warnings.warn(warn_msg, category=category)
     return warn_msg
 

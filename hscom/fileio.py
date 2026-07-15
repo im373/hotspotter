@@ -121,11 +121,11 @@ ext2_save_func = {
 
 def debug_smart_load(dpath='', fname='*', uid='*', ext='*'):
     pattern = fname + uid + ext
-    logger.debug(f"debug_smart_load(): dpath={dpath!r}")
+    logger.debug("debug_smart_load(): dpath=%r", dpath)
     for fname_ in os.listdir(dpath):
         if fnmatch.fnmatch(fname_, pattern):
             #fpath = join(dpath, fname_)
-            logger.debug(f"{fname_}")
+            logger.debug("%s", fname_)
 
 
 # --- Smart Load/Save ---
@@ -160,7 +160,7 @@ def smart_save(data, dpath='', fname='', uid='', ext='', verbose=VERBOSE_IO):
     if verbose:
         if verbose > 1:
             logger.info("")
-        logger.info(f"{smart_fname_info('smart_save', dpath, fname, uid, ext)}")
+        logger.info("%s", smart_fname_info('smart_save', dpath, fname, uid, ext))
     ret = __smart_save(data, fpath, verbose)
     if verbose > 1:
         logger.info("")
@@ -174,7 +174,7 @@ def smart_load(dpath='', fname='', uid='', ext='', verbose=VERBOSE_IO, **kwargs)
     if verbose:
         if verbose > 1:
             logger.info("")
-        logger.info(f"{smart_fname_info('smart_load', dpath, fname, uid, ext)}")
+        logger.info("%s", smart_fname_info('smart_load', dpath, fname, uid, ext))
     data = __smart_load(fpath, verbose, **kwargs)
     if verbose > 1:
         logger.info("")
@@ -188,13 +188,13 @@ def __smart_save(data, fpath, verbose):
     fname_noext, ext_ = os.path.splitext(fname)
     save_func = ext2_save_func[ext_]
     if verbose > 1:
-        logger.info(f"saving: {type(data)!r}")
+        logger.info("saving: %r", type(data))
     try:
         save_func(fpath, data)
         if verbose > 1:
-            logger.info(f"saved {filesize_str(fpath)}")
+            logger.info("saved %s", filesize_str(fpath))
     except Exception as ex:
-        logger.exception(f"Exception while saving {fpath!r}")
+        logger.exception("Exception while saving %r", fpath)
         raise
 
 
@@ -206,7 +206,7 @@ def __smart_load(fpath, verbose, allow_alternative=False, can_fail=True, **kwarg
     fname_noext, ext_ = os.path.splitext(fname)
     # If exact path doesnt exist
     if not exists(fpath):
-        logger.warning(f"fname={fname!r} does not exist")
+        logger.warning("fname=%r does not exist", fname)
         if allow_alternative:
             # allows alternative extension
             convert_alternative(fpath, verbose, can_fail=can_fail, **kwargs)
@@ -218,19 +218,19 @@ def __smart_load(fpath, verbose, allow_alternative=False, can_fail=True, **kwarg
         # Do actual data loading
         try:
             if verbose > 1:
-                logger.info(f"loading {filesize_str(fpath)}")
+                logger.info("loading %s", filesize_str(fpath))
             data = load_func(fpath)
             if verbose:
                 logger.info("loaded data")
         except Exception as ex:
             if verbose:
-                logger.exception(f"Exception while loading {fpath!r}")
+                logger.exception("Exception while loading %r", fpath)
             data = None
             if not can_fail:
                 raise
     if data is None:
         if verbose:
-            logger.warning(f"did not load {fpath!r}")
+            logger.warning("did not load %r", fpath)
     return data
 #----
 
@@ -244,7 +244,7 @@ def convert_alternative(fpath, verbose, can_fail):
     if len(alternatives) == 0:
         fail_msg = '[io] ...no alternatives to %r' % fname
         if verbose:
-            logger.warning(f"{fail_msg}")
+            logger.warning("%s", fail_msg)
         if can_fail:
             return None
         else:
@@ -253,7 +253,7 @@ def convert_alternative(fpath, verbose, can_fail):
         #load and convert alternative
         alt_fpath = alternatives[0]
         if verbose > 1:
-            logger.info(f"converting {alt_fpath!r}")
+            logger.info("converting %r", alt_fpath)
         data = __smart_load(alt_fpath, verbose, allow_alternative=False)
         __smart_save(data, fpath, verbose)
         return data
@@ -273,9 +273,9 @@ def find_alternatives(fpath, verbose):
             alternatives.append(alt_fpath)
     if verbose > 1:
         # Print num alternatives / filesizes
-        logger.info(f"Found {len(alternatives)} alternate(s)")
+        logger.info("Found %s alternate(s)", len(alternatives))
         for alt_fpath in iter(alternatives):
-            logger.info(f"{filesize_str(alt_fpath)}")
+            logger.info("%s", filesize_str(alt_fpath))
     return alternatives
 
 
@@ -313,7 +313,7 @@ def exiftime_to_unixtime(datetime_str):
                 return -1
             if datetime_str == '0000:00:00 00:00:00':
                 return -1
-        logger.exception(f"Could not parse EXIF datetime {datetime_str!r} of type {type(datetime_str)!r}")
+        logger.exception("Could not parse EXIF datetime %r of type %r", datetime_str, type(datetime_str))
         raise
 
 
@@ -328,7 +328,7 @@ def check_exif_keys(pil_image):
             valid_keys.append((key, exif_keyval))
         except KeyError:
             invalid_keys.append(key)
-    logger.info(f"valid_keys = {valid_keys!r}")
+    logger.info("valid_keys = %r", valid_keys)
     #import draw_func2 as df2
     #exec(df2.present())
 
@@ -372,7 +372,7 @@ def read_exif(fpath, tag=None):
             return 'No EXIF Data'
     except IOError as ex:
         from . import argparse2
-        logger.exception(f"Caught IOError reading EXIF from {fpath!r}")
+        logger.exception("Caught IOError reading EXIF from %r", fpath)
         print_image_checks(fpath)
         if argparse2.ARGS_.strict:
             raise
@@ -390,9 +390,9 @@ def print_image_checks(img_fpath):
     hasimg = helpers.checkpath(img_fpath, verbose=True)
     if hasimg:
         _tup = (img_fpath, filesize_str(img_fpath))
-        logger.warning(f"Image {_tup[0]!r} ({_tup[1]}) exists. Is it corrupted?")
+        logger.warning("Image %r (%s) exists. Is it corrupted?", _tup[0], _tup[1])
     else:
-        logger.warning(f"Image {img_fpath!r} does not exist")
+        logger.warning("Image %r does not exist", img_fpath)
     return hasimg
 
 
@@ -441,7 +441,7 @@ def imread(img_fpath, mode=None):
                 return cv2.cvtColor(imgBGR, cv2.COLOR_BGR2HSV)
         return imgBGR
     except Exception as ex:
-        logger.exception(f"ERROR reading image {img_fpath!r}")
+        logger.exception("ERROR reading image %r", img_fpath)
         raise
 
 

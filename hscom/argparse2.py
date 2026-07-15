@@ -262,9 +262,9 @@ def fix_args_with_cache(args):
         if args.dbdir in ['.', '', ' ']:
             args.dbdir = None
         elif not exists(args.dbdir):
-            logger.warning(f"Cached db_dir does not exist: {args.dbdir!r}")
+            logger.warning("Cached db_dir does not exist: %r", args.dbdir)
             args.dbdir = None
-        logger.debug(f"Trying to read db_dir from cache: {args.dbdir!r}")
+        logger.debug("Trying to read db_dir from cache: %r", args.dbdir)
     # --db has priority over --dbdir
     args = fix_args_shortnames(args)
     ARGS_ = args
@@ -290,8 +290,8 @@ def parse_arguments(defaultdb=None, **kwargs):
     args, unknown = parser2.parser.parse_known_args()
     #args, unknown = parser.parse_args()
     if DEBUG:
-        logger.debug(f"args={args!r}")
-        logger.debug(f"unknown={unknown!r}")
+        logger.debug("args=%r", args)
+        logger.debug("unknown=%r", unknown)
     if args.db == 'DEFAULT' and args.dbdir is None:
         args.db = defaultdb
     args.__dict__.update(**kwargs)
@@ -310,4 +310,4 @@ if __name__ == '__main__':
     logger.info("====================")
     logger.info("__main__ == argparse2.py")
     args = parse_arguments()
-    logger.info(f"{args}")
+    logger.info("%s", args)

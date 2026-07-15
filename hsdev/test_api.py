@@ -66,7 +66,7 @@ def main(defaultdb='cache', preload=False, app=None):
     if setcfg is not None:
         # FIXME move experiment harness to hsdev
         from . import experiment_harness
-        logger.info(f"Setting cfg to {setcfg!r}")
+        logger.info("Setting cfg to %r", setcfg)
         varied_list = experiment_harness.get_varied_params_list([setcfg])
         cfg_dict = varied_list[0]
         hs.prefs.query_cfg.update_cfg(**cfg_dict)
@@ -79,7 +79,7 @@ def main(defaultdb='cache', preload=False, app=None):
         db_dir = hs.dirs.db_dir
         io.global_cache_write('db_dir', db_dir)
     except ValueError as ex:
-        logger.exception(f"Failed to load HotSpotter data: {ex!r}")
+        logger.exception("Failed to load HotSpotter data: %r", ex)
         if params.args.strict:
             raise
     if app is not None:
@@ -113,7 +113,7 @@ def get_valid_cid(hs, num=0):
             raise IndexError('THERE ARE NO TEST_CIDS IN THIS DATABASE')
         cid = test_cids[num % len(test_cids)]
     except IndexError as ex:
-        logger.exception(f"Index Error: {ex}")
+        logger.exception("Index Error: %s", ex)
         raise
     return cid
 
@@ -171,27 +171,27 @@ def get_qcx_list(hs):
         logger.debug("No query cases selected")
         qcx_all = get_cases(hs, with_hard=True, with_gt=False, with_nogt=False)
     else:
-        logger.debug(f"Chosen qcid={params.args.qcid!r}")
+        logger.debug("Chosen qcid=%r", params.args.qcid)
         qcx_all =  util.ensure_iterable(hs.cid2_cx(params.args.qcid))
     # Filter only the ones you want from the large pool
     if histids is None:
         qcx_list = qcx_all
     else:
         histids = util.ensure_iterable(histids)
-        logger.debug(f"Chosen histids={histids!r}")
+        logger.debug("Chosen histids=%r", histids)
         qcx_list = [qcx_list[id_] for id_ in histids]
 
     if len(qcx_list) == 0:
         msg = '[tapi.get_qcxs] no qcx_list history'
-        logger.warning(msg)
+        logger.warning("%s", msg)
         import sys
         if '--vstrict' in sys.argv:  # if params.args.vstrict:
             raise Exception(msg)
-        logger.debug(f"valid_cxs={valid_cxs!r}")
+        logger.debug("valid_cxs=%r", valid_cxs)
         qcx_list = valid_cxs[0:1]
-    logger.debug(f"len(qcx_list) = {len(qcx_list)}")
+    logger.debug("len(qcx_list) = %s", len(qcx_list))
     qcx_list = util.unique_keep_order(qcx_list)
-    logger.debug(f"qcx_list = {qcx_list!r}")
+    logger.debug("qcx_list = %r", qcx_list)
     return qcx_list
 
 

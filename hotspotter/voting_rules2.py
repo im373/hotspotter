@@ -187,7 +187,7 @@ def _filter_utilities(qfx2_utilities, max_alts=200):
     tnx2_freq = np.bincount(tnxs - tnxs_min)
     nAlts = (tnx2_freq > 0).sum()
     nRemove = max(0, nAlts - max_alts)
-    logger.info(' * removing %r/%r alternatives' % (nRemove, nAlts))
+    logger.info(' * removing %r/%r alternatives', nRemove, nAlts)
     if nRemove > 0:  # remove least frequent names
         most_freq_tnxs = tnx2_freq.argsort()[::-1] + tnxs_min
         keep_tnxs = set(most_freq_tnxs[0:max_alts].tolist())

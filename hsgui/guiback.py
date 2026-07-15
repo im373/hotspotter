@@ -65,7 +65,7 @@ def _strict_mode():
 
 
 def _report_backend_exception(back, title, message, ex):
-    logger.exception(f"{title}: {message}")
+    logger.exception("%s: %s", title, message)
     back.user_info('%s\n\n%s: %s' % (message, type(ex).__name__, ex),
                    title=title)
     if _strict_mode():
@@ -103,14 +103,14 @@ def _user_select_new_dbdir(back):
         msg_put = 'Where should I put %r?' % new_db
         opt_put = ['Choose Directory', 'My Work Dir']
         reply = back.user_option(msg_put, 'options', opt_put, True)
-        logger.debug(f"New database location reply={reply!r}")
+        logger.debug("New database location reply=%r", reply)
         if reply == opt_put[1]:
             put_dir = back.get_work_directory()
-            logger.debug(f"Using work directory {put_dir!r}")
+            logger.debug("Using work directory %r", put_dir)
         elif reply == opt_put[0]:
             put_dir = guitools.select_directory(
                 'Select where to put the new database')
-            logger.debug(f"Selected new database parent directory {put_dir!r}")
+            logger.debug("Selected new database parent directory %r", put_dir)
         else:
             raise StopIteration('Canceled')
 
@@ -311,7 +311,7 @@ class MainWindowBackend(QtCore.QObject):
                 cx = back.hs.cid2_cx(cid)
                 return cx
             except IndexError as ex:
-                logger.exception(f"Invalid chip id {cid!r}")
+                logger.exception("Invalid chip id %r", cid)
                 msg = 'Query qcid=%d does not exist / is invalid' % cid
                 raise AssertionError(msg)
         if back.selection is None:
@@ -355,7 +355,7 @@ class MainWindowBackend(QtCore.QObject):
     @profile
     def _populate_table(back, tblname, extra_cols={},
                         index_list=None, prefix_cols=[]):
-        logger.debug(f"Populating table {tblname!r}")
+        logger.debug("Populating table %r", tblname)
         headers = back.table_headers[tblname]
         editable = back.table_editable[tblname]
         if tblname == 'cxs':  # in ['cxs', 'res']: TODO props in restable
@@ -426,7 +426,7 @@ class MainWindowBackend(QtCore.QObject):
     def append_header(back, tblname, header, editable=False):
         try:
             pos = back.table_headers[tblname].index(header)
-            logger.debug(f"{tblname}_TBL already has header={header!r} at pos={pos}")
+            logger.debug("%s_TBL already has header=%r at pos=%s", tblname, header, pos)
         except ValueError:
             back.table_headers[tblname].append(header)
 
@@ -534,7 +534,7 @@ class MainWindowBackend(QtCore.QObject):
 
     @slot_(str)
     def backend_print(back, msg):
-        logger.info(f"{msg}")
+        logger.info("%s", msg)
 
     @slot_()
     def clear_selection(back, **kwargs):
@@ -561,7 +561,7 @@ class MainWindowBackend(QtCore.QObject):
         # variable type by its value and it will get stuck on things like
         # 'True'. Is that a string or a bool? I don't know. We should tell it.)
         key, val = list(map(str, (key, val)))
-        logger.info(f"Changing chip property cid={cid!r} key={key!r} val={val!r}")
+        logger.info("Changing chip property cid=%r key=%r val=%r", cid, key, val)
         cx = back.hs.cid2_cx(cid)
         if key in ['name', 'matching_name']:
             back.hs.change_name(cx, val)
@@ -574,7 +574,7 @@ class MainWindowBackend(QtCore.QObject):
     @profile
     def alias_name(back, nx, key, val):
         key, val = list(map(str, (key, val)))
-        logger.info(f"Aliasing name nx={nx!r} key={key!r} val={val!r}")
+        logger.info("Aliasing name nx=%r key=%r val=%r", nx, key, val)
         if key in ['name']:
             # TODO: Add option to change name if alias fails
             back.hs.alias_name(nx, val)
@@ -585,7 +585,7 @@ class MainWindowBackend(QtCore.QObject):
     def change_image_property(back, gx, key, val):
         # Table Edit -> Change Image Property
         key, val = str(key), bool(val)
-        logger.info(f"Changing image property gx={gx!r} key={key!r} val={val!r}")
+        logger.info("Changing image property gx=%r key=%r val=%r", gx, key, val)
         if key in ['aif']:
             back.hs.change_aif(gx, val)
         back.populate_image_table()
@@ -601,7 +601,7 @@ class MainWindowBackend(QtCore.QObject):
         if new_dbdir is None:
             new_dbdir = back.user_select_new_dbdir()
         if new_dbdir is not None:
-            logger.info(f"Creating new database directory {new_dbdir!r}")
+            logger.info("Creating new database directory %r", new_dbdir)
             util.ensurepath(new_dbdir)
             back.open_database(new_dbdir)
         else:
@@ -618,7 +618,7 @@ class MainWindowBackend(QtCore.QObject):
             if db_dir is None:
                 msg = 'Select (or create) a database directory.'
                 db_dir = guitools.select_directory(msg)
-            logger.info(f"User selected database {db_dir}")
+            logger.info("User selected database %s", db_dir)
             if not db_dir:
                 return
             # Try and load db
@@ -658,7 +658,7 @@ class MainWindowBackend(QtCore.QObject):
         # File -> Import Images From Directory
         msg = 'Select directory with images in it'
         img_dpath = guitools.select_directory(msg)
-        logger.info(f"Selected image directory {img_dpath!r}")
+        logger.info("Selected image directory %r", img_dpath)
         fpath_list = util.list_images(img_dpath, fullpath=True)
         back.hs.add_images(fpath_list)
         back.populate_image_table()
@@ -680,7 +680,7 @@ class MainWindowBackend(QtCore.QObject):
         back.hs.add_property(newprop)
         back.populate_chip_table()
         back.populate_result_table()
-        logger.info(f"Added chip property {newprop!r}")
+        logger.info("Added chip property %r", newprop)
 
     @slot_()
     @blocking
@@ -714,9 +714,9 @@ class MainWindowBackend(QtCore.QObject):
         # Action -> Query
 
         with util.Indent('[back.prequery]'):
-            logger.info(f"Query requested cid={cid!r} kwargs={kwargs!r}")
+            logger.info("Query requested cid=%r kwargs=%r", cid, kwargs)
             cx = back.get_selected_cx(cid)
-            logger.debug(f"Resolved query cx={cx!r}")
+            logger.debug("Resolved query cx=%r", cx)
             if cx is None:
                 back.user_info('Cannot query. No chip selected')
                 return
@@ -770,7 +770,7 @@ class MainWindowBackend(QtCore.QObject):
         back.hs.save_database()
         back.populate_tables()
         back.select_gx(gx, cx, **kwargs)
-        logger.info(f"Reselected ROI={roi!r}")
+        logger.info("Reselected ROI=%r", roi)
 
     @slot_()
     @blocking
@@ -793,7 +793,7 @@ class MainWindowBackend(QtCore.QObject):
         back.hs.save_database()
         back.populate_tables()
         back.select_gx(gx, cx, **kwargs)
-        logger.info(f"Reselected theta={theta!r}")
+        logger.info("Reselected theta=%r", theta)
 
     @slot_()
     @blocking
@@ -809,7 +809,7 @@ class MainWindowBackend(QtCore.QObject):
         back.hs.delete_chip(cx)
         back.populate_tables()
         back.select_gx(gx)
-        logger.info(f"Deleted chip cx={cx!r}")
+        logger.info("Deleted chip cx=%r", cx)
 
     @slot_()
     @blocking
@@ -823,7 +823,7 @@ class MainWindowBackend(QtCore.QObject):
         back.clear_selection()
         back.hs.delete_image(gx)
         back.populate_tables()
-        logger.info(f"Deleted image gx={gx!r}")
+        logger.info("Deleted image gx=%r", gx)
 
     @slot_()
     @blocking
@@ -917,7 +917,7 @@ class MainWindowBackend(QtCore.QObject):
         epw = back.edit_prefs
         epw.ui.defaultPrefsBUT.clicked.connect(back.default_preferences)
         query_uid = ''.join(back.hs.prefs.query_cfg.get_uid())
-        logger.debug(f"query_uid = {query_uid}")
+        logger.debug("query_uid = %s", query_uid)
 
     #--------------------------------------------------------------------------
     # Help menu slots

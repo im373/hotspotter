@@ -110,7 +110,7 @@ def nearest_neighbors(hs, qcxs, qreq):
     Knorm  = nn_cfg.Knorm
     checks = nn_cfg.checks
     uid_   = nn_cfg.get_uid()
-    logger.debug('[mf] Step 1) Assign nearest neighbors: ' + uid_)
+    logger.debug("[mf] Step 1) Assign nearest neighbors: %s", uid_)
     # Grab descriptors
     cx2_desc = hs.feats.cx2_desc
     # NNIndex
@@ -140,8 +140,7 @@ def nearest_neighbors(hs, qcxs, qreq):
         nNN += qfx2_dx.size
         nDesc += len(qfx2_desc)
     end_progress()
-    logger.debug('[mf] * assigned %d desc from %d chips to %r nearest neighbors' %
-          (nDesc, len(qcxs), nNN))
+    logger.debug('[mf] * assigned %d desc from %d chips to %r nearest neighbors', nDesc, len(qcxs), nNN)
     return qcx2_nns
 
 
@@ -153,7 +152,7 @@ def nearest_neighbors(hs, qcxs, qreq):
 @profile
 def weight_neighbors(hs, qcx2_nns, qreq):
     filt_cfg = qreq.cfg.filt_cfg
-    logger.debug('[mf] Step 2) Weight neighbors: ' + filt_cfg.get_uid())
+    logger.debug("[mf] Step 2) Weight neighbors: %s", filt_cfg.get_uid())
     if not filt_cfg.filt_on:
         return  {}
     nnfilter_list = filt_cfg.get_active_filters()
@@ -196,7 +195,7 @@ def filter_neighbors(hs, qcx2_nns, filt2_weights, qreq):
         # Get a numeric score score and valid flag for each feature match
         qfx2_score, qfx2_valid = _apply_filter_scores(qcx, qfx2_nn, filt2_weights, filt_cfg)
         qfx2_cx = dx2_cx[qfx2_nn]
-        logger.debug('[mf] * %d assignments are invalid by thresh' % ((~qfx2_valid).sum()))
+        logger.debug('[mf] * %d assignments are invalid by thresh', (~qfx2_valid).sum())
         # Remove Impossible Votes:
         # dont vote for yourself or another chip in the same image
         qfx2_notsamechip = qfx2_cx != qcx
@@ -205,8 +204,8 @@ def filter_neighbors(hs, qcx2_nns, filt2_weights, qreq):
             ####DBG
             nChip_all_invalid = ((~qfx2_notsamechip)).sum()
             nChip_new_invalid = (qfx2_valid & (~qfx2_notsamechip)).sum()
-            logger.debug('[mf] * %d assignments are invalid by self' % nChip_all_invalid)
-            logger.debug('[mf] * %d are newly invalided by self' % nChip_new_invalid)
+            logger.debug('[mf] * %d assignments are invalid by self', nChip_all_invalid)
+            logger.debug('[mf] * %d are newly invalided by self', nChip_new_invalid)
             ####
             qfx2_valid = np.logical_and(qfx2_valid, qfx2_notsamechip)
         if cant_match_sameimg:
@@ -214,8 +213,8 @@ def filter_neighbors(hs, qcx2_nns, filt2_weights, qreq):
             ####DBG
             nImg_all_invalid = ((~qfx2_notsameimg)).sum()
             nImg_new_invalid = (qfx2_valid & (~qfx2_notsameimg)).sum()
-            logger.debug('[mf] * %d assignments are invalid by gx' % nImg_all_invalid)
-            logger.debug('[mf] * %d are newly invalided by gx' % nImg_new_invalid)
+            logger.debug('[mf] * %d assignments are invalid by gx', nImg_all_invalid)
+            logger.debug('[mf] * %d are newly invalided by gx', nImg_new_invalid)
             ####
             qfx2_valid = np.logical_and(qfx2_valid, qfx2_notsameimg)
         if cant_match_samename:
@@ -223,11 +222,11 @@ def filter_neighbors(hs, qcx2_nns, filt2_weights, qreq):
             ####DBG
             nName_all_invalid = ((~qfx2_notsamename)).sum()
             nName_new_invalid = (qfx2_valid & (~qfx2_notsamename)).sum()
-            logger.debug('[mf] * %d assignments are invalid by nx' % nName_all_invalid)
-            logger.debug('[mf] * %d are newly invalided by nx' % nName_new_invalid)
+            logger.debug('[mf] * %d assignments are invalid by nx', nName_all_invalid)
+            logger.debug('[mf] * %d are newly invalided by nx', nName_new_invalid)
             ####
             qfx2_valid = np.logical_and(qfx2_valid, qfx2_notsamename)
-        logger.debug('[mf] * Marking %d assignments as invalid' % ((~qfx2_valid).sum()))
+        logger.debug('[mf] * Marking %d assignments as invalid', (~qfx2_valid).sum())
         qcx2_nnfilter[qcx] = (qfx2_score, qfx2_valid)
     end_progress()
     return qcx2_nnfilter
@@ -262,7 +261,7 @@ def build_chipmatches(hs, qcx2_nns, qcx2_nnfilt, qreq):
     K = qreq.cfg.nn_cfg.K
     query_type = qreq.cfg.agg_cfg.query_type
     is_vsone = query_type == 'vsone'
-    logger.debug('[mf] Step 4) Building chipmatches %s' % (query_type,))
+    logger.debug('[mf] Step 4) Building chipmatches %s', query_type)
     # Data Index
     dx2_cx = qreq._data_index.ax2_cx
     dx2_fx = qreq._data_index.ax2_fx
@@ -327,7 +326,7 @@ def spatial_verification(hs, qcx2_chipmatch, qreq):
     if not sv_cfg.sv_on or sv_cfg.xy_thresh is None:
         logger.debug('[mf] Step 5) Spatial verification: off')
         return qcx2_chipmatch
-    logger.debug('[mf] Step 5) Spatial verification: ' + sv_cfg.get_uid())
+    logger.debug("[mf] Step 5) Spatial verification: %s", sv_cfg.get_uid())
     prescore_method = sv_cfg.prescore_method
     nShortlist      = sv_cfg.nShortlist
     xy_thresh       = sv_cfg.xy_thresh
