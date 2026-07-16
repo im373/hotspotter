@@ -14,7 +14,9 @@ from PyQt5 import QtGui
 from PyQt5 import QtWidgets
 
 # HotSpotter
+from ._frontend.ChipPropertyDialog import ChipPropertyDialog
 from ._frontend.CleanNameTableDialog import CleanNameTableDialog
+from ._frontend.DeleteChipPropertyDialog import DeleteChipPropertyDialog
 from ._frontend.MainSkel import Ui_mainSkel
 from ._frontend.TableFilterDialog import TableFilterDialog
 from . import guitools
@@ -572,13 +574,22 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
     @slot_()
     @blocking
     def new_prop(front):
-        newprop = guitools.user_input(
-            front,
-            'What is the new property name?',
-            title='New Chip Property',
-        )
-        if newprop:
-            front.backend.new_prop(newprop)
+        definition = None
+        while True:
+            dialog = ChipPropertyDialog(definition, front)
+            if dialog.exec_() != QtWidgets.QDialog.Accepted:
+                return
+            definition = dialog.definition()
+            try:
+                front.backend.new_prop(definition)
+            except (KeyError, TypeError, ValueError) as ex:
+                QtWidgets.QMessageBox.warning(
+                    front,
+                    'Invalid Chip Property',
+                    str(ex),
+                )
+                continue
+            return
 
     @slot_()
     @blocking
@@ -747,6 +758,11 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
         ui.res_TBL.itemChanged.connect(front.res_tbl_changed)
         ui.nxs_TBL.itemClicked.connect(front.name_tbl_clicked)
         ui.nxs_TBL.itemChanged.connect(front.name_tbl_changed)
+        chip_header = ui.cxs_TBL.horizontalHeader()
+        chip_header.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        chip_header.customContextMenuRequested.connect(
+            front.chip_header_context_requested
+        )
         # Tab Widget
         ui.tablesTabWidget.currentChanged.connect(front.change_view)
         ui.cxs_TBL.sortByColumn(0, QtCore.Qt.AscendingOrder)
@@ -895,32 +911,10 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
             front.backend.clean_name_table()
 
     def _populate_table(front, tblname, tbl, col_headers, col_editable, row_list, datatup_list):
-        # TODO: for chip table: delete metedata column
-        # RCOS TODO:
-        # I have a small right-click context menu working
-        # Maybe one of you can put some useful functions in these?
-        # RCOS TODO: How do we get the clicked item on a right click?
-        # RCOS TODO:
+        # TODO:
         # The data tables should not use the item model
         # Instead they should use the more efficient and powerful QAbstractItemModel / QAbstractTreeModel
-        def set_header_context_menu(hheader):
-            hheader.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
-            opt2_callback = [
-                ('header', lambda: logger.debug("finishme")),
-                ('cancel', lambda: logger.debug("cancel")), ]
-            popup_slot = guitools.popup_menu(tbl, opt2_callback)
-            hheader.customContextMenuRequested.connect(popup_slot)
-
-        def set_table_context_menu(tbl):
-            tbl.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
-            opt2_callback = [
-                ('Query', front.querySignal.emit), ]
-            popup_slot = guitools.popup_menu(tbl, opt2_callback)
-            tbl.customContextMenuRequested.connect(popup_slot)
-
         hheader = tbl.horizontalHeader()
-        #set_header_context_menu(hheader)
-        #set_table_context_menu(tbl)
 
         sort_col = hheader.sortIndicatorSection()
         sort_ord = hheader.sortIndicatorOrder()
@@ -1002,6 +996,56 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
                 return tbl.item(row, col).text()
         raise KeyError('Table has no column %r' % (column_key,))
 
+    @slot_(QtCore.QPoint)
+    def chip_header_context_requested(front, pos):
+        """Open property actions for a user-defined chip-table column."""
+        header = front.ui.cxs_TBL.horizontalHeader()
+        col = header.logicalIndexAt(pos)
+        if col < 0:
+            return
+        column_key = front.table_column_key(front.ui.cxs_TBL, col)
+        definition = front.backend.get_chip_property_definition(column_key)
+        if definition is None:
+            return
+        menu = QtWidgets.QMenu(front)
+        edit_action = menu.addAction('Edit Property...')
+        delete_action = menu.addAction('Delete Property...')
+        selected = menu.exec_(header.mapToGlobal(pos))
+        if selected is edit_action:
+            front.edit_chip_property(column_key, definition)
+        elif selected is delete_action:
+            front.confirm_delete_chip_property(column_key)
+
+    def edit_chip_property(front, column_key, definition=None):
+        definition = (
+            definition
+            or front.backend.get_chip_property_definition(column_key)
+        )
+        while definition is not None:
+            dialog = ChipPropertyDialog(definition, front)
+            if dialog.exec_() != QtWidgets.QDialog.Accepted:
+                return
+            updated_definition = dialog.definition()
+            try:
+                front.backend.update_chip_property_definition(
+                    column_key,
+                    updated_definition,
+                )
+            except (KeyError, TypeError, ValueError) as ex:
+                QtWidgets.QMessageBox.warning(
+                    front,
+                    'Invalid Chip Property',
+                    str(ex),
+                )
+                definition = updated_definition
+                continue
+            return
+
+    def confirm_delete_chip_property(front, column_key):
+        dialog = DeleteChipPropertyDialog(column_key, front)
+        if dialog.exec_() == QtWidgets.QDialog.Accepted:
+            front.backend.delete_chip_property(column_key)
+
     #=======================
     # Table Changed Functions
     #=======================
@@ -1022,8 +1066,14 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
         row, col = (item.row(), item.column())
         tbl = front.ui.cxs_TBL
         sel_cid = int(front.table_value(tbl, row, 'cid'))
-        new_val = csv_sanatize(item.text())   # sanatize for csv
         column_key = front.table_column_key(tbl, col)
+        definition = front.backend.get_chip_property_definition(column_key)
+        if definition is not None and definition['datatype'] == 'bool':
+            new_val = (
+                'true' if item.checkState() == QtCore.Qt.Checked else 'false'
+            )
+        else:
+            new_val = csv_sanatize(item.text())
         front.changeCidSignal.emit(sel_cid, column_key, new_val)
 
     @slot_(QtWidgets.QTableWidgetItem)

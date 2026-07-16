@@ -31,6 +31,7 @@ from hscom.Preferences import Pref
 from . import DataStructures as ds
 from . import Config
 from . import chip_compute2 as cc2
+from . import chip_properties
 from . import feature_compute2 as fc2
 from . import load_data2 as ld2
 from . import match_chips3 as mc3
@@ -651,7 +652,13 @@ class HotSpotter(DynStruct):
 
     @profile
     def change_property(hs, cx, key, val):
-        hs.tables.prop_dict[key][cx] = val
+        definition = hs.get_property_definition(key)
+        if definition is None:
+            raise KeyError('Unknown chip property %r' % key)
+        hs.tables.prop_dict[key][cx] = chip_properties.coerce_property_value(
+            val,
+            definition['datatype'],
+        )
 
     @profile
     def change_aif(hs, gx, val):
@@ -671,12 +678,86 @@ class HotSpotter(DynStruct):
     # Adding functions
     # ---------------
     @profile
-    def add_property(hs, key):
-        if not isinstance(key, str):
-            raise ValueError('[hs] New property %r is a %r, not a string.' % (key, type(key)))
-        if key in hs.tables.prop_dict:
-            raise UserWarning('[hs] WARNING: Property add an already existing property')
-        hs.tables.prop_dict[key] = ['' for _ in range(hs.get_num_chips())]
+    def get_property_definition(hs, key):
+        if key not in hs.tables.prop_dict:
+            return None
+        if not hasattr(hs.tables, 'prop_metadata'):
+            hs.tables.prop_metadata = {}
+        definition = hs.tables.prop_metadata.get(key)
+        if definition is None:
+            definition = chip_properties.normalize_property_definition()
+            hs.tables.prop_metadata[key] = definition
+        return dict(definition)
+
+    def get_property_definitions(hs):
+        return {
+            key: hs.get_property_definition(key)
+            for key in hs.tables.prop_dict
+        }
+
+    @profile
+    def add_property(hs, key, datatype='str', importance=0):
+        key = chip_properties.validate_property_name(
+            key,
+            hs.tables.prop_dict.keys(),
+        )
+        definition = chip_properties.normalize_property_definition(
+            datatype,
+            importance,
+        )
+        default = chip_properties.default_property_value(
+            definition['datatype']
+        )
+        hs.tables.prop_dict[key] = [
+            default for _ in range(hs.get_num_chips())
+        ]
+        if not hasattr(hs.tables, 'prop_metadata'):
+            hs.tables.prop_metadata = {}
+        hs.tables.prop_metadata[key] = definition
+        return key
+
+    @profile
+    def update_property_definition(hs, key, new_key, datatype, importance):
+        if key not in hs.tables.prop_dict:
+            raise KeyError('Unknown chip property %r' % key)
+        new_key = chip_properties.validate_property_name(
+            new_key,
+            hs.tables.prop_dict.keys(),
+            original_name=key,
+        )
+        definition = chip_properties.normalize_property_definition(
+            datatype,
+            importance,
+        )
+        converted_values = [
+            chip_properties.coerce_property_value(
+                value,
+                definition['datatype'],
+            )
+            for value in hs.tables.prop_dict[key]
+        ]
+        old_definitions = hs.get_property_definitions()
+        hs.tables.prop_dict = {
+            (new_key if old_key == key else old_key): (
+                converted_values if old_key == key else values
+            )
+            for old_key, values in hs.tables.prop_dict.items()
+        }
+        hs.tables.prop_metadata = {
+            (new_key if old_key == key else old_key): (
+                definition if old_key == key else old_definitions[old_key]
+            )
+            for old_key in old_definitions
+        }
+        return new_key
+
+    @profile
+    def delete_property(hs, key):
+        if key not in hs.tables.prop_dict:
+            raise KeyError('Unknown chip property %r' % key)
+        del hs.tables.prop_dict[key]
+        if hasattr(hs.tables, 'prop_metadata'):
+            hs.tables.prop_metadata.pop(key, None)
 
     @profile
     def add_name(hs, name):
@@ -737,7 +818,16 @@ class HotSpotter(DynStruct):
         hs.tables.cx2_theta = np.concatenate((hs.tables.cx2_theta, [theta]))
         prop_dict = hs.tables.prop_dict
         for key in prop_dict.keys():
-            prop_dict[key].append(props.get(key, ''))
+            definition = hs.get_property_definition(key)
+            default = chip_properties.default_property_value(
+                definition['datatype']
+            )
+            prop_dict[key].append(
+                chip_properties.coerce_property_value(
+                    props.get(key, default),
+                    definition['datatype'],
+                )
+            )
         #hs.num_cx += 1
         cx = len(hs.tables.cx2_cid) - 1
         if dochecks:

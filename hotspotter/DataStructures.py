@@ -157,7 +157,8 @@ class HotspotterTables(DynStruct):
              gx2_gname=[], gx2_aif=[],
              nx2_name=['____', '____'],
              cx2_cid=[], cx2_nx=[], cx2_gx=[],
-             cx2_roi=[], cx2_theta=[], prop_dict={}, cx2_size=[]):
+             cx2_roi=[], cx2_theta=[], prop_dict={}, cx2_size=[],
+             prop_metadata={}):
         #----
         # Image Info
         #----
@@ -185,6 +186,7 @@ class HotspotterTables(DynStruct):
         # algorithm.
         #self.cx2_size     = np.array(cx2_size, dtype=np.int32)
         self.prop_dict    = prop_dict
+        self.prop_metadata = dict(prop_metadata or {})
 
 
 # ___CLASS HOTSPOTTER DIRS________

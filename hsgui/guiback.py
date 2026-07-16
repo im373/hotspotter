@@ -584,17 +584,19 @@ class MainWindowBackend(QtCore.QObject):
     @profile
     def change_chip_property(back, cid, key, val):
         # Table Edit -> Change Chip Property
-        # RCOS TODO: These function should take the type of the variable as an
-        # arugment as well. (Guifront tries to automatically interpret the
-        # variable type by its value and it will get stuck on things like
-        # 'True'. Is that a string or a bool? I don't know. We should tell it.)
         key, val = list(map(str, (key, val)))
         logger.info("Changing chip property cid=%r key=%r val=%r", cid, key, val)
         cx = back.hs.cid2_cx(cid)
         if key in ['name', 'matching_name']:
             back.hs.change_name(cx, val)
         else:
-            back.hs.change_property(cx, key, val)
+            try:
+                back.hs.change_property(cx, key, val)
+            except ValueError as ex:
+                back.operationFailedSignal.emit(
+                    'Invalid Chip Property Value',
+                    str(ex),
+                )
         back.populate_tables(image=False)
 
     @slot_(int, str, str)
@@ -695,17 +697,50 @@ class MainWindowBackend(QtCore.QObject):
     # Action menu slots
     #--------------------------------------------------------------------------
 
-    @slot_()
-    @blocking
-    def new_prop(back, newprop=None):
+    def get_chip_property_definition(back, key):
+        definition = back.hs.get_property_definition(str(key))
+        if definition is None:
+            return None
+        definition['name'] = str(key)
+        return definition
+
+    def new_prop(back, definition=None):
         # Action -> New Chip Property
-        if not newprop:
-            logger.info("Aborted property creation because no name was supplied")
+        if not definition:
+            logger.info("Aborted property creation because no definition was supplied")
             return
-        back.hs.add_property(newprop)
+        newprop = back.hs.add_property(
+            definition.get('name', ''),
+            definition.get('datatype', 'str'),
+            definition.get('importance', 0),
+        )
         back.populate_chip_table()
         back.populate_result_table()
         logger.info("Added chip property %r", newprop)
+
+    def update_chip_property_definition(back, key, definition):
+        key = str(key)
+        new_key = back.hs.update_property_definition(
+            key,
+            definition.get('name', ''),
+            definition.get('datatype', 'str'),
+            definition.get('importance', 0),
+        )
+        chip_filters = back.table_filters.get('cxs', {})
+        if key != new_key and key in chip_filters:
+            chip_filters[new_key] = chip_filters.pop(key)
+        back.populate_chip_table()
+        back.populate_result_table()
+        logger.info("Updated chip property %r as %r", key, new_key)
+        return new_key
+
+    def delete_chip_property(back, key):
+        key = str(key)
+        back.hs.delete_property(key)
+        back.table_filters.get('cxs', {}).pop(key, None)
+        back.populate_chip_table()
+        back.populate_result_table()
+        logger.info("Deleted chip property %r", key)
 
     @slot_()
     @blocking

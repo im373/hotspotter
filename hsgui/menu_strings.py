@@ -75,7 +75,7 @@ MENU_TOOLTIP = {
 
     # Actions menu
     'add_chip': QT_TRANSLATE_NOOP('HotSpotterMenus', 'When adding a chip, you select an ROI in Image View. The ROI defines a new chip and it is added (but not saved) to the database.'),
-    'new_chip_property': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Creates a new column in the chip table for user properties.'),
+    'new_chip_property': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Creates a typed user column in the chip table with an importance level.'),
     'query': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Issues the currently selected chip as a query. The result table is then populated.'),
     'reselect_roi': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Changes the ROI of a chip. Previously associated results and chip data are removed and recomputed.'),
     'reselect_ori': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Changes the orientation of a chip. Previously associated results and chip data are removed and recomputed.'),

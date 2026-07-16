@@ -14,6 +14,7 @@ from hscom.dev_utils import make_reloader
 logger = logging.getLogger(__name__)
 rrr = make_reloader(__name__, '[ld2]')
 # Standard
+import json
 from os.path import join, exists, splitext
 import os
 import re
@@ -24,6 +25,7 @@ import numpy as np
 from PIL import Image
 # Hotspotter
 from . import DataStructures as ds
+from . import chip_properties
 from hscom import helpers
 from hscom import helpers as util
 from hscom import tools
@@ -36,6 +38,7 @@ VERBOSE_LOAD_DATA = True
 CHIP_TABLE_FNAME = 'chip_table.csv'
 NAME_TABLE_FNAME = 'name_table.csv'
 IMAGE_TABLE_FNAME = 'image_table.csv'
+CHIP_PROPERTY_METADATA_FNAME = 'chip_property_metadata.json'
 
 # TODO: Allow alternative internal directories
 RDIR_INTERNAL_ALTS = ['.hs_internals']
@@ -54,6 +57,81 @@ RDIR_RESULTS  = join(RDIR_COMPUTED, 'results')
 RDIR_QRES     = join(RDIR_COMPUTED, 'query_results')
 
 UNKNOWN_NAME = '____'
+
+
+def load_chip_property_metadata(internal_dir, prop_dict):
+    """Load typed property definitions without changing the chip CSV format."""
+    metadata_fpath = join(internal_dir, CHIP_PROPERTY_METADATA_FNAME)
+    saved_definitions = {}
+    if exists(metadata_fpath):
+        try:
+            payload = json.loads(helpers.read_text(metadata_fpath))
+            if not isinstance(payload, dict):
+                raise ValueError('metadata root must be a JSON object')
+            saved_definitions = payload.get('properties', {})
+            if not isinstance(saved_definitions, dict):
+                raise ValueError('metadata properties must be a JSON object')
+        except (OSError, TypeError, ValueError) as ex:
+            logger.warning(
+                'Could not load chip property metadata %r: %s',
+                metadata_fpath,
+                ex,
+            )
+    try:
+        definitions = chip_properties.definitions_for_properties(
+            prop_dict.keys(),
+            saved_definitions,
+        )
+    except (AttributeError, TypeError, ValueError) as ex:
+        logger.warning(
+            'Invalid chip property metadata definitions: %s. '
+            'Using legacy string defaults.',
+            ex,
+        )
+        definitions = chip_properties.definitions_for_properties(
+            prop_dict.keys()
+        )
+    for key, values in prop_dict.items():
+        datatype = definitions[key]['datatype']
+        try:
+            converted = []
+            for value in values:
+                converted.append(
+                    chip_properties.coerce_property_value(value, datatype)
+                )
+        except (TypeError, ValueError) as ex:
+            logger.warning(
+                'Invalid %s value for chip property %r: %s. '
+                'Using the legacy string datatype.',
+                datatype,
+                key,
+                ex,
+            )
+            definitions[key] = chip_properties.normalize_property_definition()
+            converted = [str(value) for value in values]
+        prop_dict[key] = converted
+    return definitions
+
+
+def write_chip_property_metadata(hs):
+    """Write user property definitions to their JSON sidecar."""
+    definitions = chip_properties.definitions_for_properties(
+        hs.tables.prop_dict.keys(),
+        hs.tables.prop_metadata,
+    )
+    payload = {
+        'version': 1,
+        'properties': definitions,
+    }
+    metadata_fpath = join(
+        hs.dirs.internal_dir,
+        CHIP_PROPERTY_METADATA_FNAME,
+    )
+    helpers.ensurepath(hs.dirs.internal_dir)
+    helpers.write_to(
+        metadata_fpath,
+        json.dumps(payload, indent=2, sort_keys=True) + '\n',
+    )
 
 # DRIVER CODE
 
@@ -522,10 +600,12 @@ def load_csv_tables(db_dir, allow_new_dir=True):
     # Return all information from load_tables
     #hs_tables.gid2_gx = gid2_gx
     #hs_tables.nid2_nx  = nid2_nx
+    prop_metadata = load_chip_property_metadata(internal_dir, prop_dict)
     hs_tables.init(gx2_gname, gx2_aif,
                    nx2_name,
                    cx2_cid, cx2_nx, cx2_gx,
-                   cx2_roi, cx2_theta, prop_dict)
+                   cx2_roi, cx2_theta, prop_dict,
+                   prop_metadata=prop_metadata)
 
     logger.debug('[ld2] Done Loading hotspotter csv tables: %r', db_dir)
     if 'vcd' in sys.argv:
@@ -731,6 +811,8 @@ def write_csv_tables(hs):
     helpers.write_to(name_table_fpath, name_table)
     logger.info('[ld2] Writing image table')
     helpers.write_to(image_table_fpath, image_table)
+    logger.info('[ld2] Writing chip property metadata')
+    write_chip_property_metadata(hs)
 
 
 def write_flat_table(hs):
@@ -760,3 +842,4 @@ def backup_csv_tables(hs, force_backup=False):
         do_backup(CHIP_TABLE_FNAME)
         do_backup(NAME_TABLE_FNAME)
         do_backup(IMAGE_TABLE_FNAME)
+        do_backup(CHIP_PROPERTY_METADATA_FNAME)
