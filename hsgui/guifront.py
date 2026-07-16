@@ -14,6 +14,7 @@ from PyQt5 import QtGui
 from PyQt5 import QtWidgets
 
 # HotSpotter
+from ._frontend.CleanNameTableDialog import CleanNameTableDialog
 from ._frontend.MainSkel import Ui_mainSkel
 from ._frontend.TableFilterDialog import TableFilterDialog
 from . import guitools
@@ -45,8 +46,8 @@ IS_INIT = False
 NOSTEAL_OVERRIDE = False  # Hard disable switch for stream stealer
 
 TABLE_COLUMN_WIDTH_FACTORS = {
-    'cxs': {'Name': 2.0},
-    'nxs': {'Name': 2.0},
+    'cxs': {'name': 2.0},
+    'nxs': {'name': 2.0},
 }
 
 TABLE_TAB_LABELS = {
@@ -54,6 +55,23 @@ TABLE_TAB_LABELS = {
     'cxs': 'Chip Table',
     'nxs': 'Name Table',
     'res': 'Query Results Table',
+}
+
+TABLE_HEADER_LABELS = {
+    'gx':         'Image Index',
+    'nx':         'Name Index',
+    'cid':        'Chip ID',
+    'aif':        'All Detected',
+    'gname':      'Image Name',
+    'nCxs':       '#Chips',
+    'name':       'Name',
+    'nGt':        '#GT',
+    'nKpts':      '#Kpts',
+    'theta':      'Theta',
+    'roi':        'ROI (x, y, w, h)',
+    'rank':       'Rank',
+    'score':      'Confidence',
+    'match_name': 'Matching Name',
 }
 
 
@@ -84,15 +102,20 @@ def csv_sanatize(str_):
     return str(str_).replace(',', ';;')
 
 
-def apply_table_column_widths(tblname, tbl, col_fancyheaders):
+def display_table_header(header):
+    """Return the user-facing label for an internal table column key."""
+    return TABLE_HEADER_LABELS.get(header, header)
+
+
+def apply_table_column_widths(tblname, tbl, col_headers):
     """Apply per-table display width preferences after headers are created."""
     width_factors = TABLE_COLUMN_WIDTH_FACTORS.get(tblname, {})
     if not width_factors:
         return
     default_width = tbl.horizontalHeader().defaultSectionSize()
     for header, factor in width_factors.items():
-        if header in col_fancyheaders:
-            col = col_fancyheaders.index(header)
+        if header in col_headers:
+            col = col_headers.index(header)
             tbl.horizontalHeader().resizeSection(col, int(default_width * factor))
 
 
@@ -257,6 +280,7 @@ def menu_action_specs(front):
             action_spec('actionLayout_Figures', 'layout_figures', front.layout_figures, 'Ctrl+L'),
             None,
             action_spec('actionFilter_Table', 'filter_table', front.filter_table, 'Ctrl+F'),
+            action_spec('actionClear_Filter', 'clear_filter', back.clear_table_filters, 'Ctrl+Shift+F'),
         ],
         'menuActions': [
             action_spec('actionAdd_Chip', 'add_chip', front.add_chip, 'A'),
@@ -267,11 +291,14 @@ def menu_action_specs(front):
             action_spec('actionReselect_ROI', 'reselect_roi', front.reselect_roi, 'R'),
             action_spec('actionReselect_Ori', 'reselect_ori', front.reselect_ori, 'O'),
             None,
+            action_spec('actionPrevious', 'previous', back.select_previous, 'B'),
             action_spec('actionNext', 'next', back.select_next, 'N'),
+            action_spec('actionPrevious_Unannotated', 'previous_unannotated', back.select_previous_unannotated, 'Shift+B'),
             action_spec('actionNext_Unannotated', 'next_unannotated', back.select_next_unannotated, 'Shift+N'),
             None,
             action_spec('actionDelete_Chip', 'delete_chip', back.delete_chip, 'Ctrl+Del'),
             action_spec('actionDelete_Image', 'delete_image', back.delete_image, 'Ctrl+Shift+Del'),
+            action_spec('actionClean_Name_Table', 'clean_name_table', front.clean_name_table),
         ],
         'menuBatch': [
             action_spec('actionPrecomputeChipsFeatures', 'precompute_chips_features', back.precompute_feats, 'Ctrl+Return'),
@@ -413,6 +440,9 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
         front.ostream = None
         front.gui_logging_handler = None
         front.backend = backend
+        # temp import for debug  purposes
+        # from .guiback import MainWindowBackend
+        # front.backend: MainWindowBackend = backend
         front._backend_block_stack = []
         front.edit_prefs = None
         front.ui = init_ui(front)
@@ -759,7 +789,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
 
     @slot_(str, list, list, list, list)
     @blocking
-    def populate_tbl(front, tblname, col_fancyheaders, col_editable, row_list, datatup_list):
+    def populate_tbl(front, tblname, col_headers, col_editable, row_list, datatup_list):
         tblname = str(tblname)
         tbl_dict = {
             'gxs': front.ui.gxs_TBL,
@@ -772,7 +802,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
         front._populate_table(
             tblname,
             tbl,
-            col_fancyheaders,
+            col_headers,
             col_editable,
             row_list,
             datatup_list,
@@ -810,11 +840,15 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
     @slot_()
     def filter_table(front):
         tblname, tbl = front.current_table()
-        headers = [
-            str(tbl.horizontalHeaderItem(column).text())
+        columns = [
+            (
+                front.table_column_key(tbl, column),
+                str(tbl.horizontalHeaderItem(column).text()),
+            )
             for column in range(tbl.columnCount())
             if tbl.horizontalHeaderItem(column) is not None
         ]
+        headers = [column_key for column_key, _ in columns]
         if not headers:
             logger.warning("[filter] There is no columns to filter in table %s.", tblname)
             QtWidgets.QMessageBox.information(
@@ -827,9 +861,9 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
             )
             return
 
-        conditions = front.backend.get_table_filters(tblname, headers)
+        conditions = front.backend.get_table_filters(tblname)
         while True:
-            dialog = TableFilterDialog(headers, conditions, front)
+            dialog = TableFilterDialog(columns, conditions, front)
             if dialog.exec_() != QtWidgets.QDialog.Accepted:
                 return
             conditions = dialog.conditions()
@@ -844,7 +878,23 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
                 continue
             return
 
-    def _populate_table(front, tblname, tbl, col_fancyheaders, col_editable, row_list, datatup_list):
+    @slot_()
+    def clean_name_table(front):
+        unused_name_rows = front.backend.get_unused_name_rows()
+        if not unused_name_rows:
+            front.show_information(
+                _translate('CleanNameTableDialog', 'Clean Name Table'),
+                _translate(
+                    'CleanNameTableDialog',
+                    'The name table has no zero-chip names to remove.',
+                ),
+            )
+            return
+        dialog = CleanNameTableDialog(unused_name_rows, front)
+        if dialog.exec_() == QtWidgets.QDialog.Accepted:
+            front.backend.clean_name_table()
+
+    def _populate_table(front, tblname, tbl, col_headers, col_editable, row_list, datatup_list):
         # TODO: for chip table: delete metedata column
         # RCOS TODO:
         # I have a small right-click context menu working
@@ -877,11 +927,14 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
         tbl.sortByColumn(0, QtCore.Qt.AscendingOrder)  # Basic Sorting
         tblWasBlocked = tbl.blockSignals(True)
         tbl.clear()
-        tbl.setColumnCount(len(col_fancyheaders))
+        tbl.setColumnCount(len(col_headers))
         tbl.setRowCount(len(row_list))
         tbl.verticalHeader().hide()
-        tbl.setHorizontalHeaderLabels(col_fancyheaders)
-        apply_table_column_widths(tblname, tbl, col_fancyheaders)
+        for col, header in enumerate(col_headers):
+            header_item = QtWidgets.QTableWidgetItem(display_table_header(header))
+            header_item.setData(QtCore.Qt.UserRole, header)
+            tbl.setHorizontalHeaderItem(col, header_item)
+        apply_table_column_widths(tblname, tbl, col_headers)
         tbl.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         tbl.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         tbl.setSortingEnabled(False)
@@ -934,59 +987,20 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
         return int(QtCore.Qt.ItemIsEditable & item.flags()) == int(QtCore.Qt.ItemIsEditable)
 
     #=======================
-    # General Table Getters
+    # General Table Access
     #=======================
 
-    def get_tbl_header(front, tbl, col):
-        # Map the fancy header back to the internal one.
-        fancy_header = str(tbl.horizontalHeaderItem(col).text())
-        return front.backend.resolve_table_header(fancy_header)
+    def table_column_key(front, tbl, col):
+        """Return the internal key stored on a displayed header item."""
+        header_item = tbl.horizontalHeaderItem(col)
+        return str(header_item.data(QtCore.Qt.UserRole))
 
-    def get_tbl_int(front, tbl, row, col):
-        return int(tbl.item(row, col).text())
-
-    def get_tbl_str(front, tbl, row, col):
-        return str(tbl.item(row, col).text())
-
-    def get_header_val(front, tbl, header, row):
-        # RCOS TODO: This is hacky. These just need to be
-        # in dicts to begin with.
-        tblname = str(tbl.objectName()).replace('_TBL', '')
-        tblname = tblname.replace('image', 'img')  # Sooooo hack
-        # TODO: backmap from fancy headers to consise
-        col = front.backend.get_table_column(tblname, header)
-        return tbl.item(row, col).text()
-
-    #=======================
-    # Specific Item Getters
-    #=======================
-
-    def get_chiptbl_header(front, col):
-        return front.get_tbl_header(front.ui.cxs_TBL, col)
-
-    def get_imgtbl_header(front, col):
-        return front.get_tbl_header(front.ui.gxs_TBL, col)
-
-    def get_restbl_header(front, col):
-        return front.get_tbl_header(front.ui.res_TBL, col)
-
-    def get_nametbl_header(front, col):
-        return front.get_tbl_header(front.ui.nxs_TBL, col)
-
-    def get_restbl_cid(front, row):
-        return int(front.get_header_val(front.ui.res_TBL, 'cid', row))
-
-    def get_chiptbl_cid(front, row):
-        return int(front.get_header_val(front.ui.cxs_TBL, 'cid', row))
-
-    def get_nametbl_name(front, row):
-        return str(front.get_header_val(front.ui.nxs_TBL, 'name', row))
-
-    def get_nametbl_nx(front, row):
-        return int(front.get_header_val(front.ui.nxs_TBL, 'nx', row))
-
-    def get_imgtbl_gx(front, row):
-        return int(front.get_header_val(front.ui.gxs_TBL, 'gx', row))
+    def table_value(front, tbl, row, column_key):
+        """Read a table cell by its stable internal column key."""
+        for col in range(tbl.columnCount()):
+            if front.table_column_key(tbl, col) == column_key:
+                return tbl.item(row, col).text()
+        raise KeyError('Table has no column %r' % (column_key,))
 
     #=======================
     # Table Changed Functions
@@ -996,37 +1010,41 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
     def img_tbl_changed(front, item):
         logger.debug("img_tbl_changed()")
         row, col = (item.row(), item.column())
-        sel_gx = front.get_imgtbl_gx(row)
-        header_lbl = front.get_imgtbl_header(col)
+        tbl = front.ui.gxs_TBL
+        sel_gx = int(front.table_value(tbl, row, 'gx'))
+        column_key = front.table_column_key(tbl, col)
         new_val = item.checkState() == QtCore.Qt.Checked
-        front.changeGxSignal.emit(sel_gx, header_lbl, new_val)
+        front.changeGxSignal.emit(sel_gx, column_key, new_val)
 
     @slot_(QtWidgets.QTableWidgetItem)
     def chip_tbl_changed(front, item):
         logger.debug("chip_tbl_changed()")
         row, col = (item.row(), item.column())
-        sel_cid = front.get_chiptbl_cid(row)  # Get selected chipid
+        tbl = front.ui.cxs_TBL
+        sel_cid = int(front.table_value(tbl, row, 'cid'))
         new_val = csv_sanatize(item.text())   # sanatize for csv
-        header_lbl = front.get_chiptbl_header(col)  # Get changed column
-        front.changeCidSignal.emit(sel_cid, header_lbl, new_val)
+        column_key = front.table_column_key(tbl, col)
+        front.changeCidSignal.emit(sel_cid, column_key, new_val)
 
     @slot_(QtWidgets.QTableWidgetItem)
     def res_tbl_changed(front, item):
         logger.debug("res_tbl_changed()")
         row, col = (item.row(), item.column())
-        sel_cid  = front.get_restbl_cid(row)  # The changed row's chip id
+        tbl = front.ui.res_TBL
+        sel_cid = int(front.table_value(tbl, row, 'cid'))
         new_val  = csv_sanatize(item.text())  # sanatize val for csv
-        header_lbl = front.get_restbl_header(col)  # Get changed column
-        front.changeCidSignal.emit(sel_cid, header_lbl, new_val)
+        column_key = front.table_column_key(tbl, col)
+        front.changeCidSignal.emit(sel_cid, column_key, new_val)
 
     @slot_(QtWidgets.QTableWidgetItem)
     def name_tbl_changed(front, item):
         logger.debug("name_tbl_changed()")
         row, col = (item.row(), item.column())
-        sel_nx = front.get_nametbl_nx(row)    # The changed row's name index
+        tbl = front.ui.nxs_TBL
+        sel_nx = int(front.table_value(tbl, row, 'nx'))
         new_val  = csv_sanatize(item.text())  # sanatize val for csv
-        header_lbl = front.get_nametbl_header(col)  # Get changed column
-        front.aliasNameSignal.emit(sel_nx, header_lbl, new_val)
+        column_key = front.table_column_key(tbl, col)
+        front.aliasNameSignal.emit(sel_nx, column_key, new_val)
 
     #=======================
     # Table Clicked Functions
@@ -1036,7 +1054,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
     def img_tbl_clicked(front, item):
         row = item.row()
         logger.debug("img_tbl_clicked(%r)", row)
-        sel_gx = front.get_imgtbl_gx(row)
+        sel_gx = int(front.table_value(front.ui.gxs_TBL, row, 'gx'))
         front.selectGxSignal.emit(sel_gx)
 
     @slot_(QtWidgets.QTableWidgetItem)
@@ -1044,7 +1062,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
     def chip_tbl_clicked(front, item):
         row, col = (item.row(), item.column())
         logger.debug("chip_tbl_clicked(%r, %r)", row, col)
-        sel_cid = front.get_chiptbl_cid(row)
+        sel_cid = int(front.table_value(front.ui.cxs_TBL, row, 'cid'))
         front.selectCidSignal.emit(sel_cid)
 
     @slot_(QtWidgets.QTableWidgetItem)
@@ -1052,7 +1070,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
     def res_tbl_clicked(front, item):
         row, col = (item.row(), item.column())
         logger.debug("res_tbl_clicked(%r, %r)", row, col)
-        sel_cid = front.get_restbl_cid(row)
+        sel_cid = int(front.table_value(front.ui.res_TBL, row, 'cid'))
         front.selectResSignal.emit(sel_cid)
 
     @slot_(QtWidgets.QTableWidgetItem)
@@ -1060,7 +1078,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
     def name_tbl_clicked(front, item):
         row, col = (item.row(), item.column())
         logger.debug("name_tbl_clicked(%r, %r)", row, col)
-        sel_name = front.get_nametbl_name(row)
+        sel_name = str(front.table_value(front.ui.nxs_TBL, row, 'name'))
         front.selectNameSignal.emit(sel_name)
 
     #=======================

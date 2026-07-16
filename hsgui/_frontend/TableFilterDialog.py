@@ -10,7 +10,7 @@ def _translate(text):
 class TableFilterDialog(QtWidgets.QDialog):
     """Modal editor for a table's per-column filter conditions."""
 
-    def __init__(self, headers, conditions, parent=None):
+    def __init__(self, columns, conditions, parent=None):
         super(TableFilterDialog, self).__init__(parent)
         self.setWindowTitle(_translate('Filter Table'))
         self.setModal(True)
@@ -32,14 +32,14 @@ class TableFilterDialog(QtWidgets.QDialog):
         scroll_area.setWidgetResizable(True)
         editor_widget = QtWidgets.QWidget(scroll_area)
         form_layout = QtWidgets.QFormLayout(editor_widget)
-        for header in headers:
+        for column_key, display_label in columns:
             editor = QtWidgets.QLineEdit(editor_widget)
             editor.setPlaceholderText(_translate('None'))
-            condition = conditions.get(header)
+            condition = conditions.get(column_key)
             if condition is not None:
                 editor.setText(str(condition))
-            form_layout.addRow(str(header), editor)
-            self._editors.append((header, editor))
+            form_layout.addRow(str(display_label), editor)
+            self._editors.append((column_key, editor))
         scroll_area.setWidget(editor_widget)
         layout.addWidget(scroll_area)
 
@@ -62,6 +62,6 @@ class TableFilterDialog(QtWidgets.QDialog):
 
     def conditions(self):
         return {
-            header: str(editor.text()).strip()
-            for header, editor in self._editors
+            column_key: str(editor.text()).strip()
+            for column_key, editor in self._editors
         }

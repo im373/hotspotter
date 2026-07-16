@@ -1,11 +1,11 @@
 import unittest
 
-from hsgui.guiback import filter_table_rows
+from hsgui.guiback import MainWindowBackend, filter_table_rows
 
 
 class TableFilterTest(unittest.TestCase):
     def setUp(self):
-        self.headers = ['Image', 'Direction', 'Year']
+        self.headers = ['gname', 'direction', 'year']
         self.rows = [
             ('2017_alpha', 'L', 2017),
             ('2017_beta', 'R', 2017),
@@ -17,7 +17,7 @@ class TableFilterTest(unittest.TestCase):
         filtered = filter_table_rows(
             self.headers,
             self.rows,
-            {'Direction': 'L'},
+            {'direction': 'L'},
         )
         self.assertEqual(filtered, [self.rows[0], self.rows[2]])
 
@@ -25,7 +25,7 @@ class TableFilterTest(unittest.TestCase):
         filtered = filter_table_rows(
             self.headers,
             self.rows,
-            {'Image': '2017_*'},
+            {'gname': '2017_*'},
         )
         self.assertEqual(filtered, [self.rows[0], self.rows[1]])
 
@@ -33,7 +33,7 @@ class TableFilterTest(unittest.TestCase):
         filtered = filter_table_rows(
             self.headers,
             self.rows,
-            {'Image': 're:^201[78]_alpha$'},
+            {'gname': 're:^201[78]_alpha$'},
         )
         self.assertEqual(filtered, [self.rows[0], self.rows[2]])
 
@@ -41,7 +41,7 @@ class TableFilterTest(unittest.TestCase):
         filtered = filter_table_rows(
             self.headers,
             self.rows,
-            {'Direction': 'L', 'Year': '2018'},
+            {'direction': 'L', 'year': '2018'},
         )
         self.assertEqual(filtered, [self.rows[2]])
 
@@ -51,17 +51,36 @@ class TableFilterTest(unittest.TestCase):
                 filtered = filter_table_rows(
                     self.headers,
                     self.rows,
-                    {'Direction': condition},
+                    {'direction': condition},
                 )
                 self.assertEqual(filtered, self.rows)
 
     def test_invalid_regular_expression(self):
-        with self.assertRaisesRegex(ValueError, 'Image'):
+        with self.assertRaisesRegex(ValueError, 'gname'):
             filter_table_rows(
                 self.headers,
                 self.rows,
-                {'Image': 're:['},
+                {'gname': 're:['},
             )
+
+    def test_clear_filters_resets_every_table_and_refreshes(self):
+        class FakeBackend(object):
+            def __init__(self):
+                self.table_filters = {
+                    'gxs': {'gname': '2017_*'},
+                    'cxs': {'direction': 'L'},
+                }
+                self.refresh_count = 0
+
+            def populate_tables(self):
+                self.refresh_count += 1
+
+        back = FakeBackend()
+
+        MainWindowBackend.clear_table_filters(back)
+
+        self.assertEqual(back.table_filters, {})
+        self.assertEqual(back.refresh_count, 1)
 
 
 if __name__ == '__main__':

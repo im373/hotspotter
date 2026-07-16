@@ -224,6 +224,16 @@ def _nx2_cxs(hs, nx_list, aslist=False):
     return cxs_list
 
 
+def _find_unused_name_nxs(nx2_name, cx2_nx, valid_cxs):
+    """Find named rows, excluding reserved unknown names, with no valid chips."""
+    used_nxs = set(int(nx) for nx in cx2_nx[valid_cxs] if int(nx) >= 2)
+    return np.array([
+        nx
+        for nx, name in enumerate(nx2_name)
+        if nx >= 2 and str(name) and nx not in used_nxs
+    ], dtype=np.int64)
+
+
 def _export_name(hs, nx, change_gname=True):
     # Get images belonging to name
     name = hs.tables.nx2_name[nx]
@@ -684,6 +694,26 @@ class HotSpotter(DynStruct):
         nx2_name = hs.tables.nx2_name.tolist()
         nx2_name.extend(name_list)
         hs.tables.nx2_name = np.array(nx2_name)
+
+    def get_unused_name_rows(hs):
+        """Return ``(name index, name)`` rows that have no valid chips."""
+        unused_nxs = _find_unused_name_nxs(
+            hs.tables.nx2_name,
+            hs.tables.cx2_nx,
+            hs.get_valid_cxs(),
+        )
+        return [
+            (int(nx), str(hs.tables.nx2_name[nx]))
+            for nx in unused_nxs
+        ]
+
+    def clean_name_table(hs):
+        """Remove zero-chip names from the in-memory name table."""
+        unused_rows = hs.get_unused_name_rows()
+        if unused_rows:
+            unused_nxs = [nx for nx, _ in unused_rows]
+            hs.tables.nx2_name[unused_nxs] = ''
+        return unused_rows
 
     @profile
     @util.indent_decor('[hs.add_chip]')

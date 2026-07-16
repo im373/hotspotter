@@ -20,6 +20,7 @@ MENU_TEXT = {
     # View menu
     'layout_figures': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Layout Figures'),
     'filter_table': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Filter Table'),
+    'clear_filter': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Clear Filter'),
 
     # Actions menu
     'add_chip': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Add Chip'),
@@ -27,10 +28,13 @@ MENU_TEXT = {
     'query': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Query'),
     'reselect_roi': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Reselect ROI'),
     'reselect_ori': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Reselect Orientation'),
+    'previous': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Select Previous'),
     'next': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Select Next'),
+    'previous_unannotated': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Select Previous Unannotated'),
     'next_unannotated': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Select Next Unannotated'),
     'delete_chip': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Delete Chip'),
     'delete_image': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Trash Image'),
+    'clean_name_table': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Clean Name Table'),
 
     # Batch menu
     'precompute_chips_features': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Precompute Chips/Features'),
@@ -67,6 +71,7 @@ MENU_TOOLTIP = {
     # View menu
     'layout_figures': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Organizes windows in a grid'),
     'filter_table': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Filters rows in the currently visible table.'),
+    'clear_filter': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Clears filters from every table and refreshes all tables.'),
 
     # Actions menu
     'add_chip': QT_TRANSLATE_NOOP('HotSpotterMenus', 'When adding a chip, you select an ROI in Image View. The ROI defines a new chip and it is added (but not saved) to the database.'),
@@ -74,9 +79,12 @@ MENU_TOOLTIP = {
     'query': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Issues the currently selected chip as a query. The result table is then populated.'),
     'reselect_roi': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Changes the ROI of a chip. Previously associated results and chip data are removed and recomputed.'),
     'reselect_ori': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Changes the orientation of a chip. Previously associated results and chip data are removed and recomputed.'),
+    'previous': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Selects the previous image in the database.'),
     'next': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Selects the next image in the database.'),
+    'previous_unannotated': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Selects the previous image without chips.'),
     'next_unannotated': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Selects the next image without chips.'),
     'delete_chip': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Removes a chip from the database.'),
+    'clean_name_table': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Removes name rows with no chips from the database file.'),
 
     # Batch menu
     'precompute_chips_features': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Extracts all chips from images, and computes features. This loads the data into memory and reduces waiting time between selecting chips and images.'),

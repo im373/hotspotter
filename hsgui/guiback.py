@@ -1,7 +1,7 @@
 # HotSpotter port notes:
 # Updated backend GUI workflows for PyQt5 signal/slot behavior.
 # Kept image/chip/query actions compatible with Python 3 data types.
-# Split image-only Select Next from Select Next Unannotated behavior.
+# Added symmetric previous/next navigation, including unannotated-image modes.
 # Reused backend selection helpers and HotSpotterAPI chip counts for navigation.
 # Replaced hscom.__common__ logging/profile hooks with logging and hscom.profiling.
 
@@ -108,20 +108,34 @@ def _close_chip_figure_if_open():
         df2.close_figure(fig)
 
 
-def select_next_image(back, next_unannotated=False):
+def select_adjacent_image(back, direction=1, unannotated=False):
+    """Select an image before or after the current image index."""
+    if direction not in (-1, 1):
+        raise ValueError('direction must be -1 or 1')
     current_gx = back.get_selected_gx()
-    current_gx = -1 if current_gx is None else int(current_gx)
-    for gx in iter(back.hs.get_valid_gxs()):
-        gx = int(gx)
-        is_next = gx > current_gx
+    current_gx = None if current_gx is None else int(current_gx)
+    valid_gxs = sorted(
+        (int(gx) for gx in back.hs.get_valid_gxs()),
+        reverse=direction < 0,
+    )
+    for gx in valid_gxs:
+        is_adjacent = (
+            current_gx is None
+            or (direction > 0 and gx > current_gx)
+            or (direction < 0 and gx < current_gx)
+        )
         is_unannotated = back.hs.gx2_nChips(gx) == 0
-        if is_next and (not next_unannotated or is_unannotated):
+        if is_adjacent and (not unannotated or is_unannotated):
             _close_chip_figure_if_open()
             back.select_gx(gx, show_chip_splash=False)
             return None
-    if next_unannotated:
-        return 'All following images already have chips.'
-    return 'end of the image list'
+    if direction > 0:
+        if unannotated:
+            return 'All following images already have chips.'
+        return 'end of the image list'
+    if unannotated:
+        return 'All preceding images already have chips.'
+    return 'beginning of the image list'
 
 
 def _strict_mode():
@@ -159,25 +173,6 @@ class MainWindowBackend(QtCore.QObject):
         back.current_res = None
         back.selection = None
         back.table_filters = {}
-
-        # A map from short internal headers to fancy headers seen by the user
-        back.fancy_headers = {
-            'gx':         'Image Index',
-            'nx':         'Name Index',
-            'cid':        'Chip ID',
-            'aif':        'All Detected',
-            'gname':      'Image Name',
-            'nCxs':       '#Chips',
-            'name':       'Name',
-            'nGt':        '#GT',
-            'nKpts':      '#Kpts',
-            'theta':      'Theta',
-            'roi':        'ROI (x, y, w, h)',
-            'rank':       'Rank',
-            'score':      'Confidence',
-            'match_name': 'Matching Name',
-        }
-        back.reverse_fancy = {v: k for (k, v) in list(back.fancy_headers.items())}
 
         # A list of default internal headers to display
         back.table_headers = {
@@ -373,34 +368,17 @@ class MainWindowBackend(QtCore.QObject):
         body_datatup = back.hs.get_datatup_list(tblname, index_list,
                                                 col_headers, extra_cols)
         datatup_list = prefix_datatup + body_datatup
-        # Populate with fancy headers.
-        col_fancyheaders = [back.fancy_headers[key]
-                            if key in back.fancy_headers else key
-                            for key in col_headers]
         datatup_list = filter_table_rows(
-            col_fancyheaders,
+            col_headers,
             datatup_list,
             back.table_filters.get(tblname, {}),
         )
         row_list = list(range(len(datatup_list)))
-        back.populateSignal.emit(tblname, col_fancyheaders, col_editable,
+        back.populateSignal.emit(tblname, col_headers, col_editable,
                                  row_list, datatup_list)
 
-    def get_table_filters(back, tblname, headers=None):
-        conditions = dict(back.table_filters.get(tblname, {}))
-        if headers is None:
-            return conditions
-        return {
-            header: condition
-            for header, condition in conditions.items()
-            if header in headers
-        }
-
-    def resolve_table_header(back, fancy_header):
-        return back.reverse_fancy.get(fancy_header, fancy_header)
-
-    def get_table_column(back, tblname, header):
-        return back.table_headers[tblname].index(header)
+    def get_table_filters(back, tblname):
+        return dict(back.table_filters.get(tblname, {}))
 
     def set_table_filters(back, tblname, headers, conditions):
         normalized = {
@@ -418,6 +396,34 @@ class MainWindowBackend(QtCore.QObject):
             'res': back.populate_result_table,
         }[tblname]
         populate()
+
+    @slot_()
+    def clear_table_filters(back):
+        """Clear filters for every table and refresh their visible rows."""
+        back.table_filters.clear()
+        back.populate_tables()
+        logger.info("Cleared filters from all tables")
+
+    def get_unused_name_rows(back):
+        return back.hs.get_unused_name_rows()
+
+    @slot_()
+    @blocking
+    def clean_name_table(back):
+        """Remove zero-chip names, persist the tables, and refresh the GUI."""
+        removed_rows = back.hs.clean_name_table()
+        if removed_rows:
+            back.hs.save_database()
+        back.populate_tables()
+        count = len(removed_rows)
+        if count:
+            message = 'Removed %d zero-chip name%s from the database.' % (
+                count,
+                '' if count == 1 else 's',
+            )
+        else:
+            message = 'The name table has no zero-chip names to remove.'
+        back.informationSignal.emit('Clean Name Table', message)
 
     def populate_image_table(back, **kwargs):
         back._populate_table('gxs', **kwargs)
@@ -843,7 +849,7 @@ class MainWindowBackend(QtCore.QObject):
     @profile
     def select_next(back):
         # Action -> Next
-        msg = select_next_image(back)
+        msg = select_adjacent_image(back)
         if msg is not None:
             back.informationSignal.emit('Select Next', msg)
 
@@ -852,9 +858,29 @@ class MainWindowBackend(QtCore.QObject):
     @profile
     def select_next_unannotated(back):
         # Action -> Next Unannotated
-        msg = select_next_image(back, next_unannotated=True)
+        msg = select_adjacent_image(back, unannotated=True)
         if msg is not None:
             back.informationSignal.emit('Select Next Unannotated', msg)
+
+    @slot_()
+    @blocking
+    @profile
+    def select_previous(back):
+        msg = select_adjacent_image(back, direction=-1)
+        if msg is not None:
+            back.informationSignal.emit('Select Previous', msg)
+
+    @slot_()
+    @blocking
+    @profile
+    def select_previous_unannotated(back):
+        msg = select_adjacent_image(
+            back,
+            direction=-1,
+            unannotated=True,
+        )
+        if msg is not None:
+            back.informationSignal.emit('Select Previous Unannotated', msg)
 
     #--------------------------------------------------------------------------
     # Batch menu slots
@@ -873,9 +899,7 @@ class MainWindowBackend(QtCore.QObject):
     def precompute_queries(back):
         # Batch -> Precompute Queries
         # TODO:
-        #http://stackoverflow.com/questions/15637768/
-        # pyqt-how-to-capture-output-of-pythons-interpreter-
-        # and-display-it-in-qedittext
+        #http://stackoverflow.com/questions/15637768/pyqt-how-to-capture-output-of-pythons-interpreter-and-display-it-in-qedittext
         #import matching_functions as mf
         #import DataStructures as ds
         #import match_chips3 as mc3

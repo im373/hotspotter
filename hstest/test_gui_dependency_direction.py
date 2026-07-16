@@ -31,6 +31,15 @@ class GuiDependencyDirectionTest(unittest.TestCase):
         ]
         self.assertEqual(front_attributes, [])
 
+    def test_backend_has_no_display_header_mapping(self):
+        attribute_names = {
+            node.attr
+            for node in ast.walk(self.tree)
+            if isinstance(node, ast.Attribute)
+        }
+        self.assertNotIn('fancy_headers', attribute_names)
+        self.assertNotIn('reverse_fancy', attribute_names)
+
 
 if __name__ == '__main__':
     unittest.main()
