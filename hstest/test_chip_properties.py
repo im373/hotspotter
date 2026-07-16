@@ -19,6 +19,8 @@ class FakeHotSpotter(object):
     update_property_definition = HotSpotter.update_property_definition
     delete_property = HotSpotter.delete_property
     change_property = HotSpotter.change_property
+    get_property = HotSpotter.get_property
+    cid2_cx = HotSpotter.cid2_cx
     add_chip = HotSpotter.add_chip
 
     def __init__(self):
@@ -182,7 +184,7 @@ class ChipPropertyTest(unittest.TestCase):
         )
         self.assertEqual(prop_dict['quality'], ['1', 'not-an-int'])
 
-    def test_backend_rename_and_delete_refresh_tables(self):
+    def test_backend_rename_and_delete_refresh_only_chip_table(self):
         class FakeBackend(object):
             def __init__(self):
                 self.hs = FakeHotSpotter()
@@ -204,7 +206,68 @@ class ChipPropertyTest(unittest.TestCase):
         MainWindowBackend.delete_chip_property(back, 'rating')
 
         self.assertNotIn('rating', back.hs.tables.prop_dict)
-        self.assertEqual(back.populate_count, 4)
+        self.assertEqual(back.populate_count, 2)
+
+    def test_chip_metadata_edit_updates_one_cell_without_table_refresh(self):
+        hs = FakeHotSpotter()
+        hs.add_property('rating', 'int', 1)
+        back = MainWindowBackend(hs=hs)
+        refreshes = []
+        cell_updates = []
+        back.populate_chip_table = lambda: refreshes.append('cxs')
+        back.populate_tables = lambda **kwargs: refreshes.append(kwargs)
+        back.chipCellUpdateSignal.connect(
+            lambda *args: cell_updates.append(args)
+        )
+
+        back.change_chip_property(1, 'rating', '7')
+
+        self.assertEqual(refreshes, [])
+        self.assertEqual(cell_updates, [(1, 'rating', 7)])
+        self.assertEqual(hs.tables.prop_dict['rating'][0], 7)
+
+    def test_chip_name_edit_refreshes_related_tables(self):
+        hs = FakeHotSpotter()
+        changed_names = []
+        hs.change_name = lambda cx, value: changed_names.append((cx, value))
+        back = MainWindowBackend(hs=hs)
+        refreshes = []
+        back.populate_tables = lambda **kwargs: refreshes.append(kwargs)
+
+        back.change_chip_property(1, 'name', 'renamed')
+
+        self.assertEqual(changed_names, [(0, 'renamed')])
+        self.assertEqual(refreshes, [{'image': False}])
+
+    def test_roi_and_orientation_edits_refresh_only_chip_table(self):
+        hs = FakeHotSpotter()
+        edits = []
+        hs.change_roi = lambda cx, roi: edits.append(('roi', cx, roi))
+        hs.change_theta = lambda cx, theta: edits.append(
+            ('orientation', cx, theta)
+        )
+        hs.save_database = lambda: edits.append(('save',))
+        back = MainWindowBackend(hs=hs)
+        refreshes = []
+        selections = []
+        back.populate_chip_table = lambda: refreshes.append('cxs')
+        back.populate_tables = lambda **kwargs: refreshes.append(kwargs)
+        back.select_gx = lambda gx, cx=None: selections.append((gx, cx))
+
+        back.reselect_roi(cid=1, roi=[1, 2, 8, 9])
+        back.reselect_ori(cid=1, theta=0.5)
+
+        self.assertEqual(refreshes, ['cxs', 'cxs'])
+        self.assertEqual(selections, [(0, 0), (0, 0)])
+        self.assertEqual(
+            edits,
+            [
+                ('roi', 0, [1, 2, 8, 9]),
+                ('save',),
+                ('orientation', 0, 0.5),
+                ('save',),
+            ],
+        )
 
 
 if __name__ == '__main__':

@@ -91,6 +91,16 @@ class DataTableModelTest(unittest.TestCase):
         self.model.set_rows([])
         self.assertEqual(self.model.rowCount(), 0)
 
+    def test_backend_value_update_does_not_emit_user_edit(self):
+        edits = []
+        self.model.cell_edited.connect(lambda *args: edits.append(args))
+
+        updated = self.model.update_value(42, 'name', 'normalized')
+
+        self.assertTrue(updated)
+        self.assertEqual(self.model.index(0, 1).data(), 'normalized')
+        self.assertEqual(edits, [])
+
 
 class DataTableProxyModelTest(unittest.TestCase):
     @classmethod

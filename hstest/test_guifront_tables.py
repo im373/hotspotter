@@ -1,5 +1,6 @@
 import unittest
 from types import SimpleNamespace
+from unittest import mock
 
 from PyQt5 import QtCore
 from PyQt5 import QtWidgets
@@ -100,6 +101,75 @@ class GuiFrontTableTest(unittest.TestCase):
 
         self.assertTrue(changed)
         self.assertEqual(edits, [(20, 'aif', True)])
+
+    def test_backend_chip_cell_update_does_not_reset_model(self):
+        class FakeHotSpotter(object):
+            def get_property_definition(self, key):
+                if key == 'rating':
+                    return {'datatype': 'int', 'importance': 1}
+                return None
+
+        self.backend.hs = FakeHotSpotter()
+        self.front.populate_tbl(
+            'cxs',
+            ['cid', 'name', 'rating'],
+            [False, True, True],
+            [5],
+            [(5, 'alpha', 1)],
+        )
+        model = self.front.table_models['cxs']
+        model_identity = id(model)
+
+        self.backend.chipCellUpdateSignal.emit(5, 'rating', 7)
+
+        self.assertEqual(id(self.front.table_models['cxs']), model_identity)
+        self.assertEqual(model.value_at(0, 'rating'), 7)
+
+    def test_reselect_workflows_hide_and_restore_chip_figure(self):
+        context = {
+            'gx': 2,
+            'cx': 4,
+            'roi': [1, 2, 30, 40],
+            'theta': 0.25,
+        }
+        self.backend.get_selected_chip_context = lambda: context
+
+        workflows = [
+            ('reselect_roi', 'select_roi', [5, 6, 35, 45]),
+            ('reselect_ori', 'select_orientation', 0.75),
+        ]
+        for workflow_name, selector_name, selected_value in workflows:
+            for accepted in (True, False):
+                with self.subTest(workflow=workflow_name, accepted=accepted):
+                    events = []
+                    self.backend.close_chip_figure = (
+                        lambda events=events: events.append('close_chip')
+                    )
+                    self.backend.show_image = (
+                        lambda *args, events=events, **kwargs:
+                        events.append('show_image')
+                    )
+                    self.backend.show_chip = (
+                        lambda *args, events=events, **kwargs:
+                        events.append('restore_chip')
+                    )
+                    backend_edit = (
+                        lambda events=events, **kwargs:
+                        events.append('apply_edit')
+                    )
+                    setattr(self.backend, workflow_name, backend_edit)
+                    selector_result = selected_value if accepted else None
+                    with mock.patch(
+                        'hsgui.guifront.guitools.%s' % selector_name,
+                        side_effect=lambda *args, value=selector_result,
+                                           events=events, **kwargs:
+                        (events.append('select'), value)[1],
+                    ):
+                        getattr(self.front, workflow_name)()
+
+                    expected = ['close_chip', 'show_image', 'select']
+                    expected.append('apply_edit' if accepted else 'restore_chip')
+                    self.assertEqual(events, expected)
 
 
 if __name__ == '__main__':

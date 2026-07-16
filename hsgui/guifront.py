@@ -638,17 +638,24 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
             front.show_information(
                 'Reselect ROI', 'Cannot reselect ROI. No chip selected')
             return
-        front.backend.show_image(
-            context['gx'],
-            [context['cx']],
-            figtitle='Image View - ReSelect ROI (drag a yellow corner)',
-        )
-        roi = guitools.select_roi(
-            context['roi'],
-            theta=context['theta'],
-        )
-        if roi is not None:
-            front.backend.reselect_roi(roi=roi)
+        edit_applied = False
+        front.backend.close_chip_figure()
+        try:
+            front.backend.show_image(
+                context['gx'],
+                [context['cx']],
+                figtitle='Image View - ReSelect ROI (drag a yellow corner)',
+            )
+            roi = guitools.select_roi(
+                context['roi'],
+                theta=context['theta'],
+            )
+            if roi is not None:
+                front.backend.reselect_roi(roi=roi)
+                edit_applied = True
+        finally:
+            if not edit_applied:
+                front.backend.show_chip(context['cx'])
 
     @slot_()
     @blocking
@@ -660,14 +667,21 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
                 'Cannot reselect orientation. No chip selected',
             )
             return
-        front.backend.show_image(
-            context['gx'],
-            [context['cx']],
-            figtitle='Image View - Select Orientation (click two points)',
-        )
-        theta = guitools.select_orientation()
-        if theta is not None:
-            front.backend.reselect_ori(theta=theta)
+        edit_applied = False
+        front.backend.close_chip_figure()
+        try:
+            front.backend.show_image(
+                context['gx'],
+                [context['cx']],
+                figtitle='Image View - Select Orientation (click two points)',
+            )
+            theta = guitools.select_orientation()
+            if theta is not None:
+                front.backend.reselect_ori(theta=theta)
+                edit_applied = True
+        finally:
+            if not edit_applied:
+                front.backend.show_chip(context['cx'])
 
     @slot_()
     def edit_preferences(front):
@@ -770,6 +784,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
         back.informationSignal.connect(front.show_information)
         back.operationFailedSignal.connect(front.show_error)
         back.apiConnectedSignal.connect(front.handle_api_connected)
+        back.chipCellUpdateSignal.connect(front.update_chip_table_cell)
 
         # Gui Components
         # Table views
@@ -1159,6 +1174,21 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
             )
             return
         raise KeyError('Unknown table %r' % (tblname,))
+
+    @slot_(int, str, object)
+    def update_chip_table_cell(front, cid, column_key, value):
+        """Apply a backend-normalized chip value without rebuilding a table."""
+        updated = front.table_models['cxs'].update_value(
+            cid,
+            str(column_key),
+            value,
+        )
+        if not updated:
+            logger.warning(
+                "Could not refresh missing chip cell cid=%r key=%r",
+                cid,
+                column_key,
+            )
 
     #=======================
     # Table Clicked Functions

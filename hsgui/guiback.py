@@ -50,6 +50,8 @@ def _close_chip_figure_if_open():
     if df2.plt.fignum_exists(fnum):
         fig = df2.plt.figure(fnum)
         df2.close_figure(fig)
+        return True
+    return False
 
 
 def select_adjacent_image(back, direction=1, unannotated=False):
@@ -108,6 +110,7 @@ class MainWindowBackend(QtCore.QObject):
     informationSignal = QtCore.pyqtSignal(str, str)
     operationFailedSignal = QtCore.pyqtSignal(str, str)
     apiConnectedSignal = QtCore.pyqtSignal()
+    chipCellUpdateSignal = QtCore.pyqtSignal(int, str, object)
 
     #------------------------
     # Constructor
@@ -178,6 +181,12 @@ class MainWindowBackend(QtCore.QObject):
         else:
             viz.show_chip(back.hs, cx, fnum=fnum, figtitle='Chip View')
         back._layout_figures_if(did_exist)
+
+    def close_chip_figure(back):
+        """Close the chip figure while an original-image edit is active."""
+        closed = _close_chip_figure_if_open()
+        logger.debug("Closed chip figure for image edit: %r", closed)
+        return closed
 
     @drawing
     @profile
@@ -507,6 +516,7 @@ class MainWindowBackend(QtCore.QObject):
         cx = back.hs.cid2_cx(cid)
         if key in ['name', 'matching_name']:
             back.hs.change_name(cx, val)
+            back.populate_tables(image=False)
         else:
             try:
                 back.hs.change_property(cx, key, val)
@@ -515,7 +525,14 @@ class MainWindowBackend(QtCore.QObject):
                     'Invalid Chip Property Value',
                     str(ex),
                 )
-        back.populate_tables(image=False)
+            stored_value = back.hs.get_property(cx, key)
+            logger.debug(
+                "Refreshing chip cell cid=%r key=%r value=%r",
+                cid,
+                key,
+                stored_value,
+            )
+            back.chipCellUpdateSignal.emit(cid, key, stored_value)
 
     @slot_(int, str, str)
     @blocking
@@ -633,7 +650,6 @@ class MainWindowBackend(QtCore.QObject):
             definition.get('importance', 0),
         )
         back.populate_chip_table()
-        back.populate_result_table()
         logger.info("Added chip property %r", newprop)
 
     def update_chip_property_definition(back, key, definition):
@@ -645,7 +661,6 @@ class MainWindowBackend(QtCore.QObject):
             definition.get('importance', 0),
         )
         back.populate_chip_table()
-        back.populate_result_table()
         logger.info("Updated chip property %r as %r", key, new_key)
         return new_key
 
@@ -653,7 +668,6 @@ class MainWindowBackend(QtCore.QObject):
         key = str(key)
         back.hs.delete_property(key)
         back.populate_chip_table()
-        back.populate_result_table()
         logger.info("Deleted chip property %r", key)
 
     @slot_()
@@ -735,7 +749,7 @@ class MainWindowBackend(QtCore.QObject):
             return
         back.hs.change_roi(cx, roi)
         back.hs.save_database()
-        back.populate_tables()
+        back.populate_chip_table()
         back.select_gx(gx, cx, **kwargs)
         logger.info("Reselected ROI=%r", roi)
 
@@ -757,7 +771,7 @@ class MainWindowBackend(QtCore.QObject):
             return
         back.hs.change_theta(cx, theta)
         back.hs.save_database()
-        back.populate_tables()
+        back.populate_chip_table()
         back.select_gx(gx, cx, **kwargs)
         logger.info("Reselected theta=%r", theta)
 

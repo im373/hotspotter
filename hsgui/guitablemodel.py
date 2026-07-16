@@ -191,6 +191,23 @@ class DataTableModel(QtCore.QAbstractTableModel):
         self._set_row_storage(rows)
         self.endResetModel()
 
+    def update_value(self, record_id, column_key, value):
+        """Replace one source value without emitting the user-edit signal."""
+        source_row = self.source_row_for_id(record_id)
+        if source_row is None:
+            return False
+        try:
+            source_column = self.column_index(column_key)
+        except KeyError:
+            return False
+        self._rows[source_row]['values'][source_column] = value
+        index = self.index(source_row, source_column)
+        roles = [QtCore.Qt.DisplayRole, QtCore.Qt.EditRole, RAW_VALUE_ROLE]
+        if self._columns[source_column].get('checkable', False):
+            roles.append(QtCore.Qt.CheckStateRole)
+        self.dataChanged.emit(index, index, roles)
+        return True
+
     def record_at(self, source_row):
         record = self._rows[source_row]
         return {'id': record['id'], 'values': tuple(record['values'])}
