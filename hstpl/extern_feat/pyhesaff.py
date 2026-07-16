@@ -135,12 +135,13 @@ def detect_kpts(img_fpath, use_adaptive_scale=False, **kwargs):
         detect_fn = getattr(pyhesaff, 'detect_feats_in_image', None)
         if detect_fn is None:
             detect_fn = getattr(pyhesaff, 'detect_image')
-        try:
-            kpts, desc = detect_fn(img, use_adaptive_scale=use_adaptive_scale)
-        except TypeError:
-            # Some builds expose a lower-level detector only.
-            kpts, desc = pyhesaff.detect_image(
-                img, use_adaptive_scale=use_adaptive_scale)
+        kpts, desc = detect_fn(img, **kwargs)
+        if use_adaptive_scale:
+            adapt_fn = getattr(pyhesaff, 'adapt_scale', None)
+            if adapt_fn is None:
+                raise RuntimeError(
+                    'The installed pyhesaff does not support adaptive scale')
+            kpts, desc = adapt_fn(img_fpath, kpts)
         return kpts, desc
 
     #print('Detecting Keypoints')

@@ -6,6 +6,7 @@
 # Replaced hscom.__common__ logging hooks with module-level logging.
 
 import logging
+from os.path import exists, join
 import sys
 # Qt
 from PyQt5 import QtCore
@@ -14,6 +15,7 @@ from PyQt5 import QtWidgets
 
 # HotSpotter
 from ._frontend.MainSkel import Ui_mainSkel
+from ._frontend.TableFilterDialog import TableFilterDialog
 from . import guitools
 from . import menu_strings
 from .guitools import slot_
@@ -45,6 +47,13 @@ NOSTEAL_OVERRIDE = False  # Hard disable switch for stream stealer
 TABLE_COLUMN_WIDTH_FACTORS = {
     'cxs': {'Name': 2.0},
     'nxs': {'Name': 2.0},
+}
+
+TABLE_TAB_LABELS = {
+    'gxs': 'Image Table',
+    'cxs': 'Chip Table',
+    'nxs': 'Name Table',
+    'res': 'Query Results Table',
 }
 
 
@@ -231,27 +240,32 @@ def action_spec(action_name, i18n_key, slot_fn=None, shortcut=None, enabled=True
 
 
 def menu_action_specs(front):
-    back = front.back
+    back = front.backend
     return {
         'menuFile': [
-            action_spec('actionNew_Database', 'new_database', back.new_database, 'Ctrl+N'),
-            action_spec('actionOpen_Database', 'open_database', back.open_database, 'Ctrl+O'),
+            action_spec('actionNew_Database', 'new_database', front.new_database, 'Ctrl+N'),
+            action_spec('actionOpen_Database', 'open_database', front.open_database, 'Ctrl+O'),
             None,
             action_spec('actionSave_Database', 'save_database', back.save_database, 'Ctrl+S'),
             None,
-            action_spec('actionImport_Img_file', 'import_img_file', back.import_images_from_file, 'Ctrl+I'),
-            action_spec('actionImport_Img_dir', 'import_img_dir', back.import_images_from_dir),
+            action_spec('actionImport_Img_file', 'import_img_file', front.import_images_from_file, 'Ctrl+I'),
+            action_spec('actionImport_Img_dir', 'import_img_dir', front.import_images_from_dir),
             None,
-            action_spec('actionQuit', 'quit', back.quit),
+            action_spec('actionQuit', 'quit', front.quit_application),
+        ],
+        'menuView': [
+            action_spec('actionLayout_Figures', 'layout_figures', front.layout_figures, 'Ctrl+L'),
+            None,
+            action_spec('actionFilter_Table', 'filter_table', front.filter_table, 'Ctrl+F'),
         ],
         'menuActions': [
-            action_spec('actionAdd_Chip', 'add_chip', back.add_chip, 'A'),
-            action_spec('actionNew_Chip_Property', 'new_chip_property', back.new_prop),
+            action_spec('actionAdd_Chip', 'add_chip', front.add_chip, 'A'),
+            action_spec('actionNew_Chip_Property', 'new_chip_property', front.new_prop),
             None,
             action_spec('actionQuery', 'query', back.query, 'Q'),
             None,
-            action_spec('actionReselect_ROI', 'reselect_roi', back.reselect_roi, 'R'),
-            action_spec('actionReselect_Ori', 'reselect_ori', back.reselect_ori, 'O'),
+            action_spec('actionReselect_ROI', 'reselect_roi', front.reselect_roi, 'R'),
+            action_spec('actionReselect_Ori', 'reselect_ori', front.reselect_ori, 'O'),
             None,
             action_spec('actionNext', 'next', back.select_next, 'N'),
             action_spec('actionNext_Unannotated', 'next_unannotated', back.select_next_unannotated, 'Shift+N'),
@@ -268,9 +282,7 @@ def menu_action_specs(front):
             action_spec('actionConvert_all_images_into_chips', 'convert_all_images_into_chips', None, enabled=False),
         ],
         'menuOptions': [
-            action_spec('actionLayout_Figures', 'layout_figures', back.layout_figures, 'Ctrl+L'),
-            None,
-            action_spec('actionPreferences', 'preferences', back.edit_preferences, 'Ctrl+P'),
+            action_spec('actionPreferences', 'preferences', front.edit_preferences, 'Ctrl+P'),
         ],
         'menuHelp': [
             action_spec('actionAbout', 'about', lambda: guitools.msgbox('About', 'hotspotter'),  enabled=False),
@@ -283,11 +295,11 @@ def menu_action_specs(front):
             action_spec('actionWriteLogs', 'write_logs', None, enabled=False),
             None,
             action_spec('actionDelete_Precomputed_Results', 'delete_precomputed_results', back.delete_queryresults_dir),
-            action_spec('actionDelete_computed_directory', 'delete_computed_directory', back.delete_cache),
+            action_spec('actionDelete_computed_directory', 'delete_computed_directory', front.delete_cache),
             action_spec('actionDelete_global_preferences', 'delete_global_preferences', back.delete_global_prefs),
             None,
-            action_spec('actionDev_Mode_IPython', 'dev_mode_ipython', back.dev_mode, 'Ctrl+Alt+Shift+D'),
-            action_spec('actionDeveloper_Reload', 'developer_reload', back.dev_reload, 'Ctrl+Shift+R'),
+            action_spec('actionDev_Mode_IPython', 'dev_mode_ipython', front.dev_mode, 'Ctrl+Alt+Shift+D'),
+            action_spec('actionDeveloper_Reload', 'developer_reload', front.dev_reload, 'Ctrl+Shift+R'),
             action_spec('actionDetect_Duplicate_Images', 'detect_duplicate_images', back.detect_dupimg),
         ],
     }
@@ -317,7 +329,6 @@ def new_menu_action(front, menu_name, name, text=None, shortcut=None,
     if tooltip is not None:
         action.setToolTip(tooltip)
     if slot_fn is not None:
-        logger.debug("Connecting %s", name)
         action.triggered.connect(slot_fn)
     return action
 
@@ -352,6 +363,27 @@ def init_ui(front):
     return ui
 
 
+def make_main_window(app=None, hs=None):
+    """Construct the backend and frontend with a one-way dependency."""
+    from hscom import params
+    from . import guiback
+
+    backend = guiback.MainWindowBackend(hs=hs)
+    frontend = MainWindowFrontend(backend=backend)
+    if app is not None:
+        app._hotspotter_main_window = frontend
+        app.setActiveWindow(frontend)
+
+    nogui = bool(getattr(getattr(params, 'args', None), 'nogui', False))
+    if hs is not None:
+        backend.connect_api(hs)
+    if hs is None or not nogui:
+        frontend.show()
+        if hs is None:
+            frontend.layout_figures()
+    return backend, frontend
+
+
 #def popup(front, pos):
     #for i in front.ui.gxs_TBL.selectionModel().selection().indexes():
         #print(repr((i.row(), i.column())))
@@ -375,24 +407,274 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
     changeGxSignal  = QtCore.pyqtSignal(int, str, bool)
     querySignal = QtCore.pyqtSignal()
 
-    def __init__(front, back):
-        super(MainWindowFrontend, front).__init__()
+    def __init__(front, backend, parent=None):
+        super(MainWindowFrontend, front).__init__(parent)
         front.prev_tbl_item = None
         front.ostream = None
         front.gui_logging_handler = None
-        front.back = back
+        front.backend = backend
+        front._backend_block_stack = []
+        front.edit_prefs = None
         front.ui = init_ui(front)
         create_menu_actions(front)
         # Progress bar is not hooked up yet
         front.ui.progressBar.setVisible(False)
         front.connect_signals()
         front.steal_stdout()
+        from hsviz import draw_func2 as df2
+        df2.register_qt_win(front)
 
     def steal_stdout(front):
         return _steal_stdout(front)
 
     def return_stdout(front):
         return _return_stdout(front)
+
+    @slot_(bool)
+    def set_backend_busy(front, busy):
+        if busy:
+            front._backend_block_stack.append(front.blockSignals(True))
+        elif front._backend_block_stack:
+            was_blocked = front._backend_block_stack.pop()
+            front.blockSignals(was_blocked)
+
+    @slot_(str, str)
+    def show_information(front, title, message):
+        guitools.user_info(front, message, title=title)
+
+    @slot_(str, str)
+    def show_error(front, title, message):
+        QtWidgets.QMessageBox.critical(front, title, message)
+
+    @slot_()
+    def handle_api_connected(front):
+        from hscom import params
+
+        if not bool(getattr(getattr(params, 'args', None), 'nogui', False)):
+            front.layout_figures()
+
+    @slot_()
+    def quit_application(front):
+        guitools.exit_application()
+
+    @slot_()
+    @blocking
+    def new_database(front):
+        while True:
+            new_db = guitools.user_input(
+                front,
+                'Enter the new database name',
+                title='New Database',
+            )
+            if not new_db:
+                logger.info("Aborted new database creation")
+                return
+
+            reply = guitools._user_option(
+                front,
+                'Where should I put %r?' % new_db,
+                'New Database',
+                ['Choose Directory', 'My Work Dir'],
+                True,
+            )
+            if reply == 'My Work Dir':
+                put_dir = front.backend.get_work_directory()
+            elif reply == 'Choose Directory':
+                put_dir = guitools.select_directory(
+                    'Select where to put the new database',
+                    parent=front,
+                )
+            else:
+                logger.info("Aborted new database creation")
+                return
+
+            if not put_dir or not exists(put_dir):
+                error = 'Directory %r does not exist.' % put_dir
+            else:
+                new_dbdir = join(put_dir, new_db)
+                error = None
+            if error is None and exists(new_dbdir):
+                error = 'New DB %r already exists.' % new_dbdir
+            elif error is None:
+                front.backend.new_database(new_dbdir)
+                return
+
+            retry = guitools._user_option(
+                front,
+                error,
+                'New Database Failed',
+                ['Try Again'],
+                False,
+            )
+            if retry != 'Try Again':
+                return
+
+    @slot_()
+    @blocking
+    def open_database(front):
+        db_dir = guitools.select_directory(
+            'Select (or create) a database directory.',
+            parent=front,
+        )
+        if db_dir:
+            front.backend.open_database(db_dir)
+
+    @slot_()
+    @blocking
+    def import_images_from_file(front):
+        fpath_list = guitools.select_images(
+            'Select image files to import',
+            parent=front,
+        )
+        if fpath_list:
+            front.backend.import_images_from_file(fpath_list)
+
+    @slot_()
+    @blocking
+    def import_images_from_dir(front):
+        img_dpath = guitools.select_directory(
+            'Select directory with images in it',
+            parent=front,
+        )
+        if img_dpath:
+            front.backend.import_images_from_dir(img_dpath)
+
+    @slot_()
+    @blocking
+    def new_prop(front):
+        newprop = guitools.user_input(
+            front,
+            'What is the new property name?',
+            title='New Chip Property',
+        )
+        if newprop:
+            front.backend.new_prop(newprop)
+
+    @slot_()
+    @blocking
+    def add_chip(front):
+        gx = front.backend.get_selected_gx()
+        if gx is None:
+            front.show_information(
+                'Add Chip', 'Select an image before adding a chip')
+            return
+        front.backend.show_image(
+            gx,
+            figtitle='Image View - Select ROI (click two points)',
+        )
+        roi = guitools.select_roi()
+        if roi is not None:
+            front.backend.add_chip(gx, roi)
+
+    @slot_()
+    @blocking
+    def reselect_roi(front):
+        context = front.backend.get_selected_chip_context()
+        if context is None:
+            front.show_information(
+                'Reselect ROI', 'Cannot reselect ROI. No chip selected')
+            return
+        front.backend.show_image(
+            context['gx'],
+            [context['cx']],
+            figtitle='Image View - ReSelect ROI (drag a yellow corner)',
+        )
+        roi = guitools.select_roi(
+            context['roi'],
+            theta=context['theta'],
+        )
+        if roi is not None:
+            front.backend.reselect_roi(roi=roi)
+
+    @slot_()
+    @blocking
+    def reselect_ori(front):
+        context = front.backend.get_selected_chip_context()
+        if context is None:
+            front.show_information(
+                'Reselect Orientation',
+                'Cannot reselect orientation. No chip selected',
+            )
+            return
+        front.backend.show_image(
+            context['gx'],
+            [context['cx']],
+            figtitle='Image View - Select Orientation (click two points)',
+        )
+        theta = guitools.select_orientation()
+        if theta is not None:
+            front.backend.reselect_ori(theta=theta)
+
+    @slot_()
+    def edit_preferences(front):
+        preferences = front.backend.get_preferences()
+        front.edit_prefs = front.show_preferences(
+            preferences,
+            front.backend.default_preferences,
+        )
+        query_uid = ''.join(preferences.query_cfg.get_uid())
+        logger.debug("query_uid = %s", query_uid)
+
+    @slot_()
+    def delete_cache(front):
+        answer = guitools._user_option(
+            front,
+            'Are you sure you want to delete cache?',
+            options=['No', 'Yes'],
+        )
+        if answer == 'Yes':
+            front.backend.delete_cache()
+
+    @slot_()
+    @blocking
+    def dev_mode(front):
+        from hscom import helpers as util
+
+        steal_again = front.return_stdout()
+        hs = front.backend.get_hotspotter()  # NOQA
+        back = front.backend  # NOQA
+        devmode = True  # NOQA
+        logger.info("Finished developer help setup")
+        QtCore.pyqtRemoveInputHook()
+        execstr = util.ipython_execstr()
+        logger.warning(
+            "Debugging in IPython. IPython will break gui until you exit")
+        exec(execstr)
+        if steal_again:
+            front.steal_stdout()
+
+    @slot_()
+    @blocking
+    def dev_reload(front):
+        from hsdev import dev_reload
+        from hsviz import draw_func2 as df2
+
+        dev_reload.reload_all_modules()
+        df2.unregister_qt_win('all')
+        df2.register_qt_win(front)
+        front.backend.populate_tables()
+
+    def show_preferences(front, preferences, default_callback):
+        widget = preferences.createQWidget()
+        widget.ui.defaultPrefsBUT.clicked.connect(default_callback)
+        return widget
+
+    @slot_()
+    @blocking
+    def layout_figures(front):
+        from hsviz import draw_func2 as df2
+
+        logger.debug("Layout figures")
+        app = QtWidgets.QApplication.instance()
+        if app is None:
+            logger.warning("Cannot detect screen geometry")
+            diagonal = 1618
+        else:
+            screen_rect = app.desktop().screenGeometry()
+            width = screen_rect.width()
+            height = screen_rect.height()
+            diagonal = (width ** 2 + height ** 2) ** 0.5 / 1.618
+        df2.present(num_rc=(2, 3), wh=diagonal, wh_off=(0, 60))
 
 
     @slot_()
@@ -402,11 +684,11 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
 
     def connect_signals(front):
         # Connect signals to slots
-        back = front.back
+        back = front.backend
         ui = front.ui
         # Frontend Signals
         front.printSignal.connect(back.backend_print)
-        front.quitSignal.connect(back.quit)
+        front.quitSignal.connect(front.quit_application)
         front.selectGxSignal.connect(back.select_gx)
         front.selectCidSignal.connect(back.select_cid)
         front.selectResSignal.connect(back.select_res_cid)
@@ -415,6 +697,15 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
         front.aliasNameSignal.connect(back.alias_name)
         front.changeGxSignal.connect(back.change_image_property)
         front.querySignal.connect(back.query)
+
+        # Backend Signals
+        back.populateSignal.connect(front.populate_tbl)
+        back.setEnabledSignal.connect(front.setEnabled)
+        back.windowTitleSignal.connect(front.setWindowTitle)
+        back.busySignal.connect(front.set_backend_busy)
+        back.informationSignal.connect(front.show_information)
+        back.operationFailedSignal.connect(front.show_error)
+        back.apiConnectedSignal.connect(front.handle_api_connected)
 
         # Gui Components
         # Tables Widgets
@@ -470,12 +761,6 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
     @blocking
     def populate_tbl(front, tblname, col_fancyheaders, col_editable, row_list, datatup_list):
         tblname = str(tblname)
-        fancytab_dict = {
-            'gxs': 'Image Table',
-            'cxs': 'Chip Table',
-            'nxs': 'Name Table',
-            'res': 'Query Results Table',
-        }
         tbl_dict = {
             'gxs': front.ui.gxs_TBL,
             'cxs': front.ui.cxs_TBL,
@@ -484,8 +769,15 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
         }
         tbl = tbl_dict[tblname]
 
-        front._populate_table(tblname, tbl, col_fancyheaders, col_editable, row_list, datatup_list)
-        
+        front._populate_table(
+            tblname,
+            tbl,
+            col_fancyheaders,
+            col_editable,
+            row_list,
+            datatup_list,
+        )
+
         # Set the tab text to show the number of items listed
         tablename2_tabwidget = {
             'gxs': front.ui.image_view,
@@ -496,8 +788,61 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
         ui = front.ui
         tab_widget = tablename2_tabwidget[tblname]
         tab_index = ui.tablesTabWidget.indexOf(tab_widget)
-        tab_text = _translate("mainSkel", f"{fancytab_dict[tblname]} ({len(row_list)})")
+        tab_text = _translate(
+            "mainSkel",
+            "%s (%d)" % (TABLE_TAB_LABELS[tblname], len(row_list)),
+        )
         ui.tablesTabWidget.setTabText(tab_index, tab_text)
+
+    def current_table(front):
+        current_widget = front.ui.tablesTabWidget.currentWidget()
+        widget_tables = [
+            (front.ui.image_view, 'gxs', front.ui.gxs_TBL),
+            (front.ui.chip_view, 'cxs', front.ui.cxs_TBL),
+            (front.ui.name_view, 'nxs', front.ui.nxs_TBL),
+            (front.ui.result_view, 'res', front.ui.res_TBL),
+        ]
+        for widget, tblname, table in widget_tables:
+            if current_widget is widget:
+                return tblname, table
+        raise RuntimeError('The selected tab does not contain a known table')
+
+    @slot_()
+    def filter_table(front):
+        tblname, tbl = front.current_table()
+        headers = [
+            str(tbl.horizontalHeaderItem(column).text())
+            for column in range(tbl.columnCount())
+            if tbl.horizontalHeaderItem(column) is not None
+        ]
+        if not headers:
+            logger.warning("[filter] There is no columns to filter in table %s.", tblname)
+            QtWidgets.QMessageBox.information(
+                front,
+                _translate('TableFilterDialog', 'Filter Table'),
+                _translate(
+                    'TableFilterDialog',
+                    'The current table has no columns to filter.',
+                ),
+            )
+            return
+
+        conditions = front.backend.get_table_filters(tblname, headers)
+        while True:
+            dialog = TableFilterDialog(headers, conditions, front)
+            if dialog.exec_() != QtWidgets.QDialog.Accepted:
+                return
+            conditions = dialog.conditions()
+            try:
+                front.backend.set_table_filters(tblname, headers, conditions)
+            except ValueError as ex:
+                QtWidgets.QMessageBox.warning(
+                    front,
+                    _translate('TableFilterDialog', 'Invalid Table Filter'),
+                    str(ex),
+                )
+                continue
+            return
 
     def _populate_table(front, tblname, tbl, col_fancyheaders, col_editable, row_list, datatup_list):
         # TODO: for chip table: delete metedata column
@@ -595,9 +940,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
     def get_tbl_header(front, tbl, col):
         # Map the fancy header back to the internal one.
         fancy_header = str(tbl.horizontalHeaderItem(col).text())
-        header = (front.back.reverse_fancy[fancy_header]
-                  if fancy_header in front.back.reverse_fancy else fancy_header)
-        return header
+        return front.backend.resolve_table_header(fancy_header)
 
     def get_tbl_int(front, tbl, row, col):
         return int(tbl.item(row, col).text())
@@ -611,7 +954,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
         tblname = str(tbl.objectName()).replace('_TBL', '')
         tblname = tblname.replace('image', 'img')  # Sooooo hack
         # TODO: backmap from fancy headers to consise
-        col = front.back.table_headers[tblname].index(header)
+        col = front.backend.get_table_column(tblname, header)
         return tbl.item(row, col).text()
 
     #=======================
@@ -726,12 +1069,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
 
     @slot_(int)
     def change_view(front, new_state):
-        tab_name = str(front.ui.tablesTabWidget.tabText(new_state))
         logger.debug("change_view(%r)", new_state)
-        prevBlock = front.ui.tablesTabWidget.blockSignals(True)
-        front.ui.tablesTabWidget.blockSignals(prevBlock)
-        if tab_name.startswith('Query Results Table'):
-            logger.debug("Current cache uid: %s", front.back.hs.get_cache_uid())
 
     @slot_(str, str, list)
     def modal_useroption(front, msg, title, options):
@@ -739,7 +1077,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
 
     @slot_(str)
     def gui_write(front, msg_):
-        app = front.back.app
+        app = QtWidgets.QApplication.instance()
         outputEdit = front.ui.outputEdit
         # Write msg to text area
         outputEdit.moveCursor(QtGui.QTextCursor.End)
@@ -753,7 +1091,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
 
     @slot_()
     def gui_flush(front):
-        app = front.back.app
+        app = QtWidgets.QApplication.instance()
         if app is not None:
             app.processEvents()
         #front.ui.outputEdit.moveCursor(QtGui.QTextCursor.End)

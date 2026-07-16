@@ -44,8 +44,10 @@ def whiten_features(desc_list):
 @profile
 def bigcache_feat_save(cache_dir, uid, ext, kpts_list, desc_list):
     logger.debug('[fc2] Caching desc_list and kpts_list')
-    io.smart_save(kpts_list, cache_dir, 'kpts_list', uid, ext)
-    io.smart_save(desc_list, cache_dir, 'desc_list', uid, ext)
+    kpts_array = np.asarray(kpts_list, dtype=object)
+    desc_array = np.asarray(desc_list, dtype=object)
+    io.smart_save(kpts_array, cache_dir, 'kpts_list', uid, ext)
+    io.smart_save(desc_array, cache_dir, 'desc_list', uid, ext)
 
 
 @profile

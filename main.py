@@ -71,7 +71,7 @@ def postload_args_process(hs, back):
 
 def main():
     from hscom.logging_utils import configure_logging
-    configure_logging(log_dir="logs", debug=False, quiet=False)
+    configure_logging(log_dir="logs", debug=True, quiet=False)
 
     from hsdev import test_api
 

@@ -19,7 +19,6 @@ if __name__ == '__main__':
 
     guitools.configure_matplotlib()
     app, is_root = guitools.init_qtapp()
-    backend = None
     #guitools.make_dummy_main_window()
     prefs = Preferences.Pref()
     r = prefs
@@ -43,4 +42,4 @@ if __name__ == '__main__':
 
     print(prefs)
     prefWidget = prefs.createQWidget()
-    guitools.run_main_loop(app, is_root, backend)
+    guitools.run_main_loop(app, is_root, prefWidget)

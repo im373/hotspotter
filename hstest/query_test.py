@@ -12,6 +12,7 @@ if __name__ == '__main__':
     app, is_root = guitools.init_qtapp()
     # Create a HotSpotter API (hs) and GUI backend (back)
     hs, back = test_api.main(defaultdb='NAUTS', preload=False, app=app)
+    front = app._hotspotter_main_window
     # The test api returns a list of interesting chip indexes
     cx = test_api.get_test_cxs(hs, 1)[0]
     # Convert chip-index in to chip-id
@@ -20,4 +21,4 @@ if __name__ == '__main__':
     res = back.query(cid)
     # LAAEFTR: use res to do stuff
     # Run Qt Loop to use the GUI
-    guitools.run_main_loop(app, is_root, back, frequency=20)
+    guitools.run_main_loop(app, is_root, front, frequency=20)

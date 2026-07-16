@@ -12,6 +12,7 @@ if __name__ == '__main__':
     multiprocessing.freeze_support()
     app, is_root = guitools.init_qtapp()
     hs, back = test_api.main(defaultdb=None, preload=False, app=app)
+    front = app._hotspotter_main_window
 
     # Build the test db name
     work_dir = back.get_work_directory()
@@ -23,6 +24,6 @@ if __name__ == '__main__':
 
     back.new_database(new_dbdir)
 
-    back.import_images_from_file()
+    front.import_images_from_file()
 
-    guitools.run_main_loop(app, is_root, back, frequency=100)
+    guitools.run_main_loop(app, is_root, front, frequency=100)

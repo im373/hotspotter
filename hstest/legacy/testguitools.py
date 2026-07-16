@@ -3,6 +3,5 @@ if __name__ == '__main__':
     freeze_support()
     print('__main__ = gui.py')
     app, is_root = init_qtapp()
-    back = make_dummy_main_window()
-    front = back.front
-    run_main_loop(app, is_root, back)
+    front = make_dummy_main_window()
+    run_main_loop(app, is_root, front)

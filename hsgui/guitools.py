@@ -111,24 +111,29 @@ def backblocking(func):
     #printDBG('[@guitools] Wrapping %r with backblocking' % func.func_name)
 
     def block_wrapper(back, *args, **kwargs):
-        #print('[guitools] BLOCKING')
-        wasBlocked_ = back.front.blockSignals(True)
+        busy_signal = getattr(back, 'busySignal', None)
+        if busy_signal is not None:
+            busy_signal.emit(True)
         try:
             result = func(back, *args, **kwargs)
         except Exception as ex:
-            back.front.blockSignals(wasBlocked_)
             logger.exception("Block wrapper caught exception in %r", func.__name__)
             logger.debug("back = %r", back)
             VERBOSE = False
             if VERBOSE:
                 logger.debug("*args = %r", args)
                 logger.debug("**kwargs = %r", kwargs)
-            #print('ex = %r' % ex)
-            #back.user_info('Error in blocking ex=%r' % ex)
-            back.user_info('Error while blocking gui:\nex=%r' % ex)
+            failure_signal = getattr(back, 'operationFailedSignal', None)
+            if failure_signal is not None:
+                failure_signal.emit(
+                    'Operation failed',
+                    'Error while running %s:\n%s: %s' % (
+                        func.__name__, type(ex).__name__, ex),
+                )
             raise
-        back.front.blockSignals(wasBlocked_)
-        #print('[guitools] UNBLOCKING')
+        finally:
+            if busy_signal is not None:
+                busy_signal.emit(False)
         return result
     block_wrapper.__name__ = func.__name__
     return block_wrapper
@@ -153,7 +158,7 @@ def frontblocking(func):
                 logger.debug("*args = %r", args)
                 logger.debug("**kwargs = %r", kwargs)
             #print('ex = %r' % ex)
-            front.user_info('Error in blocking ex=%r' % ex)
+            user_info(front, 'Error in blocking ex=%r' % ex)
             raise
         front.blockSignals(wasBlocked_)
         #print('[guitools] UNBLOCKING')
@@ -180,7 +185,6 @@ def drawing(func):
 
 @profile
 def select_orientation():
-    #from matplotlib.backend_bases import mplDeprecation
     logger.info("Define an orientation angle by clicking two points")
     fig = None
     oldcbfn = None
@@ -193,9 +197,6 @@ def select_orientation():
         logger.info("Waiting for 2 points from ginput")
         pts = np.asarray(fig.ginput(2))
         logger.info("ginput returned pts=%r", pts)
-        # if len(pts) != 2:
-        #     print('[*guitools] orientation selection cancelled: pts=%r' % (pts,))
-        #     return None
         refpt = pts[1] - pts[0]
         theta = math.atan2(refpt[1], refpt[0])
         logger.info("Calculated theta=%r refpt=%r", theta, refpt)
@@ -212,7 +213,6 @@ def select_orientation():
 def select_roi(initial_roi=None, theta=0):
     if initial_roi is not None:
         return select_roi_drag(initial_roi, theta=theta)
-    #from matplotlib.backend_bases import mplDeprecation
     logger.info("Define a rectangular ROI by clicking two points")
     fig = None
     oldcbfn = None
@@ -490,21 +490,26 @@ def getQtImageNameFilter():
 
 
 @profile
-def select_images(caption='Select images:', directory=None):
+def select_images(caption='Select images:', directory=None, parent=None):
     name_filter = getQtImageNameFilter()
-    selected = select_files(caption, directory, name_filter)
+    selected = select_files(caption, directory, name_filter, parent=parent)
     logger.info("Selected images = %r", selected)
     return selected
 
 
 @profile
-def select_files(caption='Select Files:', directory=None, name_filter=None):
+def select_files(caption='Select Files:', directory=None, name_filter=None,
+                 parent=None):
     'Selects one or more files from disk using a qt dialog'
     logger.info("%s", caption)
     if directory is None:
         directory = io.global_cache_read('select_directory')
-    qdlg = QtWidgets.QFileDialog()
-    qfile_list = qdlg.getOpenFileNames(caption=caption, directory=directory, filter=name_filter)
+    qfile_list = QtWidgets.QFileDialog.getOpenFileNames(
+        parent,
+        caption=caption,
+        directory=directory,
+        filter=name_filter,
+    )
     logger.debug("qfile_list = %r", qfile_list)
     if isinstance(qfile_list, tuple):
         qfile_list = qfile_list[0]
@@ -518,14 +523,16 @@ def select_files(caption='Select Files:', directory=None, name_filter=None):
 
 
 @profile
-def select_directory(caption='Select Directory', directory=None):
+def select_directory(caption='Select Directory', directory=None, parent=None):
     logger.info("%s", caption)
     if directory is None:
         directory = io.global_cache_read('select_directory')
-    qdlg = QtWidgets.QFileDialog()
     qopt = QtWidgets.QFileDialog.ShowDirsOnly
     qdlg_kwargs = dict(caption=caption, options=qopt, directory=directory)
-    dpath = str(qdlg.getExistingDirectory(**qdlg_kwargs))
+    dpath = str(QtWidgets.QFileDialog.getExistingDirectory(
+        parent,
+        **qdlg_kwargs
+    ))
     logger.info("Selected directory: %r", dpath)
     io.global_cache_write('select_directory', split(dpath)[0])
     return dpath
@@ -583,11 +590,11 @@ def exit_application():
 
 @util.indent_decor('[qt-main]')
 @profile
-def run_main_loop(app, is_root=True, back=None, **kwargs):
-    if back is not None:
+def run_main_loop(app, is_root=True, window=None, **kwargs):
+    if window is not None:
         logger.debug("Setting active window")
-        app.setActiveWindow(back.front)
-        back.timer = ping_python_interpreter(**kwargs)
+        app.setActiveWindow(window)
+        app._hotspotter_timer = ping_python_interpreter(**kwargs)
     if is_root:
         exec_core_app_loop(app)
         #exec_core_event_loop(app)
@@ -628,14 +635,10 @@ def ping_python_interpreter(frequency=4200):  # 4200):
 
 
 def make_dummy_main_window():
-    class DummyBackend(QtCore.QObject):
-        def __init__(self):
-            super(DummyBackend,  self).__init__()
-            self.front = QtWidgets.QMainWindow()
-            self.front.setWindowTitle('Dummy Main Window')
-            self.front.show()
-    back = DummyBackend()
-    return back
+    window = QtWidgets.QMainWindow()
+    window.setWindowTitle('Dummy Main Window')
+    window.show()
+    return window
 
 
 def get_scope(qobj, scope_title='_scope_list'):

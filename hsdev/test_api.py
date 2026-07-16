@@ -2,7 +2,6 @@
 import logging
 
 from hscom.dev_utils import make_reloader
-from hscom.profiling import profile
 
 logger = logging.getLogger(__name__)
 rrr = make_reloader(__name__, '[tapi]')
@@ -52,7 +51,7 @@ def main(defaultdb='cache', preload=False, app=None):
     from hscom import params
     from hotspotter import HotSpotterAPI as api
     from hsgui import guitools
-    from hsgui import guiback
+    from hsgui import guifront
     if app is True:
         app, is_root = guitools.init_qtapp()
     args = parse_arguments(defaultdb, defaultdb == 'cache')
@@ -60,8 +59,12 @@ def main(defaultdb='cache', preload=False, app=None):
     if app is None:
         hs = api.HotSpotter(args)
     else:
-        back = guiback.make_main_window(app)
-        hs = back.open_database(args.dbdir)
+        back, front = guifront.make_main_window(app)
+        if args.dbdir:
+            hs = back.open_database(args.dbdir)
+        else:
+            front.open_database()
+            hs = back.hs
     setcfg = args.setcfg
     if setcfg is not None:
         # FIXME move experiment harness to hsdev
@@ -225,6 +228,7 @@ def main_loop(app, is_root, back, runqtmain=True):
     if not embedded and runqtmain:
         logger.debug("Running main loop")
         # If not in IPython run the QT main loop
-        guitools.run_main_loop(app, is_root, back, frequency=100)
+        window = getattr(app, '_hotspotter_main_window', None)
+        guitools.run_main_loop(app, is_root, window, frequency=100)
     signal_reset()
     logger.debug("HotSpotter will exit")

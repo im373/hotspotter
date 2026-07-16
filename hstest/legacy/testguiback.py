@@ -5,8 +5,8 @@ if __name__ == '__main__':
     freeze_support()
     print('__main__ = gui.py')
     app, is_root = guitools.init_qtapp()
-    back = guitools.make_main_window()
-    front = back.front
+    from hsgui import guifront
+    back, front = guifront.make_main_window(app)
     ui = front.ui
-    guitools.run_main_loop(app, is_root, back)
+    guitools.run_main_loop(app, is_root, front)
 '''
