@@ -81,6 +81,31 @@ class DataTableModelTest(unittest.TestCase):
 
         self.assertEqual(index.data(QtCore.Qt.EditRole), True)
 
+    def test_nullable_checkbox_supports_empty_state(self):
+        model = DataTableModel(
+            [{
+                'key': 'reviewed',
+                'header': 'Reviewed',
+                'editable': True,
+                'checkable': True,
+                'nullable': True,
+            }],
+            [(3, (True,))],
+        )
+        index = model.index(0, 0)
+
+        self.assertTrue(index.flags() & QtCore.Qt.ItemIsUserTristate)
+        self.assertTrue(model.setData(
+            index,
+            QtCore.Qt.PartiallyChecked,
+            QtCore.Qt.CheckStateRole,
+        ))
+        self.assertEqual(index.data(QtCore.Qt.EditRole), '')
+        self.assertEqual(
+            index.data(QtCore.Qt.CheckStateRole),
+            QtCore.Qt.PartiallyChecked,
+        )
+
     def test_set_rows_reuses_model(self):
         self.model.set_rows([(100, (100, 'only', False))])
 

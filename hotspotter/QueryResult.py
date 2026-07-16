@@ -20,6 +20,7 @@ import numpy as np
 from hscom import helpers as util
 from hscom import params
 from hscom.Printable import DynStruct
+from . import chip_properties
 from . import voting_rules2 as vr2
 
 
@@ -190,7 +191,22 @@ class QueryResult(DynStruct):
             cx2_score = vr2.enforce_one_name(hs, cx2_score,
                                              cx2_chipscore=cx2_chipscore)
         top_cxs = cx2_score.argsort()[::-1]
-        dcxs_ = set(hs.get_indexed_sample()) - set([res.qcx])
+        indexed_cxs = hs.get_indexed_sample()
+        constraints = chip_properties.permanent_metadata_constraints(
+            hs.tables.prop_dict,
+            getattr(hs.tables, 'prop_metadata', {}),
+            res.qcx,
+        )
+        dcxs_ = {
+            int(cx)
+            for cx in indexed_cxs
+            if int(cx) != res.qcx
+            and chip_properties.metadata_matches_constraints(
+                hs.tables.prop_dict,
+                int(cx),
+                constraints,
+            )
+        }
         top_cxs = [cx for cx in iter(top_cxs) if cx in dcxs_]
         #top_cxs = np.intersect1d(top_cxs, hs.get_indexed_sample())
         if only_gt:

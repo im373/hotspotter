@@ -33,6 +33,7 @@ class QueryRequest(DynStruct):
         qreq._dftup2_index = {}   # cached indexes
         qreq.query_uid = None
         qreq.featchip_uid = None
+        qreq.permanent_metadata_uid = ''
         qreq.vsmany = False
         qreq.vsone = False
 
@@ -60,6 +61,8 @@ class QueryRequest(DynStruct):
             # In case you don't search the entire dataset
             dcxs_uid = util.hashstr_arr(qreq._dcxs, '_dcxs')
             uid_list += [dcxs_uid]
+        if qreq.permanent_metadata_uid:
+            uid_list += [qreq.permanent_metadata_uid]
         return uid_list
 
     def get_uid(qreq, *args, **kwargs):

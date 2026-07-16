@@ -3,12 +3,15 @@ import os
 import tempfile
 import unittest
 from types import SimpleNamespace
+from unittest import mock
 
 import numpy as np
 
 from hsgui.guiback import MainWindowBackend
+from hotspotter import QueryResult as query_result
 from hotspotter import chip_properties
 from hotspotter import load_data2
+from hotspotter import matching_functions
 from hotspotter.HotSpotterAPI import HotSpotter
 
 
@@ -43,17 +46,56 @@ class FakeHotSpotter(object):
 class ChipPropertyTest(unittest.TestCase):
     def test_value_coercion(self):
         self.assertEqual(chip_properties.coerce_property_value('12', 'int'), 12)
+        self.assertEqual(
+            chip_properties.coerce_property_value('1.25', 'float'),
+            1.25,
+        )
         self.assertIs(chip_properties.coerce_property_value('yes', 'bool'), True)
         self.assertIs(chip_properties.coerce_property_value('0', 'bool'), False)
+        for datatype in chip_properties.PROPERTY_DATATYPES:
+            with self.subTest(datatype=datatype):
+                self.assertEqual(
+                    chip_properties.coerce_property_value('', datatype),
+                    '',
+                )
         with self.assertRaises(ValueError):
             chip_properties.coerce_property_value('sometimes', 'bool')
 
-    def test_add_typed_property_uses_typed_defaults(self):
+    def test_numeric_metadata_rejects_out_of_range_values(self):
+        self.assertEqual(
+            chip_properties.coerce_property_value(
+                str(chip_properties.INTEGER_MIN),
+                'int',
+            ),
+            chip_properties.INTEGER_MIN,
+        )
+        self.assertEqual(
+            chip_properties.coerce_property_value(
+                str(chip_properties.INTEGER_MAX),
+                'int',
+            ),
+            chip_properties.INTEGER_MAX,
+        )
+        for value in (
+            str(chip_properties.INTEGER_MIN - 1),
+            str(chip_properties.INTEGER_MAX + 1),
+        ):
+            with self.subTest(datatype='int', value=value):
+                with self.assertRaisesRegex(ValueError, 'must be between'):
+                    chip_properties.coerce_property_value(value, 'int')
+        for value in ('1e9999', '-1e9999', 'nan', 'inf', '-inf'):
+            with self.subTest(datatype='float', value=value):
+                with self.assertRaisesRegex(ValueError, 'must be finite'):
+                    chip_properties.coerce_property_value(value, 'float')
+
+    def test_add_typed_property_uses_empty_defaults(self):
         hs = FakeHotSpotter()
 
         hs.add_property('reviewed', 'bool', 1)
+        hs.add_property('weight', 'float', 2)
 
-        self.assertEqual(hs.tables.prop_dict['reviewed'], [False, False])
+        self.assertEqual(hs.tables.prop_dict['reviewed'], ['', ''])
+        self.assertEqual(hs.tables.prop_dict['weight'], ['', ''])
         self.assertEqual(
             hs.tables.prop_metadata['reviewed'],
             {'datatype': 'bool', 'importance': 1},
@@ -90,14 +132,47 @@ class ChipPropertyTest(unittest.TestCase):
 
         self.assertIs(hs.tables.prop_dict['reviewed'][0], True)
 
-    def test_new_chip_receives_typed_property_default(self):
+    def test_new_chip_receives_empty_property_default(self):
         hs = FakeHotSpotter()
         hs.add_property('reviewed', 'bool', 1)
 
         hs.add_chip(0, [1, 2, 3, 4], dochecks=False)
 
         self.assertEqual(hs.tables.prop_dict['reviewed'],
-                         [False, False, False])
+                         ['', '', ''])
+
+    def test_empty_typed_values_survive_metadata_loading(self):
+        with tempfile.TemporaryDirectory() as internal_dir:
+            metadata_fpath = os.path.join(
+                internal_dir,
+                load_data2.CHIP_PROPERTY_METADATA_FNAME,
+            )
+            with open(metadata_fpath, 'w', encoding='utf-8') as file_:
+                json.dump({
+                    'version': 1,
+                    'properties': {
+                        'count': {'datatype': 'int', 'importance': 2},
+                        'ratio': {'datatype': 'float', 'importance': 2},
+                        'flag': {'datatype': 'bool', 'importance': 2},
+                    },
+                }, file_)
+            prop_dict = {
+                'count': ['', '3'],
+                'ratio': ['', '1.5'],
+                'flag': ['', 'true'],
+            }
+
+            definitions = load_data2.load_chip_property_metadata(
+                internal_dir,
+                prop_dict,
+            )
+
+        self.assertEqual(prop_dict['count'], ['', 3])
+        self.assertEqual(prop_dict['ratio'], ['', 1.5])
+        self.assertEqual(prop_dict['flag'], ['', True])
+        self.assertEqual(definitions['count']['datatype'], 'int')
+        self.assertEqual(definitions['ratio']['datatype'], 'float')
+        self.assertEqual(definitions['flag']['datatype'], 'bool')
 
     def test_delete_removes_values_and_definition(self):
         hs = FakeHotSpotter()
@@ -226,6 +301,39 @@ class ChipPropertyTest(unittest.TestCase):
         self.assertEqual(cell_updates, [(1, 'rating', 7)])
         self.assertEqual(hs.tables.prop_dict['rating'][0], 7)
 
+    def test_invalid_numeric_edit_reports_error_and_restores_cell(self):
+        hs = FakeHotSpotter()
+        hs.add_property('count', 'int', 1)
+        hs.add_property('weight', 'float', 1)
+        hs.change_property(0, 'count', '7')
+        hs.change_property(0, 'weight', '1.5')
+        back = MainWindowBackend(hs=hs)
+        errors = []
+        cell_updates = []
+        back.operationFailedSignal.connect(lambda *args: errors.append(args))
+        back.chipCellUpdateSignal.connect(
+            lambda *args: cell_updates.append(args)
+        )
+
+        back.change_chip_property(
+            1,
+            'count',
+            str(chip_properties.INTEGER_MAX + 1),
+        )
+        back.change_chip_property(1, 'weight', '-1e9999')
+
+        self.assertEqual(len(errors), 2)
+        self.assertTrue(all(
+            title == 'Invalid Chip Property Value'
+            for title, _ in errors
+        ))
+        self.assertEqual(
+            cell_updates,
+            [(1, 'count', 7), (1, 'weight', 1.5)],
+        )
+        self.assertEqual(hs.tables.prop_dict['count'][0], 7)
+        self.assertEqual(hs.tables.prop_dict['weight'][0], 1.5)
+
     def test_chip_name_edit_refreshes_related_tables(self):
         hs = FakeHotSpotter()
         changed_names = []
@@ -268,6 +376,169 @@ class ChipPropertyTest(unittest.TestCase):
                 ('save',),
             ],
         )
+
+    def test_permanent_metadata_filters_neighbor_comparisons(self):
+        tables = SimpleNamespace(
+            prop_dict={'direction': ['L', 'R', '', 'L']},
+            prop_metadata={
+                'direction': {'datatype': 'str', 'importance': 2},
+            },
+            cx2_gx=np.arange(4),
+            cx2_nx=np.arange(4),
+        )
+        hs = SimpleNamespace(tables=tables)
+        filt_cfg = SimpleNamespace(
+            can_match_sameimg=True,
+            can_match_samename=True,
+        )
+        qreq = SimpleNamespace(
+            cfg=SimpleNamespace(
+                filt_cfg=filt_cfg,
+                nn_cfg=SimpleNamespace(K=3),
+            ),
+            _data_index=SimpleNamespace(ax2_cx=np.array([1, 2, 3])),
+        )
+        neighbors = {
+            0: (
+                np.array([[0, 1, 2]]),
+                np.zeros((1, 3), dtype=float),
+            ),
+        }
+
+        filtered = matching_functions.filter_neighbors(
+            hs,
+            neighbors,
+            {},
+            qreq,
+        )
+
+        self.assertEqual(filtered[0][1].tolist(), [[False, True, True]])
+
+        tables.prop_dict['direction'][0] = ''
+        unfiltered = matching_functions.filter_neighbors(
+            hs,
+            neighbors,
+            {},
+            qreq,
+        )
+        self.assertEqual(unfiltered[0][1].tolist(), [[True, True, True]])
+
+    def test_multiple_permanent_fields_use_wildcards_per_field(self):
+        prop_dict = {
+            'direction': ['L', 'R', '', 'L'],
+            'sex': ['', 'F', 'M', 'M'],
+            'note': ['query', 'different', 'different', 'different'],
+        }
+        definitions = {
+            'direction': {'datatype': 'str', 'importance': 2},
+            'sex': {'datatype': 'str', 'importance': 2},
+            'note': {'datatype': 'str', 'importance': 1},
+        }
+
+        query_constraints = chip_properties.permanent_metadata_constraints(
+            prop_dict,
+            definitions,
+            3,
+        )
+        compatible = [
+            chip_properties.metadata_matches_constraints(
+                prop_dict,
+                cx,
+                query_constraints,
+            )
+            for cx in range(3)
+        ]
+
+        self.assertEqual(query_constraints, {'direction': 'L', 'sex': 'M'})
+        self.assertEqual(compatible, [True, False, True])
+
+    def test_query_results_hide_incompatible_permanent_metadata(self):
+        hs = SimpleNamespace(
+            tables=SimpleNamespace(
+                prop_dict={'direction': ['L', 'R', '', 'L']},
+                prop_metadata={
+                    'direction': {'datatype': 'str', 'importance': 2},
+                },
+            ),
+            prefs=SimpleNamespace(
+                display_cfg=SimpleNamespace(name_scoring=False, N=10),
+            ),
+            get_indexed_sample=lambda: np.array([0, 1, 2, 3]),
+        )
+        result = query_result.QueryResult(0, 'test')
+        result.cx2_score = np.array([0.0, 100.0, 50.0, 40.0])
+
+        self.assertEqual(result.topN_cxs(hs, N='all'), [2, 3])
+
+    def test_single_chip_query_indexes_only_compatible_candidates(self):
+        hs = SimpleNamespace(
+            tables=SimpleNamespace(
+                prop_dict={'direction': ['L', 'R', '', 'L']},
+                prop_metadata={
+                    'direction': {'datatype': 'str', 'importance': 2},
+                },
+            ),
+            prefs=SimpleNamespace(query_cfg=object()),
+            qreq=object(),
+        )
+        prepared_request = object()
+        with mock.patch(
+            'hotspotter.HotSpotterAPI.mc3.prep_query_request',
+            return_value=prepared_request,
+        ) as prepare, mock.patch(
+            'hotspotter.HotSpotterAPI.mc3.process_query_request',
+            return_value={0: 'result'},
+        ):
+            result = HotSpotter.query_cxs(
+                hs,
+                0,
+                np.array([1, 2, 3]),
+            )
+
+        self.assertEqual(result, 'result')
+        self.assertEqual(
+            prepare.call_args.kwargs['dcxs'].tolist(),
+            [2, 3],
+        )
+
+    def test_query_with_no_compatible_candidates_skips_matcher(self):
+        hs = SimpleNamespace(
+            tables=SimpleNamespace(
+                cx2_cid=np.array([1, 2]),
+                prop_dict={'direction': ['L', 'R']},
+                prop_metadata={
+                    'direction': {'datatype': 'str', 'importance': 2},
+                },
+            ),
+            prefs=SimpleNamespace(query_cfg=object()),
+            qreq=object(),
+            get_num_chips=lambda: 2,
+        )
+        with mock.patch(
+            'hotspotter.HotSpotterAPI.mc3.process_query_request'
+        ) as process:
+            result = HotSpotter.query_cxs(hs, 0, np.array([1]))
+
+        process.assert_not_called()
+        self.assertEqual(result.cx2_score.tolist(), [0.0, 0.0])
+        self.assertEqual(result.cx2_fm[1].shape, (0, 2))
+
+    def test_permanent_metadata_changes_query_cache_uid(self):
+        prop_dict = {'direction': ['L', 'R']}
+        definitions = {
+            'direction': {'datatype': 'str', 'importance': 2},
+        }
+        before = chip_properties.permanent_metadata_uid(
+            prop_dict,
+            definitions,
+        )
+        prop_dict['direction'][1] = 'L'
+        after = chip_properties.permanent_metadata_uid(
+            prop_dict,
+            definitions,
+        )
+
+        self.assertNotEqual(before, after)
 
 
 if __name__ == '__main__':

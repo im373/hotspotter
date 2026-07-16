@@ -125,6 +125,95 @@ class GuiFrontTableTest(unittest.TestCase):
         self.assertEqual(id(self.front.table_models['cxs']), model_identity)
         self.assertEqual(model.value_at(0, 'rating'), 7)
 
+    def test_nullable_bool_metadata_emits_empty_value(self):
+        class FakeHotSpotter(object):
+            def get_property_definition(self, key):
+                if key == 'reviewed':
+                    return {'datatype': 'bool', 'importance': 2}
+                return None
+
+        self.backend.hs = FakeHotSpotter()
+        self.front.populate_tbl(
+            'cxs',
+            ['cid', 'reviewed'],
+            [False, True],
+            [5],
+            [(5, True)],
+        )
+        self.front.changeCidSignal.disconnect(
+            self.backend.change_chip_property
+        )
+        edits = []
+        self.front.changeCidSignal.connect(lambda *args: edits.append(args))
+        model = self.front.table_models['cxs']
+        index = model.index(0, 1)
+
+        changed = model.setData(
+            index,
+            QtCore.Qt.PartiallyChecked,
+            QtCore.Qt.CheckStateRole,
+        )
+
+        self.assertTrue(changed)
+        self.assertEqual(edits, [(5, 'reviewed', '')])
+
+    def test_chip_metadata_cell_context_helpers_edit_and_clear(self):
+        class FakeHotSpotter(object):
+            def get_property_definition(self, key):
+                if key == 'count':
+                    return {'datatype': 'int', 'importance': 2}
+                return None
+
+        self.backend.hs = FakeHotSpotter()
+        self.front.populate_tbl(
+            'cxs',
+            ['cid', 'name', 'count'],
+            [False, True, True],
+            [5],
+            [(5, 'alpha', 7)],
+        )
+        self.front.changeCidSignal.disconnect(
+            self.backend.change_chip_property
+        )
+        edits = []
+        self.front.changeCidSignal.connect(lambda *args: edits.append(args))
+        view = self.front.table_views['cxs']
+        proxy = self.front.table_proxies['cxs']
+        source_model = self.front.table_models['cxs']
+        source_index = source_model.index(0, 2)
+        proxy_index = proxy.mapFromSource(source_index)
+
+        with mock.patch.object(view, 'edit', return_value=True) as edit:
+            self.assertTrue(self.front.edit_chip_table_cell(proxy_index))
+        edit.assert_called_once_with(proxy_index)
+
+        self.assertTrue(self.front.clear_chip_table_cell(proxy_index))
+        self.assertEqual(source_model.value_at(0, 'count'), '')
+        self.assertEqual(edits, [(5, 'count', '')])
+        self.assertEqual(
+            view.contextMenuPolicy(),
+            QtCore.Qt.CustomContextMenu,
+        )
+
+    def test_chip_cell_context_rejects_builtin_columns(self):
+        class FakeHotSpotter(object):
+            def get_property_definition(self, key):
+                return None
+
+        self.backend.hs = FakeHotSpotter()
+        self.front.populate_tbl(
+            'cxs',
+            ['cid', 'name'],
+            [False, True],
+            [5],
+            [(5, 'alpha')],
+        )
+        proxy = self.front.table_proxies['cxs']
+        source_model = self.front.table_models['cxs']
+        proxy_index = proxy.mapFromSource(source_model.index(0, 1))
+
+        self.assertFalse(self.front.clear_chip_table_cell(proxy_index))
+
     def test_reselect_workflows_hide_and_restore_chip_figure(self):
         context = {
             'gx': 2,

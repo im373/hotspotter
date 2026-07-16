@@ -11,6 +11,7 @@ import numpy as np
 from hscom import params
 from hscom import helpers as util
 from . import DataStructures as ds
+from . import chip_properties
 from . import matching_functions as mf
 
 
@@ -75,6 +76,10 @@ def pre_cache_checks(hs, qreq):
     logger.debug(' --- pre cache checks --- ')
     # Ensure hotspotter object is using the right config
     hs.attatch_qreq(qreq)
+    qreq.permanent_metadata_uid = chip_properties.permanent_metadata_uid(
+        hs.tables.prop_dict,
+        getattr(hs.tables, 'prop_metadata', {}),
+    )
     feat_uid = qreq.cfg._feat_cfg.get_uid()
     # Load any needed features or chips into memory
     if hs.feats.feat_uid != feat_uid:

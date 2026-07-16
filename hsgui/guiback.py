@@ -84,6 +84,8 @@ def select_adjacent_image(back, direction=1, unannotated=False):
     return 'beginning of the image list'
 
 
+# debug test _strict_mode
+
 def _strict_mode():
     args = getattr(params, 'args', None)
     return getattr(args, 'strict', False) or '--strict' in sys.argv

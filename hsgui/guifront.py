@@ -25,6 +25,7 @@ from .guitablemodel import DataTableModel
 from .guitablemodel import DataTableProxyModel
 from .guitools import slot_
 from .guitools import frontblocking as blocking
+from hotspotter import chip_properties
 
 logger = logging.getLogger(__name__)
 
@@ -797,6 +798,10 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
         chip_header.customContextMenuRequested.connect(
             front.chip_header_context_requested
         )
+        ui.cxs_TBL.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        ui.cxs_TBL.customContextMenuRequested.connect(
+            front.chip_cell_context_requested
+        )
         # Tab Widget
         ui.tablesTabWidget.currentChanged.connect(front.change_view)
 
@@ -888,11 +893,16 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
                 property_definition is not None
                 and property_definition.get('datatype') == 'bool'
             )
+            nullable = (
+                property_definition is not None
+                and property_definition.get('datatype') == 'bool'
+            )
             columns.append({
                 'key': column_key,
                 'header': display_table_header(column_key),
                 'editable': bool(editable),
                 'checkable': checkable,
+                'nullable': nullable,
                 'alignment': int(
                     QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter
                 ),
@@ -1104,6 +1114,65 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
         elif selected is delete_action:
             front.confirm_delete_chip_property(column_key)
 
+    @slot_(QtCore.QPoint)
+    def chip_cell_context_requested(front, pos):
+        """Open value actions for a user-defined chip metadata cell."""
+        view = front.ui.cxs_TBL
+        proxy_index = view.indexAt(pos)
+        if not proxy_index.isValid():
+            return
+        source_index = front.table_source_index('cxs', proxy_index)
+        if not source_index.isValid():
+            return
+        model = front.table_models['cxs']
+        column_key = model.column_key(source_index.column())
+        definition = front.backend.get_chip_property_definition(column_key)
+        if (
+            definition is None
+            or not (model.flags(source_index) & QtCore.Qt.ItemIsEditable)
+        ):
+            return
+
+        menu = QtWidgets.QMenu(front)
+        edit_action = menu.addAction('Edit')
+        delete_action = menu.addAction('Delete Content')
+        selected = menu.exec_(view.viewport().mapToGlobal(pos))
+        if selected is edit_action:
+            front.edit_chip_table_cell(proxy_index)
+        elif selected is delete_action:
+            front.clear_chip_table_cell(proxy_index)
+
+    def edit_chip_table_cell(front, proxy_index):
+        """Start the table's normal editor for a chip metadata cell."""
+        view = front.ui.cxs_TBL
+        source_index = front.table_source_index('cxs', proxy_index)
+        if not source_index.isValid():
+            return False
+        model = front.table_models['cxs']
+        column_key = model.column_key(source_index.column())
+        if (
+            front.backend.get_chip_property_definition(column_key) is None
+            or not (model.flags(source_index) & QtCore.Qt.ItemIsEditable)
+        ):
+            return False
+        view.setCurrentIndex(proxy_index)
+        view.edit(proxy_index)
+        return True
+
+    def clear_chip_table_cell(front, proxy_index):
+        """Reset one user-defined chip metadata value to empty."""
+        source_index = front.table_source_index('cxs', proxy_index)
+        if not source_index.isValid():
+            return False
+        model = front.table_models['cxs']
+        column_key = model.column_key(source_index.column())
+        if (
+            front.backend.get_chip_property_definition(column_key) is None
+            or not (model.flags(source_index) & QtCore.Qt.ItemIsEditable)
+        ):
+            return False
+        return model.setData(source_index, '', QtCore.Qt.EditRole)
+
     def edit_chip_property(front, column_key, definition=None):
         definition = (
             definition
@@ -1161,7 +1230,10 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
         if tblname in ('cxs', 'res'):
             definition = front.backend.get_chip_property_definition(column_key)
             if definition is not None and definition['datatype'] == 'bool':
-                new_value = 'true' if bool(value) else 'false'
+                if chip_properties.is_empty_property_value(value):
+                    new_value = ''
+                else:
+                    new_value = 'true' if bool(value) else 'false'
             else:
                 new_value = csv_sanatize(value)
             front.changeCidSignal.emit(

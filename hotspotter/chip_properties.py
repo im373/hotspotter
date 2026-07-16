@@ -1,7 +1,14 @@
-"""Validation and type handling for user-defined chip properties."""
+"""Validation, comparison, and type handling for chip properties."""
 
 
-PROPERTY_DATATYPES = ('str', 'int', 'bool')
+import hashlib
+import json
+import math
+
+
+PROPERTY_DATATYPES = ('str', 'int', 'float', 'bool')
+INTEGER_MIN = -(2 ** 63)
+INTEGER_MAX = (2 ** 63) - 1
 PROPERTY_IMPORTANCE = {
     0: 'Not significant',
     1: 'Important feature',
@@ -59,31 +66,112 @@ def validate_property_name(name, existing_names=(), original_name=None):
 
 def default_property_value(datatype):
     """Return the default cell value for a datatype."""
-    datatype = normalize_property_definition(datatype)['datatype']
-    return {'str': '', 'int': 0, 'bool': False}[datatype]
+    normalize_property_definition(datatype)
+    return ''
+
+
+def is_empty_property_value(value):
+    """Return whether a property value represents an unset metadata cell."""
+    return value is None or (isinstance(value, str) and not value.strip())
 
 
 def coerce_property_value(value, datatype):
     """Convert a CSV or GUI value to the declared property datatype."""
     datatype = normalize_property_definition(datatype)['datatype']
+    if is_empty_property_value(value):
+        return ''
     if datatype == 'str':
-        return '' if value is None else str(value)
+        return str(value)
     if datatype == 'int':
-        if value is None or (isinstance(value, str) and not value.strip()):
-            return 0
-        if isinstance(value, bool):
-            return int(value)
-        return int(value)
+        try:
+            converted = int(value)
+        except (OverflowError, TypeError, ValueError) as ex:
+            raise ValueError('%r is not a valid integer value' % value) from ex
+        if converted < INTEGER_MIN or converted > INTEGER_MAX:
+            raise ValueError(
+                'Integer metadata must be between %d and %d; got %r' % (
+                    INTEGER_MIN,
+                    INTEGER_MAX,
+                    value,
+                )
+            )
+        return converted
+    if datatype == 'float':
+        try:
+            converted = float(value)
+        except (OverflowError, TypeError, ValueError) as ex:
+            raise ValueError('%r is not a valid float value' % value) from ex
+        if not math.isfinite(converted):
+            raise ValueError(
+                'Float metadata must be finite; got %r' % value
+            )
+        return converted
     if isinstance(value, bool):
         return value
     if isinstance(value, int) and value in (0, 1):
         return bool(value)
-    text = '' if value is None else str(value).strip().lower()
-    if text in ('', '0', 'false', 'no', 'off'):
+    text = str(value).strip().lower()
+    if text in ('0', 'false', 'no', 'off'):
         return False
     if text in ('1', 'true', 'yes', 'on'):
         return True
     raise ValueError('%r is not a valid boolean value' % value)
+
+
+def permanent_metadata_constraints(prop_dict, prop_metadata, cx):
+    """Return the nonempty permanent metadata values for one chip."""
+    constraints = {}
+    prop_metadata = prop_metadata or {}
+    for key, values in prop_dict.items():
+        definition = prop_metadata.get(key, {})
+        if int(definition.get('importance', 0)) < 2:
+            continue
+        value = values[cx]
+        if not is_empty_property_value(value):
+            constraints[key] = value
+    return constraints
+
+
+def metadata_matches_constraints(prop_dict, cx, constraints):
+    """Return whether a chip satisfies constraints, treating empty as wildcard."""
+    for key, expected in constraints.items():
+        value = prop_dict[key][cx]
+        if not is_empty_property_value(value) and value != expected:
+            return False
+    return True
+
+
+def _json_property_value(value):
+    if is_empty_property_value(value):
+        return None
+    scalar_item = getattr(value, 'item', None)
+    if callable(scalar_item):
+        value = scalar_item()
+    if isinstance(value, (bool, int, float, str)):
+        return value
+    return str(value)
+
+
+def permanent_metadata_uid(prop_dict, prop_metadata):
+    """Return a stable cache suffix for all permanent metadata state."""
+    prop_metadata = prop_metadata or {}
+    payload = []
+    for key in sorted(prop_dict):
+        definition = prop_metadata.get(key, {})
+        if int(definition.get('importance', 0)) < 2:
+            continue
+        payload.append({
+            'key': key,
+            'datatype': definition.get('datatype', 'str'),
+            'values': [_json_property_value(value)
+                       for value in prop_dict[key]],
+        })
+    serialized = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(',', ':'),
+    ).encode('utf-8')
+    return '_PMETA' + hashlib.sha1(serialized).hexdigest()[:16]
 
 
 def definitions_for_properties(property_keys, saved_definitions=None):

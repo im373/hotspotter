@@ -56,7 +56,8 @@ class ChipPropertyDialog(QtWidgets.QDialog):
             _translate(
                 'Importance: 0 is not significant, 1 is an important feature, '
                 'and 2 is a permanent feature. Definitions are stored in a '
-                'separate JSON file when the database is saved.'
+                'separate JSON file when the database is saved. Permanent '
+                'values restrict query comparisons; empty cells are wildcards.'
             ),
             self,
         )

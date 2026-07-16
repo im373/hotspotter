@@ -104,6 +104,11 @@ class DataTableModel(QtCore.QAbstractTableModel):
             return _qt_scalar(self._rows[row]['id'])
         if role == QtCore.Qt.CheckStateRole:
             if column_definition.get('checkable', False):
+                if (
+                    column_definition.get('nullable', False)
+                    and (value is None or value == '')
+                ):
+                    return QtCore.Qt.PartiallyChecked
                 return QtCore.Qt.Checked if bool(value) else QtCore.Qt.Unchecked
             return None
         if role == QtCore.Qt.TextAlignmentRole:
@@ -141,6 +146,8 @@ class DataTableModel(QtCore.QAbstractTableModel):
             flags |= QtCore.Qt.ItemIsEditable
         if column_definition.get('checkable', False):
             flags |= QtCore.Qt.ItemIsUserCheckable
+            if column_definition.get('nullable', False):
+                flags |= QtCore.Qt.ItemIsUserTristate
         return flags
 
     def setData(self, index, value, role=QtCore.Qt.EditRole):
@@ -151,7 +158,13 @@ class DataTableModel(QtCore.QAbstractTableModel):
         if role == QtCore.Qt.CheckStateRole:
             if not column_definition.get('checkable', False):
                 return False
-            new_value = int(value) == int(QtCore.Qt.Checked)
+            if (
+                column_definition.get('nullable', False)
+                and int(value) == int(QtCore.Qt.PartiallyChecked)
+            ):
+                new_value = ''
+            else:
+                new_value = int(value) == int(QtCore.Qt.Checked)
         elif role == QtCore.Qt.EditRole:
             if not column_definition.get('editable', False):
                 return False

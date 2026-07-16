@@ -597,6 +597,35 @@ class HotSpotter(DynStruct):
         '''wrapper that restricts query to only known groundtruth.
         Calls the function level query wrappers'''
         logger.debug('[hs] query_cxs(kwargs=%r)', kwargs)
+        constraints = chip_properties.permanent_metadata_constraints(
+            hs.tables.prop_dict,
+            getattr(hs.tables, 'prop_metadata', {}),
+            qcx,
+        )
+        if constraints:
+            compatible_cxs = np.array([
+                cx for cx in cxs
+                if chip_properties.metadata_matches_constraints(
+                    hs.tables.prop_dict,
+                    int(cx),
+                    constraints,
+                )
+            ], dtype=ds.X_DTYPE)
+            logger.debug(
+                '[hs] permanent metadata retained %d of %d query candidates',
+                len(compatible_cxs),
+                len(cxs),
+            )
+            if len(compatible_cxs) == 0:
+                logger.info(
+                    '[hs] query has no permanent-metadata-compatible candidates'
+                )
+                uid = chip_properties.permanent_metadata_uid(
+                    hs.tables.prop_dict,
+                    getattr(hs.tables, 'prop_metadata', {}),
+                )
+                return mf.empty_query_result(hs, qcx, uid)
+            cxs = compatible_cxs
         # Ensure that we can process a query like this
         if query_cfg is None:
             query_cfg = hs.prefs.query_cfg

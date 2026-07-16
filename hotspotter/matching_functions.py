@@ -16,6 +16,7 @@ import sys
 import numpy as np
 # Hotspotter
 from . import QueryResult as qr
+from . import chip_properties
 from . import coverage
 from . import nn_filters
 from . import spatial_verification2 as sv2
@@ -196,6 +197,32 @@ def filter_neighbors(hs, qcx2_nns, filt2_weights, qreq):
         qfx2_score, qfx2_valid = _apply_filter_scores(qcx, qfx2_nn, filt2_weights, filt_cfg)
         qfx2_cx = dx2_cx[qfx2_nn]
         logger.debug('[mf] * %d assignments are invalid by thresh', (~qfx2_valid).sum())
+        permanent_constraints = (
+            chip_properties.permanent_metadata_constraints(
+                hs.tables.prop_dict,
+                getattr(hs.tables, 'prop_metadata', {}),
+                qcx,
+            )
+        )
+        if permanent_constraints:
+            compatible = np.fromiter(
+                (
+                    chip_properties.metadata_matches_constraints(
+                        hs.tables.prop_dict,
+                        int(cx),
+                        permanent_constraints,
+                    )
+                    for cx in qfx2_cx.flat
+                ),
+                dtype=bool,
+                count=qfx2_cx.size,
+            ).reshape(qfx2_cx.shape)
+            newly_invalid = (qfx2_valid & ~compatible).sum()
+            logger.debug(
+                '[mf] * %d assignments are newly invalid by permanent metadata',
+                newly_invalid,
+            )
+            qfx2_valid = np.logical_and(qfx2_valid, compatible)
         # Remove Impossible Votes:
         # dont vote for yourself or another chip in the same image
         qfx2_notsamechip = qfx2_cx != qcx
@@ -456,6 +483,15 @@ def new_fmfsfk(hs):
     cx2_fs = [[] for _ in range(num_chips)]
     cx2_fk = [[] for _ in range(num_chips)]
     return cx2_fm, cx2_fs, cx2_fk
+
+
+def empty_query_result(hs, qcx, uid='empty'):
+    """Build a valid result when a query has no compatible candidates."""
+    chipmatch = _fix_fmfsfk(*new_fmfsfk(hs))
+    res = qr.QueryResult(qcx, uid)
+    res.cx2_fm, res.cx2_fs, res.cx2_fk = chipmatch
+    res.cx2_score = np.zeros(hs.get_num_chips(), dtype=qr.FS_DTYPE)
+    return res
 
 
 #============================
