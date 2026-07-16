@@ -21,9 +21,10 @@ from ._frontend.MainSkel import Ui_mainSkel
 from ._frontend.TableFilterDialog import TableFilterDialog
 from . import guitools
 from . import menu_strings
+from .guitablemodel import DataTableModel
+from .guitablemodel import DataTableProxyModel
 from .guitools import slot_
 from .guitools import frontblocking as blocking
-from hscom import tools
 
 logger = logging.getLogger(__name__)
 
@@ -78,27 +79,13 @@ TABLE_HEADER_LABELS = {
 
 
 #=================
-# Decorators / Helpers
+# Helpers
 #=================
 
 try:
     _fromUtf8 = QtCore.QString.fromUtf8
 except AttributeError:
     _fromUtf8 = lambda s: s
-
-def clicked(func):
-    def clicked_wrapper(front, item, *args, **kwargs):
-        if front.isItemEditable(item):
-            logger.debug("Ignoring click on editable column")
-            return
-        if item == front.prev_tbl_item:
-            return
-        front.prev_tbl_item = item
-        return func(front, item, *args, **kwargs)
-    clicked_wrapper.__name__ = func.__name__
-    # Hacky decorator
-    return clicked_wrapper
-
 
 def csv_sanatize(str_):
     return str(str_).replace(',', ';;')
@@ -282,7 +269,7 @@ def menu_action_specs(front):
             action_spec('actionLayout_Figures', 'layout_figures', front.layout_figures, 'Ctrl+L'),
             None,
             action_spec('actionFilter_Table', 'filter_table', front.filter_table, 'Ctrl+F'),
-            action_spec('actionClear_Filter', 'clear_filter', back.clear_table_filters, 'Ctrl+Shift+F'),
+            action_spec('actionClear_Filter', 'clear_filter', front.clear_table_filters, 'Ctrl+Shift+F'),
         ],
         'menuActions': [
             action_spec('actionAdd_Chip', 'add_chip', front.add_chip, 'A'),
@@ -430,7 +417,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
     selectGxSignal  = QtCore.pyqtSignal(int)
     selectCidSignal = QtCore.pyqtSignal(int)
     selectResSignal = QtCore.pyqtSignal(int)
-    selectNameSignal = QtCore.pyqtSignal(str)
+    selectNxSignal = QtCore.pyqtSignal(int)
     changeCidSignal = QtCore.pyqtSignal(int, str, str)
     aliasNameSignal = QtCore.pyqtSignal(int, str, str)
     changeGxSignal  = QtCore.pyqtSignal(int, str, bool)
@@ -438,7 +425,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
 
     def __init__(front, backend, parent=None):
         super(MainWindowFrontend, front).__init__(parent)
-        front.prev_tbl_item = None
+        front.prev_table_click = None
         front.ostream = None
         front.gui_logging_handler = None
         front.backend = backend
@@ -448,6 +435,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
         front._backend_block_stack = []
         front.edit_prefs = None
         front.ui = init_ui(front)
+        front._init_table_models()
         create_menu_actions(front)
         # Progress bar is not hooked up yet
         front.ui.progressBar.setVisible(False)
@@ -455,6 +443,41 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
         front.steal_stdout()
         from hsviz import draw_func2 as df2
         df2.register_qt_win(front)
+
+    def _init_table_models(front):
+        """Attach one persistent source model and proxy to each table view."""
+        front.table_views = {
+            'gxs': front.ui.gxs_TBL,
+            'cxs': front.ui.cxs_TBL,
+            'nxs': front.ui.nxs_TBL,
+            'res': front.ui.res_TBL,
+        }
+        front.table_models = {}
+        front.table_proxies = {}
+        front.table_sort_state = {
+            'gxs': (0, QtCore.Qt.AscendingOrder),
+            'cxs': (0, QtCore.Qt.AscendingOrder),
+            'nxs': (0, QtCore.Qt.DescendingOrder),
+            'res': (0, QtCore.Qt.AscendingOrder),
+        }
+        front.table_initialized = {
+            tblname: False for tblname in front.table_views
+        }
+        for tblname, view in front.table_views.items():
+            model = DataTableModel(parent=front)
+            proxy = DataTableProxyModel(parent=front)
+            proxy.setSourceModel(model)
+            view.setModel(proxy)
+            view.verticalHeader().hide()
+            view.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+            view.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+            view.setSortingEnabled(True)
+            model.cell_edited.connect(
+                lambda record_id, column_key, value, table=tblname:
+                front.table_cell_edited(table, record_id, column_key, value)
+            )
+            front.table_models[tblname] = model
+            front.table_proxies[tblname] = proxy
 
     def steal_stdout(front):
         return _steal_stdout(front)
@@ -733,7 +756,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
         front.selectGxSignal.connect(back.select_gx)
         front.selectCidSignal.connect(back.select_cid)
         front.selectResSignal.connect(back.select_res_cid)
-        front.selectNameSignal.connect(back.select_name)
+        front.selectNxSignal.connect(back.select_nx)
         front.changeCidSignal.connect(back.change_chip_property)
         front.aliasNameSignal.connect(back.alias_name)
         front.changeGxSignal.connect(back.change_image_property)
@@ -749,15 +772,11 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
         back.apiConnectedSignal.connect(front.handle_api_connected)
 
         # Gui Components
-        # Tables Widgets
-        ui.cxs_TBL.itemClicked.connect(front.chip_tbl_clicked)
-        ui.cxs_TBL.itemChanged.connect(front.chip_tbl_changed)
-        ui.gxs_TBL.itemClicked.connect(front.img_tbl_clicked)
-        ui.gxs_TBL.itemChanged.connect(front.img_tbl_changed)
-        ui.res_TBL.itemClicked.connect(front.res_tbl_clicked)
-        ui.res_TBL.itemChanged.connect(front.res_tbl_changed)
-        ui.nxs_TBL.itemClicked.connect(front.name_tbl_clicked)
-        ui.nxs_TBL.itemChanged.connect(front.name_tbl_changed)
+        # Table views
+        ui.cxs_TBL.clicked.connect(front.chip_tbl_clicked)
+        ui.gxs_TBL.clicked.connect(front.img_tbl_clicked)
+        ui.res_TBL.clicked.connect(front.res_tbl_clicked)
+        ui.nxs_TBL.clicked.connect(front.name_tbl_clicked)
         chip_header = ui.cxs_TBL.horizontalHeader()
         chip_header.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         chip_header.customContextMenuRequested.connect(
@@ -765,9 +784,6 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
         )
         # Tab Widget
         ui.tablesTabWidget.currentChanged.connect(front.change_view)
-        ui.cxs_TBL.sortByColumn(0, QtCore.Qt.AscendingOrder)
-        ui.res_TBL.sortByColumn(0, QtCore.Qt.AscendingOrder)
-        ui.gxs_TBL.sortByColumn(0, QtCore.Qt.AscendingOrder)
 
     @slot_(bool)
     def setEnabled(front, flag):
@@ -805,38 +821,85 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
 
     @slot_(str, list, list, list, list)
     @blocking
-    def populate_tbl(front, tblname, col_headers, col_editable, row_list, datatup_list):
+    def populate_tbl(front, tblname, col_headers, col_editable,
+                     record_ids, datatup_list):
         tblname = str(tblname)
-        tbl_dict = {
-            'gxs': front.ui.gxs_TBL,
-            'cxs': front.ui.cxs_TBL,
-            'nxs': front.ui.nxs_TBL,
-            'res': front.ui.res_TBL,
-        }
-        tbl = tbl_dict[tblname]
+        view = front.table_views[tblname]
+        model = front.table_models[tblname]
+        proxy = front.table_proxies[tblname]
+        selected_ids = front.selected_record_ids(tblname)
+        header = view.horizontalHeader()
+        sort_column, sort_order = front.table_sort_state[tblname]
+        if front.table_initialized[tblname]:
+            sort_column = header.sortIndicatorSection()
+            sort_order = header.sortIndicatorOrder()
+        if sort_column < 0 or sort_column >= len(col_headers):
+            sort_column = 0
+        front.table_sort_state[tblname] = (sort_column, sort_order)
 
-        front._populate_table(
+        if len(record_ids) != len(datatup_list):
+            raise ValueError(
+                '%s table has %d record IDs for %d rows' % (
+                    tblname, len(record_ids), len(datatup_list)
+                )
+            )
+        columns = front.table_column_definitions(
             tblname,
-            tbl,
             col_headers,
             col_editable,
-            row_list,
-            datatup_list,
         )
+        rows = list(zip(record_ids, datatup_list))
+        model.set_table(columns, rows)
+        proxy.set_filters(proxy.filters())
+        if columns:
+            proxy.sort(sort_column, sort_order)
+            view.sortByColumn(sort_column, sort_order)
+        apply_table_column_widths(tblname, view, col_headers)
+        front.restore_table_selection(tblname, selected_ids)
+        front.prev_table_click = None
+        front.table_initialized[tblname] = True
+        view.show()
+        front.update_table_tab_count(tblname)
 
-        # Set the tab text to show the number of items listed
-        tablename2_tabwidget = {
+    def table_column_definitions(front, tblname, col_headers, col_editable):
+        columns = []
+        for column_key, editable in zip(col_headers, col_editable):
+            property_definition = None
+            if tblname == 'cxs':
+                property_definition = (
+                    front.backend.get_chip_property_definition(column_key)
+                )
+            checkable = column_key == 'aif' or (
+                property_definition is not None
+                and property_definition.get('datatype') == 'bool'
+            )
+            columns.append({
+                'key': column_key,
+                'header': display_table_header(column_key),
+                'editable': bool(editable),
+                'checkable': checkable,
+                'alignment': int(
+                    QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter
+                ),
+            })
+        return columns
+
+    def update_table_tab_count(front, tblname):
+        table_tabs = {
             'gxs': front.ui.image_view,
             'cxs': front.ui.chip_view,
             'nxs': front.ui.name_view,
             'res': front.ui.result_view,
         }
         ui = front.ui
-        tab_widget = tablename2_tabwidget[tblname]
+        tab_widget = table_tabs[tblname]
         tab_index = ui.tablesTabWidget.indexOf(tab_widget)
         tab_text = _translate(
             "mainSkel",
-            "%s (%d)" % (TABLE_TAB_LABELS[tblname], len(row_list)),
+            "%s (%d)" % (
+                TABLE_TAB_LABELS[tblname],
+                front.table_proxies[tblname].rowCount(),
+            ),
         )
         ui.tablesTabWidget.setTabText(tab_index, tab_text)
 
@@ -855,17 +918,14 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
 
     @slot_()
     def filter_table(front):
-        tblname, tbl = front.current_table()
+        tblname, _ = front.current_table()
+        model = front.table_models[tblname]
+        proxy = front.table_proxies[tblname]
         columns = [
-            (
-                front.table_column_key(tbl, column),
-                str(tbl.horizontalHeaderItem(column).text()),
-            )
-            for column in range(tbl.columnCount())
-            if tbl.horizontalHeaderItem(column) is not None
+            (definition['key'], definition['header'])
+            for definition in model.column_definitions()
         ]
-        headers = [column_key for column_key, _ in columns]
-        if not headers:
+        if not columns:
             logger.warning("[filter] There is no columns to filter in table %s.", tblname)
             QtWidgets.QMessageBox.information(
                 front,
@@ -877,14 +937,14 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
             )
             return
 
-        conditions = front.backend.get_table_filters(tblname)
+        conditions = proxy.filters()
         while True:
             dialog = TableFilterDialog(columns, conditions, front)
             if dialog.exec_() != QtWidgets.QDialog.Accepted:
                 return
             conditions = dialog.conditions()
             try:
-                front.backend.set_table_filters(tblname, headers, conditions)
+                proxy.set_filters(conditions)
             except ValueError as ex:
                 QtWidgets.QMessageBox.warning(
                     front,
@@ -892,7 +952,19 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
                     str(ex),
                 )
                 continue
+            front.prev_table_click = None
+            front.update_table_tab_count(tblname)
             return
+
+    @slot_()
+    def clear_table_filters(front):
+        """Clear all frontend proxy filters and refresh visible table rows."""
+        for tblname, proxy in front.table_proxies.items():
+            proxy.clear_filters()
+            front.table_views[tblname].viewport().update()
+            front.update_table_tab_count(tblname)
+        front.prev_table_click = None
+        logger.info("Cleared filters from all tables")
 
     @slot_()
     def clean_name_table(front):
@@ -910,91 +982,92 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
         if dialog.exec_() == QtWidgets.QDialog.Accepted:
             front.backend.clean_name_table()
 
-    def _populate_table(front, tblname, tbl, col_headers, col_editable, row_list, datatup_list):
-        # TODO:
-        # The data tables should not use the item model
-        # Instead they should use the more efficient and powerful QAbstractItemModel / QAbstractTreeModel
-        hheader = tbl.horizontalHeader()
-
-        sort_col = hheader.sortIndicatorSection()
-        sort_ord = hheader.sortIndicatorOrder()
-        tbl.sortByColumn(0, QtCore.Qt.AscendingOrder)  # Basic Sorting
-        tblWasBlocked = tbl.blockSignals(True)
-        tbl.clear()
-        tbl.setColumnCount(len(col_headers))
-        tbl.setRowCount(len(row_list))
-        tbl.verticalHeader().hide()
-        for col, header in enumerate(col_headers):
-            header_item = QtWidgets.QTableWidgetItem(display_table_header(header))
-            header_item.setData(QtCore.Qt.UserRole, header)
-            tbl.setHorizontalHeaderItem(col, header_item)
-        apply_table_column_widths(tblname, tbl, col_headers)
-        tbl.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
-        tbl.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
-        tbl.setSortingEnabled(False)
-        #dbg_col2_dtype = {}
-        #def DEBUG_COL_DTYPE(col, dtype):
-            #if not dtype in dbg_col2_dtype:
-                #dbg_col2_dtype[dtype] = [col]
-            #else:
-                #if not col in dbg_col2_dtype[dtype]:
-                    #dbg_col2_dtype[dtype].append(col)
-        # Add items for each row and column
-        for row in iter(row_list):
-            data_tup = datatup_list[row]
-            for col, data in enumerate(data_tup):
-                item = QtWidgets.QTableWidgetItem()
-                # BOOLEAN DATA
-                if tools.is_bool(data):
-                    check_state = QtCore.Qt.Checked if data else QtCore.Qt.Unchecked
-                    item.setCheckState(check_state)
-                    #DEBUG_COL_DTYPE(col, 'bool')
-                    #item.setData(Qt.DisplayRole, bool(data))
-                # INTEGER DATA
-                elif tools.is_int(data):
-                    item.setData(QtCore.Qt.DisplayRole, int(data))
-                    #DEBUG_COL_DTYPE(col, 'int')
-                # FLOAT DATA
-                elif tools.is_float(data):
-                    item.setData(QtCore.Qt.DisplayRole, float(data))
-                    #DEBUG_COL_DTYPE(col, 'float')
-                # STRING DATA
-                else:
-                    item.setText(str(data))
-                    #DEBUG_COL_DTYPE(col, 'string')
-                # Mark as editable or not
-                if col_editable[col]:
-                    item.setFlags(item.flags() | QtCore.Qt.ItemIsEditable)
-                    item.setBackground(QtGui.QColor(250, 240, 240))
-                else:
-                    item.setFlags(item.flags() ^ QtCore.Qt.ItemIsEditable)
-                item.setTextAlignment(QtCore.Qt.AlignHCenter)
-                tbl.setItem(row, col, item)
-
-        #print(dbg_col2_dtype)
-        tbl.setSortingEnabled(True)
-        tbl.sortByColumn(sort_col, sort_ord)  # Move back to old sorting
-        tbl.show()
-        tbl.blockSignals(tblWasBlocked)
-
-    def isItemEditable(self, item):
-        return int(QtCore.Qt.ItemIsEditable & item.flags()) == int(QtCore.Qt.ItemIsEditable)
-
     #=======================
     # General Table Access
     #=======================
 
     def table_column_key(front, tbl, col):
-        """Return the internal key stored on a displayed header item."""
-        header_item = tbl.horizontalHeaderItem(col)
-        return str(header_item.data(QtCore.Qt.UserRole))
+        """Return an internal column key for a table view column."""
+        tblname = front.table_name_for_view(tbl)
+        return front.table_models[tblname].column_key(col)
 
-    def table_value(front, tbl, row, column_key):
-        """Read a table cell by its stable internal column key."""
-        for col in range(tbl.columnCount()):
-            if front.table_column_key(tbl, col) == column_key:
-                return tbl.item(row, col).text()
-        raise KeyError('Table has no column %r' % (column_key,))
+    def table_name_for_view(front, view):
+        for tblname, candidate in front.table_views.items():
+            if candidate is view:
+                return tblname
+        raise KeyError('Unknown table view')
+
+    def table_source_index(front, tblname, proxy_index):
+        if not proxy_index.isValid():
+            return QtCore.QModelIndex()
+        return front.table_proxies[tblname].mapToSource(proxy_index)
+
+    def selected_record_ids(front, tblname):
+        view = front.table_views[tblname]
+        selection_model = view.selectionModel()
+        if selection_model is None:
+            return []
+        proxy_indexes = selection_model.selectedRows()
+        if not proxy_indexes:
+            seen_rows = set()
+            proxy_indexes = []
+            for index in selection_model.selectedIndexes():
+                if index.row() not in seen_rows:
+                    seen_rows.add(index.row())
+                    proxy_indexes.append(index)
+        model = front.table_models[tblname]
+        record_ids = []
+        seen_ids = set()
+        for proxy_index in proxy_indexes:
+            source_index = front.table_source_index(tblname, proxy_index)
+            if source_index.isValid():
+                record_id = model.record_id_at(source_index.row())
+                if record_id not in seen_ids:
+                    seen_ids.add(record_id)
+                    record_ids.append(record_id)
+        return record_ids
+
+    def restore_table_selection(front, tblname, record_ids):
+        if not record_ids:
+            return
+        view = front.table_views[tblname]
+        model = front.table_models[tblname]
+        proxy = front.table_proxies[tblname]
+        selection_model = view.selectionModel()
+        first = True
+        for record_id in record_ids:
+            source_row = model.source_row_for_id(record_id)
+            if source_row is None or model.columnCount() == 0:
+                continue
+            source_index = model.index(source_row, 0)
+            proxy_index = proxy.mapFromSource(source_index)
+            if not proxy_index.isValid():
+                continue
+            flags = QtCore.QItemSelectionModel.Rows
+            flags |= (
+                QtCore.QItemSelectionModel.ClearAndSelect
+                if first else QtCore.QItemSelectionModel.Select
+            )
+            if first:
+                selection_model.setCurrentIndex(proxy_index, flags)
+            else:
+                selection_model.select(proxy_index, flags)
+            first = False
+
+    def table_click_record_id(front, tblname, proxy_index):
+        source_index = front.table_source_index(tblname, proxy_index)
+        if not source_index.isValid():
+            return None
+        model = front.table_models[tblname]
+        if model.flags(source_index) & QtCore.Qt.ItemIsEditable:
+            logger.debug("Ignoring click on editable column")
+            return None
+        record_id = model.record_id_at(source_index.row())
+        click = (tblname, record_id, model.column_key(source_index.column()))
+        if click == front.prev_table_click:
+            return None
+        front.prev_table_click = click
+        return record_id
 
     @slot_(QtCore.QPoint)
     def chip_header_context_requested(front, pos):
@@ -1026,8 +1099,9 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
             if dialog.exec_() != QtWidgets.QDialog.Accepted:
                 return
             updated_definition = dialog.definition()
+            conditions = front.table_proxies['cxs'].filters()
             try:
-                front.backend.update_chip_property_definition(
+                new_key = front.backend.update_chip_property_definition(
                     column_key,
                     updated_definition,
                 )
@@ -1039,97 +1113,95 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
                 )
                 definition = updated_definition
                 continue
+            if column_key in conditions:
+                conditions[new_key] = conditions.pop(column_key)
+                front.table_proxies['cxs'].set_filters(conditions)
+                front.update_table_tab_count('cxs')
             return
 
     def confirm_delete_chip_property(front, column_key):
         dialog = DeleteChipPropertyDialog(column_key, front)
         if dialog.exec_() == QtWidgets.QDialog.Accepted:
             front.backend.delete_chip_property(column_key)
+            front.table_proxies['cxs'].remove_filter_key(column_key)
+            front.update_table_tab_count('cxs')
 
     #=======================
     # Table Changed Functions
     #=======================
 
-    @slot_(QtWidgets.QTableWidgetItem)
-    def img_tbl_changed(front, item):
-        logger.debug("img_tbl_changed()")
-        row, col = (item.row(), item.column())
-        tbl = front.ui.gxs_TBL
-        sel_gx = int(front.table_value(tbl, row, 'gx'))
-        column_key = front.table_column_key(tbl, col)
-        new_val = item.checkState() == QtCore.Qt.Checked
-        front.changeGxSignal.emit(sel_gx, column_key, new_val)
-
-    @slot_(QtWidgets.QTableWidgetItem)
-    def chip_tbl_changed(front, item):
-        logger.debug("chip_tbl_changed()")
-        row, col = (item.row(), item.column())
-        tbl = front.ui.cxs_TBL
-        sel_cid = int(front.table_value(tbl, row, 'cid'))
-        column_key = front.table_column_key(tbl, col)
-        definition = front.backend.get_chip_property_definition(column_key)
-        if definition is not None and definition['datatype'] == 'bool':
-            new_val = (
-                'true' if item.checkState() == QtCore.Qt.Checked else 'false'
+    def table_cell_edited(front, tblname, record_id, column_key, value):
+        """Dispatch a model edit to the backend using its stable record ID."""
+        logger.debug(
+            "Table edit table=%r record_id=%r column=%r",
+            tblname,
+            record_id,
+            column_key,
+        )
+        if tblname == 'gxs':
+            front.changeGxSignal.emit(
+                int(record_id), str(column_key), bool(value)
             )
-        else:
-            new_val = csv_sanatize(item.text())
-        front.changeCidSignal.emit(sel_cid, column_key, new_val)
-
-    @slot_(QtWidgets.QTableWidgetItem)
-    def res_tbl_changed(front, item):
-        logger.debug("res_tbl_changed()")
-        row, col = (item.row(), item.column())
-        tbl = front.ui.res_TBL
-        sel_cid = int(front.table_value(tbl, row, 'cid'))
-        new_val  = csv_sanatize(item.text())  # sanatize val for csv
-        column_key = front.table_column_key(tbl, col)
-        front.changeCidSignal.emit(sel_cid, column_key, new_val)
-
-    @slot_(QtWidgets.QTableWidgetItem)
-    def name_tbl_changed(front, item):
-        logger.debug("name_tbl_changed()")
-        row, col = (item.row(), item.column())
-        tbl = front.ui.nxs_TBL
-        sel_nx = int(front.table_value(tbl, row, 'nx'))
-        new_val  = csv_sanatize(item.text())  # sanatize val for csv
-        column_key = front.table_column_key(tbl, col)
-        front.aliasNameSignal.emit(sel_nx, column_key, new_val)
+            return
+        if tblname in ('cxs', 'res'):
+            definition = front.backend.get_chip_property_definition(column_key)
+            if definition is not None and definition['datatype'] == 'bool':
+                new_value = 'true' if bool(value) else 'false'
+            else:
+                new_value = csv_sanatize(value)
+            front.changeCidSignal.emit(
+                int(record_id), str(column_key), new_value
+            )
+            return
+        if tblname == 'nxs':
+            front.aliasNameSignal.emit(
+                int(record_id), str(column_key), csv_sanatize(value)
+            )
+            return
+        raise KeyError('Unknown table %r' % (tblname,))
 
     #=======================
     # Table Clicked Functions
     #=======================
-    @slot_(QtWidgets.QTableWidgetItem)
-    @clicked
-    def img_tbl_clicked(front, item):
-        row = item.row()
-        logger.debug("img_tbl_clicked(%r)", row)
-        sel_gx = int(front.table_value(front.ui.gxs_TBL, row, 'gx'))
-        front.selectGxSignal.emit(sel_gx)
+    @slot_(QtCore.QModelIndex)
+    def img_tbl_clicked(front, proxy_index):
+        logger.debug("img_tbl_clicked(%r)", proxy_index.row())
+        record_id = front.table_click_record_id('gxs', proxy_index)
+        if record_id is not None:
+            front.selectGxSignal.emit(int(record_id))
 
-    @slot_(QtWidgets.QTableWidgetItem)
-    @clicked
-    def chip_tbl_clicked(front, item):
-        row, col = (item.row(), item.column())
-        logger.debug("chip_tbl_clicked(%r, %r)", row, col)
-        sel_cid = int(front.table_value(front.ui.cxs_TBL, row, 'cid'))
-        front.selectCidSignal.emit(sel_cid)
+    @slot_(QtCore.QModelIndex)
+    def chip_tbl_clicked(front, proxy_index):
+        logger.debug(
+            "chip_tbl_clicked(%r, %r)",
+            proxy_index.row(),
+            proxy_index.column(),
+        )
+        record_id = front.table_click_record_id('cxs', proxy_index)
+        if record_id is not None:
+            front.selectCidSignal.emit(int(record_id))
 
-    @slot_(QtWidgets.QTableWidgetItem)
-    @clicked
-    def res_tbl_clicked(front, item):
-        row, col = (item.row(), item.column())
-        logger.debug("res_tbl_clicked(%r, %r)", row, col)
-        sel_cid = int(front.table_value(front.ui.res_TBL, row, 'cid'))
-        front.selectResSignal.emit(sel_cid)
+    @slot_(QtCore.QModelIndex)
+    def res_tbl_clicked(front, proxy_index):
+        logger.debug(
+            "res_tbl_clicked(%r, %r)",
+            proxy_index.row(),
+            proxy_index.column(),
+        )
+        record_id = front.table_click_record_id('res', proxy_index)
+        if record_id is not None:
+            front.selectResSignal.emit(int(record_id))
 
-    @slot_(QtWidgets.QTableWidgetItem)
-    @clicked
-    def name_tbl_clicked(front, item):
-        row, col = (item.row(), item.column())
-        logger.debug("name_tbl_clicked(%r, %r)", row, col)
-        sel_name = str(front.table_value(front.ui.nxs_TBL, row, 'name'))
-        front.selectNameSignal.emit(sel_name)
+    @slot_(QtCore.QModelIndex)
+    def name_tbl_clicked(front, proxy_index):
+        logger.debug(
+            "name_tbl_clicked(%r, %r)",
+            proxy_index.row(),
+            proxy_index.column(),
+        )
+        record_id = front.table_click_record_id('nxs', proxy_index)
+        if record_id is not None:
+            front.selectNxSignal.emit(int(record_id))
 
     #=======================
     # Other

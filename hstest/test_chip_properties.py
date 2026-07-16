@@ -182,11 +182,10 @@ class ChipPropertyTest(unittest.TestCase):
         )
         self.assertEqual(prop_dict['quality'], ['1', 'not-an-int'])
 
-    def test_backend_rename_and_delete_keep_filters_consistent(self):
+    def test_backend_rename_and_delete_refresh_tables(self):
         class FakeBackend(object):
             def __init__(self):
                 self.hs = FakeHotSpotter()
-                self.table_filters = {'cxs': {'quality': '1'}}
                 self.populate_count = 0
 
             def populate_chip_table(self):
@@ -202,10 +201,8 @@ class ChipPropertyTest(unittest.TestCase):
             'quality',
             {'name': 'rating', 'datatype': 'int', 'importance': 1},
         )
-        self.assertEqual(back.table_filters['cxs'], {'rating': '1'})
         MainWindowBackend.delete_chip_property(back, 'rating')
 
-        self.assertEqual(back.table_filters['cxs'], {})
         self.assertNotIn('rating', back.hs.tables.prop_dict)
         self.assertEqual(back.populate_count, 4)
 

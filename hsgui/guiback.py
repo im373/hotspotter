@@ -7,10 +7,8 @@
 
 
 # Python
-import fnmatch
 import logging
 from os.path import split, join
-import re
 import sys
 # Qt
 from PyQt5 import QtCore
@@ -33,60 +31,6 @@ logger = logging.getLogger(__name__)
 
 FNUMS = dict(image=1, chip=2, res=3, inspect=4, special=5, name=6)
 viz.register_FNUMS(FNUMS)
-
-
-# Table Filter
-
-def normalize_table_filter(condition):
-    """Return ``None`` for an inactive filter and stripped text otherwise."""
-    if condition is None:
-        return None
-    condition = str(condition).strip()
-    if not condition or condition.lower() == 'none':
-        return None
-    return condition
-
-
-def compile_table_filters(headers, conditions):
-    """Compile column conditions into ``(column, predicate)`` pairs."""
-    compiled = []
-    for header, condition in conditions.items():
-        condition = normalize_table_filter(condition)
-        if condition is None or header not in headers:
-            continue
-        column = headers.index(header)
-        if condition.startswith('re:'):
-            pattern = condition[3:]
-            try:
-                regex = re.compile(pattern)
-            except re.error as ex:
-                raise ValueError(
-                    "Invalid regular expression for %s: %s" % (header, ex)
-                )
-            predicate = lambda value, regex=regex: (
-                regex.fullmatch(str(value)) is not None
-            )
-        elif any(char in condition for char in '*?['):
-            predicate = lambda value, pattern=condition: fnmatch.fnmatchcase(
-                str(value), pattern
-            )
-        else:
-            predicate = lambda value, expected=condition: str(value) == expected
-        compiled.append((column, predicate))
-    return compiled
-
-
-def filter_table_rows(headers, rows, conditions):
-    """Return rows satisfying every active column condition."""
-    compiled = compile_table_filters(headers, conditions)
-    if not compiled:
-        return list(rows)
-    return [
-        row
-        for row in rows
-        if all(column < len(row) and predicate(row[column])
-               for column, predicate in compiled)
-    ]
 
 
 def make_table_header_lists(table_headers, editable_headers, property_keys=None):
@@ -172,7 +116,6 @@ class MainWindowBackend(QtCore.QObject):
         super(MainWindowBackend, back).__init__(parent)
         back.current_res = None
         back.selection = None
-        back.table_filters = {}
 
         # A list of default internal headers to display
         back.table_headers = {
@@ -368,41 +311,16 @@ class MainWindowBackend(QtCore.QObject):
         body_datatup = back.hs.get_datatup_list(tblname, index_list,
                                                 col_headers, extra_cols)
         datatup_list = prefix_datatup + body_datatup
-        datatup_list = filter_table_rows(
-            col_headers,
-            datatup_list,
-            back.table_filters.get(tblname, {}),
-        )
-        row_list = list(range(len(datatup_list)))
-        back.populateSignal.emit(tblname, col_headers, col_editable,
-                                 row_list, datatup_list)
-
-    def get_table_filters(back, tblname):
-        return dict(back.table_filters.get(tblname, {}))
-
-    def set_table_filters(back, tblname, headers, conditions):
-        normalized = {
-            header: condition
-            for header, raw_condition in conditions.items()
-            for condition in [normalize_table_filter(raw_condition)]
-            if condition is not None and header in headers
-        }
-        compile_table_filters(headers, normalized)
-        back.table_filters[tblname] = normalized
-        populate = {
-            'gxs': back.populate_image_table,
-            'cxs': back.populate_chip_table,
-            'nxs': back.populate_name_table,
-            'res': back.populate_result_table,
+        id_header = {
+            'gxs': 'gx',
+            'cxs': 'cid',
+            'nxs': 'nx',
+            'res': 'cid',
         }[tblname]
-        populate()
-
-    @slot_()
-    def clear_table_filters(back):
-        """Clear filters for every table and refresh their visible rows."""
-        back.table_filters.clear()
-        back.populate_tables()
-        logger.info("Cleared filters from all tables")
+        id_column = col_headers.index(id_header)
+        record_ids = [row[id_column] for row in datatup_list]
+        back.populateSignal.emit(tblname, col_headers, col_editable,
+                                 record_ids, datatup_list)
 
     def get_unused_name_rows(back):
         return back.hs.get_unused_name_rows()
@@ -726,9 +644,6 @@ class MainWindowBackend(QtCore.QObject):
             definition.get('datatype', 'str'),
             definition.get('importance', 0),
         )
-        chip_filters = back.table_filters.get('cxs', {})
-        if key != new_key and key in chip_filters:
-            chip_filters[new_key] = chip_filters.pop(key)
         back.populate_chip_table()
         back.populate_result_table()
         logger.info("Updated chip property %r as %r", key, new_key)
@@ -737,7 +652,6 @@ class MainWindowBackend(QtCore.QObject):
     def delete_chip_property(back, key):
         key = str(key)
         back.hs.delete_property(key)
-        back.table_filters.get('cxs', {}).pop(key, None)
         back.populate_chip_table()
         back.populate_result_table()
         logger.info("Deleted chip property %r", key)

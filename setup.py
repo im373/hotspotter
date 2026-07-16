@@ -1,36 +1,38 @@
-# Not in main application flow.
-# This helper/test/setup module is outside the normal HotSpotter runtime.
 #!/usr/bin/env python
-from __future__ import division, print_function
+"""Packaging metadata and maintenance commands for the Python 3 fork."""
+
 from os.path import dirname, realpath, join, exists, normpath, expanduser, splitext
+from pathlib import Path
 import os
+import subprocess
 import sys
 import fnmatch
-# Hotspotter
-from hscom import helpers as util
 
-HOME = os.path.expanduser('~')
-# Allows other python modules (like hesaff) to find hotspotter modules
-sys.path.append(dirname(__file__))
+from setuptools import find_packages
+from setuptools import setup
+
+ROOT = Path(__file__).resolve().parent
+HOME = str(Path.home())
 
 INSTALL_REQUIRES = [
-    'numpy>=1.5.0',
-    'scipy>=0.7.2',
-    'PIL>=1.1.7'
-    'argparse>=1.2.1'
-    'ipython>=1.1.0'
-    'pylru>=1.0.6'
-    'pandas>=0.12.0',
-    'python-qt>=.50',
-    'matplotlib>=1.3.1',
-    'scikit-image>=0.9dev'
-    'scikit-learn>=0.14a1'
+    'numpy>=2.0',
+    'scipy>=1.13',
+    'Pillow>=10.0',
+    'PyQt5>=5.15.9',
+    'matplotlib>=3.8.4',
+    'opencv-python>=4.10',
+    'pylru>=1.2',
+    'pyflann-ibeis>=2.3',
+    'pyhesaff>=2.2',
 ]
 
+# Imports used by the historical executable-builder configuration.
 MODULES = [
-    'sip',
-    'PyQt4',
-    'PyQt4.Qt',
+    'PyQt5',
+    'PyQt5.sip',
+    'PyQt5.QtCore',
+    'PyQt5.QtGui',
+    'PyQt5.QtWidgets',
     'PIL.Image',
     'PIL.PngImagePlugin',
     'PIL.JpegImagePlugin',
@@ -39,63 +41,61 @@ MODULES = [
     'matplotlib',
     'numpy',
     'scipy',
-    'PIL'
+    'cv2',
+    'PIL',
 ]
 
-
-#'parse'
 INSTALL_OPTIONAL = [
-    #'pyvlfeat>=0.1.1a3'
+    'networkx>=3.0',
+    'parse>=1.20',
+    'psutil>=5.9',
 ]
 
 INSTALL_OTHER = [
-    'boost-python>=1.52',
-    'Cython>=.18',
-    'ipython>=.13.1'
+    'ipython>=8.0',
 ]
 
 INSTALL_BUILD = [
-    'Cython'
+    'Cython>=3.0',
+    'setuptools>=68',
+    'wheel',
 ]
 
-INSTALL_DEV =  [
-    'py2exe>=0.6.10dev',
-    'pyflakes>=0.6.1',
-    'pylint>=0.27.0',
-    'RunSnakeRun>=2.0.2b1',
-    'maliae>=0.4.0.final.0',
-    'pycallgraph>=0.5.1'
-    'coverage>=3.6'
+INSTALL_DEV = [
+    'coverage>=7.0',
+    'pyflakes>=3.0',
+    'pylint>=3.0',
 ]
 
-CLASSIFIERS = '''\
-Development Status :: 1 - Alpha
-Intended Audience :: Education
-Intended Audience :: Science/Research
-Intended Audience :: Developers
-License :: GPL License
-Programming Language :: Python
-Operating System :: Microsoft :: Windows
-Operating System :: Unix
-Operating System :: MacOS
-'''
-NAME                = 'HotSpotter'
-AUTHOR              = 'Jonathan Crall, RPI'
-AUTHOR_EMAIL        = 'hotspotter.ir@gmail.com'
-MAINTAINER          = AUTHOR
-MAINTAINER_EMAIL    = AUTHOR_EMAIL
-DESCRIPTION         = 'Image Search for Large Animal Databases.'
-LONG_DESCRIPTION    = open('_doc/DESCRIPTION.txt').read()
-URL                 = 'http://www.cs.rpi.edu/~cralljp'
-DOWNLOAD_URL        = 'https://github.com/Erotemic/hotspotter/archive/release.zip'
-LICENSE             = 'Apache'
-PLATFORMS           = ['Windows', 'Linux', 'Mac OS-X']
-MAJOR               = 0
-MINOR               = 0
-MICRO               = 0
-SUFFIX              = ''  # Should be blank except for rc's, betas, etc.
-ISRELEASED          = False
-VERSION             = '%d.%d.%d%s' % (MAJOR, MINOR, MICRO, SUFFIX)
+EXTRAS_REQUIRE = {
+    'build': INSTALL_BUILD,
+    'dev': INSTALL_DEV + INSTALL_OTHER + INSTALL_OPTIONAL,
+    'tools': INSTALL_OTHER + INSTALL_OPTIONAL,
+}
+
+CLASSIFIERS = [
+    'Development Status :: 3 - Alpha',
+    'Intended Audience :: Developers',
+    'Intended Audience :: Education',
+    'Intended Audience :: Science/Research',
+    'License :: OSI Approved :: Apache Software License',
+    'Operating System :: MacOS',
+    'Operating System :: Microsoft :: Windows',
+    'Operating System :: POSIX :: Linux',
+    'Programming Language :: Python :: 3',
+    'Programming Language :: Python :: 3.11',
+]
+NAME = 'HotSpotter'
+AUTHOR = 'Jonathan Crall, RPI'
+AUTHOR_EMAIL = 'hotspotter.ir@gmail.com'
+MAINTAINER = AUTHOR
+MAINTAINER_EMAIL = AUTHOR_EMAIL
+DESCRIPTION = 'Animal instance recognition and identification.'
+LONG_DESCRIPTION = (ROOT / 'README.md').read_text(encoding='utf-8')
+URL = 'https://github.com/Erotemic/hotspotter'
+LICENSE = 'Apache-2.0'
+PLATFORMS = ['Windows', 'Linux', 'macOS']
+VERSION = '0.0.0.dev0'
 
 
 def _cd(dpath, verbose=True):
@@ -106,44 +106,24 @@ def _cd(dpath, verbose=True):
 
 def _cmd(args, verbose=True, sudo=False):
     sys.stdout.flush()
-    import subprocess
-    #import shlex
-    #if isinstance(args, str):
-        #if os.name == 'posix':
-            #args = [args]
-        #else:
-            #args = shlex.split(args)
-    if sudo is True and sys.platform != 'win32':
-        args = 'sudo ' + args
-    PIPE = subprocess.PIPE
-    # DANGEROUS: shell=True. Grats hackers.
+    if sudo and sys.platform != 'win32':
+        if isinstance(args, str):
+            args = 'sudo ' + args
+        else:
+            args = ['sudo'] + list(args)
     print('[setup] Running: %r' % args)
-    proc = subprocess.Popen(args, stdout=PIPE, stderr=PIPE, shell=True)
+    completed = subprocess.run(
+        args,
+        capture_output=True,
+        shell=isinstance(args, str),
+        text=True,
+    )
     if verbose:
-        ''' KNOWN PYTHON 2.x BUG
-        #http://stackoverflow.com/questions/803265/
-        #getting-realtime-output-using-subprocess
-        for line in proc.stdout.readlines(): '''
-        logged_list = []
-        append = logged_list.append
-        write = sys.stdout.write
-        flush = sys.stdout.flush
-        while True:
-            line = proc.stdout.readline()
-            if not line:
-                break
-            write(line)
-            flush()
-            append(line)
-        out = '\n'.join(logged_list)
-        (out_, err) = proc.communicate()
-        print(err)
-    else:
-        # Surpress output
-        (out, err) = proc.communicate()
-    # Make sure process if finished
-    ret = proc.wait()
-    return out, err, ret
+        if completed.stdout:
+            print(completed.stdout, end='')
+        if completed.stderr:
+            print(completed.stderr, end='', file=sys.stderr)
+    return completed.stdout, completed.stderr, completed.returncode
 
 if sys.platform == 'win32':
     buildscript_fmt = 'mingw_%s_build.bat'
@@ -273,17 +253,22 @@ def build_win32_inno_installer():
 
 
 def compile_ui():
-    'Compiles the qt designer *.ui files into python code'
-    pyuic4_cmd = {'win32':  'C:\Python27\Lib\site-packages\PyQt4\pyuic4',
-                  'linux2': 'pyuic4',
-                  'darwin': 'pyuic4'}[sys.platform]
+    """Compile Qt Designer files using the repository's PyQt5 runtime."""
     widget_dir = join(dirname(realpath(__file__)), 'hsgui/_frontend')
     print('[setup] Compiling qt designer files in %r' % widget_dir)
     for widget_ui in util.glob(widget_dir, '*.ui'):
         widget_py = os.path.splitext(widget_ui)[0] + '.py'
-        cmd = ' '.join([pyuic4_cmd, '-x', widget_ui, '-o', widget_py])
-        print('[setup] compile_ui()>' + cmd)
-        os.system(cmd)
+        cmd = [
+            sys.executable,
+            '-m',
+            'PyQt5.uic.pyuic',
+            '-x',
+            widget_ui,
+            '-o',
+            widget_py,
+        ]
+        print('[setup] compile_ui()>' + ' '.join(cmd))
+        subprocess.check_call(cmd)
 
 
 def fix_tpl_permissions():
@@ -351,19 +336,25 @@ def status(repo):
 
 
 def compile_cython(fpath):
-    pyinclude = '-I/usr/include/python2.7'
-    gcc_flags = ' '.join(['-shared', '-pthread', '-fPIC', '-fwrapv', '-O2',
-                          '-Wall', '-fno-strict-aliasing', pyinclude])
-    fname, ext = splitext(fpath)
-    # Prefer pyx over py
+    """Build one Cython extension in place for the active Python runtime."""
+    from Cython.Build import cythonize
+    from setuptools import Extension
+    from setuptools.dist import Distribution
+
+    fname, _ = splitext(fpath)
     if exists(fname + '.pyx'):
         fpath = fname + '.pyx'
-    fname_so = fname + '.so'
-    fname_c  = fname + '.c'
-    out, err, ret = _cmd('cython ' + fpath)
-    if ret == 0:
-        out, err, ret = _cmd('gcc ' + gcc_flags + ' -o ' + fname_so + ' ' + fname_c)
-    return ret
+    module_name = fname.replace('\\', '.').replace('/', '.')
+    extensions = cythonize(
+        [Extension(module_name, [fpath])],
+        compiler_directives={'language_level': 3},
+    )
+    distribution = Distribution({'ext_modules': extensions})
+    command = distribution.get_command_obj('build_ext')
+    command.inplace = True
+    command.ensure_finalized()
+    command.run()
+    return 0
 
 
 def inspect_cython_typness(fpath):
@@ -413,24 +404,78 @@ def build_cython():
 
 
 def build_pyo():
-    _cmd('python -O -m compileall *.py')
-    _cmd('python -O -m compileall hotspotter/*.py')
-    _cmd('python -O -m compileall hsgui/*.py')
-    _cmd('python -O -m compileall hsviz/*.py')
-    _cmd('python -O -m compileall hscom/*.py')
-    _cmd('python -O -m compileall hstpl/extern_feat/*.py')
+    paths = ['.', 'hotspotter', 'hsgui', 'hsviz', 'hscom', 'hstpl/extern_feat']
+    subprocess.check_call([
+        sys.executable,
+        '-O',
+        '-m',
+        'compileall',
+        '-q',
+    ] + paths)
 
-if __name__ == '__main__':
+
+SETUP_KWARGS = {
+    'name': NAME,
+    'version': VERSION,
+    'description': DESCRIPTION,
+    'long_description': LONG_DESCRIPTION,
+    'long_description_content_type': 'text/markdown',
+    'url': URL,
+    'project_urls': {
+        'Source': URL,
+        'Issue Tracker': URL + '/issues',
+    },
+    'author': AUTHOR,
+    'author_email': AUTHOR_EMAIL,
+    'maintainer': MAINTAINER,
+    'maintainer_email': MAINTAINER_EMAIL,
+    'license': LICENSE,
+    'license_files': ('LICENSE.txt',),
+    'platforms': PLATFORMS,
+    'classifiers': CLASSIFIERS,
+    'python_requires': '>=3.11',
+    'packages': find_packages(exclude=('hstest', 'hstest.*')),
+    'py_modules': ['main'],
+    'include_package_data': True,
+    'package_data': {'hsgui._frontend': ['*.ui']},
+    'install_requires': INSTALL_REQUIRES,
+    'extras_require': EXTRAS_REQUIRE,
+    'entry_points': {
+        'console_scripts': ['hotspotter=main:main'],
+    },
+    'zip_safe': False,
+}
+
+
+CUSTOM_COMMANDS = {
+    'clean',
+    'buildui', 'ui', 'compile_ui',
+    'o', 'pyo',
+    'c', 'cython',
+    'installer', 'pyinstaller', 'build_pyinstaller', 'build_installer',
+    'inno', 'win32inno',
+    'dmg', 'macdmg',
+    'otool', 'dbg-otool',
+    'flann', 'pyflann',
+    'hesaff', 'pyhesaff',
+    'opencv',
+    'pull', 'status', 'push', 'update',
+}
+
+
+def run_custom_commands(commands):
+    """Run retained repository-maintenance commands outside setuptools."""
+    global util
+    from hscom import helpers as util
+
     print('[setup] Entering HotSpotter setup')
-    for cmd in iter(sys.argv[1:]):
+    for cmd in commands:
         # Clean up non-source files
         if cmd in ['clean']:
             clean()
-            sys.exit(0)
         # Build PyQt UI files
         if cmd in ['buildui', 'ui', 'compile_ui']:
             compile_ui()
-            sys.exit(0)
 
         # Build optimized files
         if cmd in ['o', 'pyo']:
@@ -486,3 +531,14 @@ if __name__ == '__main__':
             pull('hesaff', 'hotspotter_hesaff')
             pull('flann', 'hotspotter_flann')
             pull('hotspotter', 'jon')
+
+
+if __name__ == '__main__':
+    custom_commands = [
+        command for command in sys.argv[1:]
+        if command in CUSTOM_COMMANDS
+    ]
+    if custom_commands:
+        run_custom_commands(custom_commands)
+    else:
+        setup(**SETUP_KWARGS)
