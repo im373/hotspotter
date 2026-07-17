@@ -12,7 +12,7 @@ from os.path import relpath
 import numpy as np
 # Hotspotter
 from hscom import fileio as io
-from hscom import helpers as util
+from hscom import array_utils
 
 
 #----------------------
@@ -149,11 +149,11 @@ def check_qcx2_res(hs, qcx2_res):
         test_vars['fklen'].append(len(res.cx2_fk))
         test_vars['scorelen'].append(len(res.cx2_score))
 
-    assert util.list_eq(test_vars['fmlen'])
-    assert util.list_eq(test_vars['fslen'])
-    assert util.list_eq(test_vars['fklen'])
-    assert util.list_eq(test_vars['scorelen'])
-    assert util.list_eq(test_vars['res.uid'])
+    assert array_utils.list_eq(test_vars['fmlen'])
+    assert array_utils.list_eq(test_vars['fslen'])
+    assert array_utils.list_eq(test_vars['fklen'])
+    assert array_utils.list_eq(test_vars['scorelen'])
+    assert array_utils.list_eq(test_vars['res.uid'])
 
     print('[consist] passed length tests')
 

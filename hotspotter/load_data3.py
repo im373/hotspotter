@@ -25,7 +25,7 @@ from PIL import Image
 # Hotspotter
 from . import DataStructures as ds
 from hscom import helpers
-from hscom import helpers as util
+from hscom import serialization
 from hscom import tools
 from . import db_info
 
@@ -234,7 +234,7 @@ def parse_csv_tables():
 
 def parse_csv_table_data(csv_fname, csv_columns, add_fn):
     # Open CSV file
-    csv_text = helpers.read_text(csv_fname)
+    csv_text = serialization.read_text(csv_fname)
     for line_num, csv_line in enumerate(csv_text.splitlines(True)):
             # Remove leading and trailing whitespace
             csv_line = csv_line.strip('\n\r\t ')

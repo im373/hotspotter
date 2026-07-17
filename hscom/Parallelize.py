@@ -13,6 +13,7 @@ import os
 import sys
 # Hotspotter
 from . import helpers as util
+from . import progress
 from .dev_utils import make_reloader
 from .profiling import profile
 
@@ -154,7 +155,7 @@ def _compute_in_serial(task_list, task_lbl='', verbose=True):
     result_list = []
     nTasks = len(task_list)
     if verbose:
-        mark_progress, end_prog = util.progress_func(nTasks, lbl=task_lbl)
+        mark_progress, end_prog = progress.progress_func(nTasks, lbl=task_lbl)
         # Compute each task
         for count, (fn, args) in enumerate(task_list):
             mark_progress(count)
@@ -195,7 +196,9 @@ def _compute_in_parallel(task_list, num_procs, task_lbl='', verbose=True):
     sys.stdout.flush()
     result_list = []
     if verbose:
-        mark_progress, end_prog = util.progress_func(nTasks, lbl=task_lbl, spacing=num_procs)
+        mark_progress, end_prog = progress.progress_func(
+            nTasks, lbl=task_lbl, spacing=num_procs
+        )
         for count in range(len(task_list)):
             mark_progress(count)
             printDBG("done_queue.get()")

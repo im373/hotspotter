@@ -25,6 +25,9 @@ from PIL import Image
 from hscom import cross_platform as cplat
 from hscom import fileio as io
 from hscom import helpers as util
+from hscom import array_utils
+from hscom import progress
+from hscom import serialization
 from hscom import tools
 from hscom.Printable import DynStruct
 from hscom.Preferences import Pref
@@ -542,7 +545,7 @@ class HotSpotter(DynStruct):
             hs.unload_all()
             return
         for list_ in lists:
-            util.ensure_list_size(list_, cx + 1)
+            array_utils.ensure_list_size(list_, cx + 1)
             list_[cx] = None
 
     @util.indent_decor('[hs.delete_ciddata]')
@@ -869,7 +872,7 @@ class HotSpotter(DynStruct):
     @profile
     @util.indent_decor('[hs.add_images]')
     def add_images(hs, fpath_list, move_images=True):
-        fpath_list = util.ensure_iterable(fpath_list)
+        fpath_list = array_utils.ensure_iterable(fpath_list)
         if isinstance(fpath_list, str):
             fpath_list = [fpath_list]
         else:
@@ -891,7 +894,9 @@ class HotSpotter(DynStruct):
             # It appears in multiple places
             # Also there should be the option of parallelization? IDK, these are
             # disk writes, but it still might help.
-            mark_progress, end_progress = util.progress_func(len(copy_list), lbl='Copying Image')
+            mark_progress, end_progress = progress.progress_func(
+                len(copy_list), lbl='Copying Image'
+            )
             for count, (src, dst) in enumerate(copy_list):
                 logger.debug('src = %r', src)
                 logger.debug('dst = %r', dst)
@@ -1403,7 +1408,7 @@ class HotSpotter(DynStruct):
         hs_uid    = 'HSDB(%s)' % hs.get_db_name()
         uid_list = [hs_uid] + query_cfg.get_uid_list()
         if cx_list is not None:
-            cxs_uid = util.hashstr_arr(cx_list, 'cxs')
+            cxs_uid = serialization.hashstr_arr(cx_list, 'cxs')
             uid_list.append('_' + cxs_uid)
         cache_uid = ''.join(uid_list)
         return cache_uid

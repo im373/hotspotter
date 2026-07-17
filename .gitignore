@@ -5,8 +5,11 @@
 .agent/
 .agents/
 .codex/
+.acceptance/
+.migration/
 .hidden
 .hotspotter
+test_*.py
 HotSpotterApp.pkg
 OpenGLContext.profile
 build

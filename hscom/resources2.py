@@ -7,7 +7,7 @@ import logging
 import psutil
 import os
 # HotSpotter
-from . import helpers as util
+from . import serialization
 from .dev_utils import make_reloader
 
 logger = logging.getLogger(__name__)
@@ -44,10 +44,10 @@ def used_memory():
 
 
 def memstats():
-    logger.info("total = %s", util.byte_str2(total_memory()))
-    logger.info("available = %s", util.byte_str2(available_memory()))
-    logger.info("used = %s", util.byte_str2(used_memory()))
-    logger.info("current = %s", util.byte_str2(current_memory_usage()))
+    logger.info("total = %s", serialization.byte_str2(total_memory()))
+    logger.info("available = %s", serialization.byte_str2(available_memory()))
+    logger.info("used = %s", serialization.byte_str2(used_memory()))
+    logger.info("current = %s", serialization.byte_str2(current_memory_usage()))
 
 if __name__ == '__main__':
     memstats()

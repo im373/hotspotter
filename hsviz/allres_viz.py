@@ -6,7 +6,7 @@ import logging
 from os.path import join
 import numpy as np
 from hscom import helpers
-from hscom import helpers as util
+from hscom import serialization
 from hscom.dev_utils import make_reloader
 from hscom.profiling import profile
 from . import draw_func2 as df2
@@ -130,7 +130,7 @@ def save_if_requested(hs, subdir):
     #print('[viz] Dumping Image')
     fpath = hs.dirs.result_dir
     if not subdir is None:
-        subdir = helpers.sanatize_fname2(subdir)
+        subdir = serialization.sanatize_fname2(subdir)
         fpath = join(fpath, subdir)
         helpers.ensurepath(fpath)
     df2.save_figure(fpath=fpath, usetitle=True)

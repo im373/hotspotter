@@ -26,6 +26,8 @@ from hotspotter import load_data2 as ld2
 from hotspotter import matching_functions as mf
 from hotspotter import report_results2 as rr2
 from hscom import helpers as util
+from hscom import array_utils
+from hscom import formatting
 from hscom import latex_formater
 from hscom import params
 from hsdev import dev_stats
@@ -133,7 +135,7 @@ def vary_two_cfg(hs, qcx, cx, query_cfg, vary_cfg, fnum=1):
     plt_match_args = dict(fnum=fnum, show_gname=False, showTF=False, vert=vert)
     for rowx, cfg1_value in enumerate(cfg1_steps):
         query_cfg.update_cfg(**{cfg1_name: cfg1_value})
-        y_title = cfg1_name + '=' + util.format(cfg1_value, 3)
+        y_title = cfg1_name + '=' + formatting.format(cfg1_value, 3)
         # Vary cfg2
         for colx, cfg2_value in enumerate(cfg2_steps):
             query_cfg.update_cfg(**{cfg2_name: cfg2_value})
@@ -148,7 +150,7 @@ def vary_two_cfg(hs, qcx, cx, query_cfg, vary_cfg, fnum=1):
             elif assign_alg == 'vsmany':
                 res = hs.query(qcx, query_cfg)
             res.plot_single_match(hs, cx, pnum=pnum, **plt_match_args)
-            x_title = cfg2_name + '=' + util.format(cfg2_value, 3)  # util.commas(cfg2_value, 3)
+            x_title = cfg2_name + '=' + formatting.format(cfg2_value, 3)
             ax = df2.gca()
             if rowx == len(cfg1_steps) - 1:
                 ax.set_xlabel(x_title, **xlabel_args)
@@ -287,7 +289,7 @@ def chip_info(hs, cx, notes=''):
         'Ground Truth: %s' % (hs.cidstr(gt_cxs),),
         'IndexedGroundTruth = %s' % (hs.cidstr(indexed_gt_cxs),),
     ]
-    print(util.indent('\n'.join(infostr_list), '    '))
+    print(formatting.indent('\n'.join(infostr_list), '    '))
     return locals()
 
 
@@ -377,7 +379,7 @@ def plot_seperability(hs, qcx_list, fnum=1):
     qcx2_separability = get_seperatbility(hs, qcx2_res)
     sep_score_list = qcx2_separability.values()
     df2.figure(fnum=fnum, doclf=True, docla=True)
-    print('[dev] seperability stats: ' + util.pstats(sep_score_list))
+    print('[dev] seperability stats: ' + array_utils.pstats(sep_score_list))
     sorted_sepscores = sorted(sep_score_list)
     df2.plot(sorted_sepscores, color=df2.DEEP_PINK, label='seperation score',
              yscale=YSCALE)
@@ -411,7 +413,7 @@ def plot_scores(hs, qcx_list, fnum=1):
             nonzero_cxs = np.where(cx2_score != 0)[0]
             gt_cxs = gt_cxs[gt_ys != 0]
             gt_ranks = res.get_gt_ranks(gt_cxs)
-            gt_cxs = np.array(util.list_index(nonzero_cxs, gt_cxs))
+            gt_cxs = np.array(array_utils.list_index(nonzero_cxs, gt_cxs))
             gt_ys  = gt_ys[gt_ys != 0]
             score_list = cx2_score[nonzero_cxs].tolist()
         else:
@@ -431,7 +433,7 @@ def plot_scores(hs, qcx_list, fnum=1):
     allscores_sorted = all_score_list[allx_sorted]
     # Change the groundtruth positions to correspond to sorted cmatch scores
     # Find position of gtscore_xs in allx_sorted
-    gtscore_sortxs = util.list_index(allx_sorted, gtscore_xs)
+    gtscore_sortxs = array_utils.list_index(allx_sorted, gtscore_xs)
     gtscore_sortxs = np.array(gtscore_sortxs)
     # Draw and info
     rank_bounds = [
@@ -444,7 +446,10 @@ def plot_scores(hs, qcx_list, fnum=1):
         df2.UNKNOWN_PURP,
         df2.FALSE_RED
     ]
-    print('[dev] matching chipscore stats: ' + util.pstats(all_score_list))
+    print(
+        '[dev] matching chipscore stats: ' +
+        array_utils.pstats(all_score_list)
+    )
     df2.figure(fnum=fnum, doclf=True, docla=True)
     # Finds the knee
     df2.plot(allscores_sorted, color=df2.ORANGE, label='all scores')
@@ -564,7 +569,7 @@ def run_investigations(hs, qcx_list):
     if intest('help'):
         print('valid tests are:')
 
-        print(''.join(util.indent_list('\n -t ', valid_test_list)))
+        print(''.join(formatting.indent_list('\n -t ', valid_test_list)))
         return
 
     if len(input_test_list) > 0:

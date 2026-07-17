@@ -21,7 +21,7 @@ from . import coverage
 from . import nn_filters
 from . import spatial_verification2 as sv2
 from . import voting_rules2 as vr2
-from hscom import helpers as util
+from hscom import progress
 
 
 #=================
@@ -78,7 +78,9 @@ MARK_AFTER = 2
 
 
 def progress_func(maxval=0):
-    mark_progress, end_progress = util.progress_func(maxval, mark_after=MARK_AFTER, progress_type='simple')
+    mark_progress, end_progress = progress.progress_func(
+        maxval, mark_after=MARK_AFTER, progress_type='simple'
+    )
     #if maxval > MARK_AFTER:
         #print('')
     return mark_progress, end_progress

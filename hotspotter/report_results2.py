@@ -26,6 +26,9 @@ import numpy as np
 # Hotspotter imports
 from hscom import fileio as io
 from hscom import helpers as util
+from hscom import array_utils
+from hscom import formatting
+from hscom import serialization
 from hscom import params
 from hscom.Printable import DynStruct
 from hsviz import draw_func2 as df2
@@ -71,7 +74,10 @@ class AllResults(DynStruct):
         scalar_summary = str(allres.scalar_summary).strip()
         toret += ('| All Results: %s \n' % hs.get_db_name())
         toret += ('| title_suffix=%s\n' % str(allres.title_suffix))
-        toret += ('| scalar_summary=\n%s\n' % util.indent(scalar_summary, '|   '))
+        toret += (
+            '| scalar_summary=\n%s\n' %
+            formatting.indent(scalar_summary, '|   ')
+        )
         toret += ('| ' + str(allres.scalar_mAP_str))
         toret += ('|---\n')
         toret += ('| greater5_%s \n' % (hs.cidstr(allres.greater5_cxs),))
@@ -159,7 +165,9 @@ def res2_true_and_false(hs, res):
     cx2_score = res.cx2_score
     unfilt_top_cx = np.argsort(cx2_score)[::-1]
     # Get top chip indexes and scores
-    top_cx    = np.array(util.intersect_ordered(unfilt_top_cx, indx_samp))
+    top_cx = np.array(
+        array_utils.intersect_ordered(unfilt_top_cx, indx_samp)
+    )
     top_score = cx2_score[top_cx]
     # Get the true and false ground truth ranks
     qnx         = hs.tables.cx2_nx[qcx]
@@ -515,8 +523,8 @@ def __dump_text_report(allres, report_type):
     csv_timestamp_fpath = join(timestamp_dir, csv_timestamp_fname)
     csv_fname  = report_type + allres.title_suffix + '.csv'
     csv_fpath = join(result_dir, csv_fname)
-    util.write_to(csv_fpath, report_str)
-    util.write_to(csv_timestamp_fpath, report_str)
+    serialization.write_to(csv_fpath, report_str)
+    serialization.write_to(csv_timestamp_fpath, report_str)
 
 # ===========================
 # Driver functions
@@ -1077,7 +1085,7 @@ def load_qcx2_res(hs, qcx_list, nocache=False):
     # Build query big cache uid
     query_uid = qreq.get_uid()
     hs_uid    = hs.get_db_name()
-    qcxs_uid  = util.hashstr_arr(qcx_list, lbl='_qcxs')
+    qcxs_uid = serialization.hashstr_arr(qcx_list, lbl='_qcxs')
     qres_uid  = hs_uid + query_uid + qcxs_uid
     cache_dir = join(hs.dirs.cache_dir, 'query_results_bigcache')
     logger.info('[rr2] load_qcx2_res(): %r', qres_uid)

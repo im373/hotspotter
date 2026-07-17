@@ -18,6 +18,8 @@ from scipy.cluster.hierarchy import fclusterdata
 from hotspotter import match_chips3 as mc3
 from hscom import fileio as io
 from hscom import helpers as util
+from hscom import array_utils
+from hscom import progress
 from hsviz import draw_func2 as df2
 
 
@@ -66,7 +68,10 @@ def compute_encounters(hs, seconds_thresh=15):
 
     # Print images per encouter statistics
     clusterx2_nGxs = np.array(list(map(len, clusterx2_gxs)))
-    logger.info('[encounter] image per encounter stats:\n %s', util.pstats(clusterx2_nGxs, True))
+    logger.info(
+        '[encounter] image per encounter stats:\n %s',
+        array_utils.pstats(clusterx2_nGxs, True),
+    )
 
     # Sort encounters by images per encounter
     ex2_clusterx = clusterx2_nGxs.argsort()
@@ -153,7 +158,7 @@ def make_feature_graph(qreq, qcx2_res, use_networkx=True):
             v_cx[v] = int(vprops['cx'])
             v_fx[v] = int(vprops['fx'])
 
-        mark_prog, end_prog = util.progress_func(len(weighted_edges))
+        mark_prog, end_prog = progress.progress_func(len(weighted_edges))
         count = 0
         for ax1, ax2, prop_dict in weighted_edges:
             mark_prog(count)
@@ -215,7 +220,9 @@ def draw_images_at_positions(img_list, pos_list):
     fig = df2.gcf()
     trans = ax.transData.transform
     trans2 = fig.transFigure.inverted().transform
-    mark_progress, end_progress = util.progress_func(len(pos_list), lbl='drawing img')
+    mark_progress, end_progress = progress.progress_func(
+        len(pos_list), lbl='drawing img'
+    )
     for ix, ((x, y), img) in enumerate(zip(pos_list, img_list)):
         mark_progress(ix)
         xx, yy = trans((x, y))  # figure coordinates

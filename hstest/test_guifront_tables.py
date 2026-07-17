@@ -1,3 +1,4 @@
+import logging
 import unittest
 from types import SimpleNamespace
 from unittest import mock
@@ -7,7 +8,11 @@ from PyQt5 import QtWidgets
 
 from hscom import params
 from hsgui.guiback import MainWindowBackend
-from hsgui.guifront import MainWindowFrontend
+from hsgui.guifront import (
+    GUILoggingHandler,
+    MainWindowFrontend,
+    add_gui_logging_handler,
+)
 
 
 class GuiFrontTableTest(unittest.TestCase):
@@ -62,6 +67,14 @@ class GuiFrontTableTest(unittest.TestCase):
             self.front.table_click_record_id('gxs', proxy_index),
             3,
         )
+
+    def test_user_facing_gui_log_handler_defaults_to_info(self):
+        handler = GUILoggingHandler(self.front)
+        try:
+            add_gui_logging_handler(handler)
+            self.assertEqual(handler.level, logging.INFO)
+        finally:
+            logging.getLogger().removeHandler(handler)
 
     def test_selection_filter_and_model_survive_refresh(self):
         rows = [

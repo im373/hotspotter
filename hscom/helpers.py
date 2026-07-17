@@ -2,33 +2,22 @@
 # Updated shared compatibility helpers for Python 3, NumPy 2, and Windows paths.
 # Kept logging, preferences, file I/O, and argument handling aligned with modern runtimes.
 
-'''
-This module will be renamed to util.py (or will be deprecated)
+"""Legacy HotSpotter utility compatibility façade.
 
-This is less of a helper function file and more of a pile of things
-where I wasn't sure of where to put.
-A lot of things could probably be consolidated or removed. There are many
-non-independent functions which are part of HotSpotter. They should be removed
-and put into their own module. The standalone functions should be compiled
-into a global set of helper functions.
-
-Wow, pylint is nice for cleaning.
-'''
+Focused implementations are progressively extracted into lower-level modules.
+Historical imports through ``hscom.helpers`` remain supported by re-exports.
+"""
 
 # Scientific
 import numpy as np
 # Standard
-from collections import OrderedDict
-from itertools import product as iprod
-from itertools import chain, cycle
+from itertools import chain
 from os.path import (join, relpath, normpath, split, isdir, isfile, exists,
-                     islink, ismount, expanduser)
+                     islink, ismount)
 import pickle
 import io
 import datetime
-import decimal
 import fnmatch
-import hashlib
 import inspect
 import logging
 import os
@@ -38,10 +27,99 @@ import sys
 import textwrap
 import time
 import types
-import warnings
 # HotSpotter
 from .dev_utils import make_reloader
+from .array_utils import (
+    alloc_lists,
+    all_dict_combinations,
+    array_index,
+    cartesian,
+    choose,
+    correct_zeros,
+    ensure_iterable,
+    ensure_list_size,
+    find_std_inliers,
+    index_of,
+    intersect2d,
+    intersect2d_numpy,
+    intersect_ordered,
+    list_eq,
+    list_index,
+    mystats,
+    norm_zero_one,
+    normalize,
+    npfind,
+    numpy_list_num_bits,
+    printable_mystats,
+    pstats,
+    random_indexes,
+    tiled_range,
+    unique_keep_order,
+)
 from .logging_utils import DEPRECATED
+from .path_utils import (
+    IMG_EXTENSIONS,
+    list_images,
+    matches_image,
+    num_images_in_dir,
+    try_get_path,
+)
+from .formatting import (
+    commas,
+    float_to_decimal,
+    format,
+    horiz_string,
+    indent,
+    indent_list,
+    int_comma_str,
+    joins,
+    num_fmt,
+    pack_into,
+    remove_chars,
+    sigfig_str,
+    str2,
+    truncate_str,
+    fewest_digits_float_str,
+)
+from .progress import (
+    VALID_PROGRESS_TYPES,
+    progress_func,
+    progress_str,
+    simple_progres_func,
+)
+from . import serialization as _serialization
+from .serialization import (
+    ALPHABET,
+    BIGBASE,
+    CACHE_FORMAT_VERSION,
+    CACHE_NAMESPACE,
+    HASH_ALGORITHM,
+    HASH_FORMAT_VERSION,
+    LEGACY_HASH_FORMAT_VERSION,
+    CacheException,
+    byte_str,
+    byte_str2,
+    cache_hash,
+    file_bytes,
+    file_megabytes,
+    file_megabytes_str,
+    hashstr,
+    hashstr_arr,
+    hashstr_md5,
+    hex2_base57,
+    get_cache_paths,
+    load_cache_npz,
+    load_npz,
+    load_npz_archive,
+    load_pkl,
+    load_trusted_legacy_npz,
+    read_text,
+    sanatize_fname,
+    sanatize_fname2,
+    save_cache_npz,
+    save_npz,
+    save_pkl,
+)
 from . import tools
 from .Printable import printableVal
 
@@ -49,15 +127,9 @@ logger = logging.getLogger(__name__)
 rrr = make_reloader(__name__, '[util]')
 
 
-def _message_from_args(args):
-    return ' '.join(str(arg) for arg in args)
-
-def print(*args, **kwargs):
-    """Legacy module-local print shim, now routed through logging."""
-    logger.debug("%s", _message_from_args(args))
-
 @DEPRECATED
 def print_(msg=''):
+    """Compatibility wrapper for historical debug output."""
     logger.debug("%s", str(msg).rstrip())
 
 @DEPRECATED
@@ -70,14 +142,10 @@ def print_off():
 
 @DEPRECATED
 def printDBG(msg):
+    """Compatibility wrapper for historical debug output."""
     logger.debug("%s", msg)
 
 # --- Globals ---
-
-__IMG_EXTS = ['.jpg', '.jpeg', '.png', '.tif', '.tiff', '.ppm']
-__LOWER_EXTS = [ext.lower() for ext in __IMG_EXTS]
-__UPPER_EXTS = [ext.upper() for ext in __IMG_EXTS]
-IMG_EXTENSIONS =  set(__LOWER_EXTS + __UPPER_EXTS)
 
 PRINT_CHECKS = False  # True
 __PRINT_WRITES__ = False
@@ -86,247 +154,19 @@ __CHECKPATH_VERBOSE__ = False
 VERY_VERBOSE = False
 
 
-def try_get_path(path_list):
-    tried_list = []
-    for path in path_list:
-        if path.find('~') != -1:
-            path = expanduser(path)
-        tried_list.append(path)
-        if exists(path):
-            return path
-    return (False, tried_list)
-
-
 def horiz_print(*args):
     toprint = horiz_string(args)
-    print(toprint)
-
-
-def horiz_string(str_list):
-    '''
-    str_list = ['A = ', str(np.array(((1,2),(3,4)))), ' * ', str(np.array(((1,2),(3,4))))]
-    '''
-    all_lines = []
-    hpos = 0
-    for sx in range(len(str_list)):
-        str_ = str(str_list[sx])
-        lines = str_.split('\n')
-        line_diff = len(lines) - len(all_lines)
-        # Vertical padding
-        if line_diff > 0:
-            all_lines += [' ' * hpos] * line_diff
-        # Add strings
-        for lx, line in enumerate(lines):
-            all_lines[lx] += line
-            hpos = max(hpos, len(all_lines[lx]))
-        # Horizontal padding
-        for lx in range(len(all_lines)):
-            hpos_diff = hpos - len(all_lines[lx])
-            if hpos_diff > 0:
-                all_lines[lx] += ' ' * hpos_diff
-    ret = '\n'.join(all_lines)
-    return ret
-
-
-# --- Images ----
-
-
-def num_images_in_dir(path):
-    'returns the number of images in a directory'
-    num_imgs = 0
-    for root, dirs, files in os.walk(path):
-        for fname in files:
-            if matches_image(fname):
-                num_imgs += 1
-    return num_imgs
-
-
-def matches_image(fname):
-    fname_ = fname.lower()
-    img_pats = ['*' + ext for ext in IMG_EXTENSIONS]
-    return any([fnmatch.fnmatch(fname_, pat) for pat in img_pats])
-
-
-def list_images(img_dpath, ignore_list=[], recursive=True, fullpath=False):
-    ignore_set = set(ignore_list)
-    gname_list_ = []
-    assert_path(img_dpath)
-    # Get all the files in a directory recursively
-    for root, dlist, flist in os.walk(img_dpath):
-        for fname in iter(flist):
-            gname = join(relpath(root, img_dpath), fname).replace('\\', '/').replace('./', '')
-            if fullpath:
-                gname_list_.append(join(root, gname))
-            else:
-                gname_list_.append(gname)
-        if not recursive:
-            break
-    # Filter out non images or ignorables
-    gname_list = [gname for gname in iter(gname_list_)
-                  if not gname in ignore_set and matches_image(gname)]
-    return gname_list
-
-
-# --- Strings ----
-def remove_chars(instr, illegals_chars):
-    outstr = instr
-    for ill_char in iter(illegals_chars):
-        outstr = outstr.replace(ill_char, '')
-    return outstr
-
-
-def indent(string, indent='    '):
-    return indent + string.replace('\n', '\n' + indent)
-
-
-def truncate_str(str, maxlen=110):
-    if len(str) < maxlen:
-        return str
-    else:
-        truncmsg = ' ~~~TRUNCATED~~~ '
-        maxlen_ = maxlen - len(truncmsg)
-        lowerb  = int(maxlen_ * .8)
-        upperb  = maxlen_ - lowerb
-        return str[:lowerb] + truncmsg + str[-upperb:]
-
-
-def pack_into(instr, textwidth=160, breakchars=' ', break_words=True):
-    newlines = ['']
-    word_list = instr.split(breakchars)
-    for word in word_list:
-        if len(newlines[-1]) + len(word) > textwidth:
-            newlines.append('')
-        while break_words and len(word) > textwidth:
-            newlines[-1] += word[:textwidth]
-            newlines.append('')
-            word = word[textwidth:]
-        newlines[-1] += word + ' '
-    return '\n'.join(newlines)
+    logger.debug("%s", toprint)
 
 
 # --- Lists ---
-def list_replace(instr, search_list=[], repl_list=None):
+def list_replace(instr, search_list=None, repl_list=None):
+    if search_list is None:
+        search_list = []
     repl_list = [''] * len(search_list) if repl_list is None else repl_list
     for ser, repl in zip(search_list, repl_list):
         instr = instr.replace(ser, repl)
     return instr
-
-
-def intersect_ordered(list1, list2):
-    'returns list1 elements that are also in list2 preserves order of list1'
-    set2 = set(list2)
-    new_list = [item for item in iter(list1) if item in set2]
-    #new_list =[]
-    #for item in iter(list1):
-        #if item in set2:
-            #new_list.append(item)
-    return new_list
-
-
-@DEPRECATED
-def array_index(array, item):
-    return np.where(array == item)[0][0]
-
-
-@DEPRECATED
-def index_of(item, array):
-    'index of [item] in [array]'
-    return np.where(array == item)[0][0]
-
-
-def list_index(search_list, to_find_list):
-    try:
-        toret = [np.where(search_list == item)[0][0] for item in to_find_list]
-    except IndexError as ex1:
-        print(ex1)
-        try:
-            print('item = %r' % (item,))
-        except Exception as ex2:
-            print(ex2)
-        raise
-    return toret
-
-
-def list_eq(list_):
-    # checks to see if list is equal everywhere
-    if len(list_) == 0:
-        return True
-    item0 = list_[0]
-    return all([item == item0 for item in list_])
-
-
-def intersect2d_numpy(A, B):
-    #http://stackoverflow.com/questions/8317022/
-    #get-intersecting-rows-across-two-2d-numpy-arrays/8317155#8317155
-    nrows, ncols = A.shape
-    # HACK to get consistent dtypes
-    assert A.dtype is B.dtype, 'A and B must have the same dtypes'
-    dtype = np.dtype([('f%d' % i, A.dtype) for i in range(ncols)])
-    try:
-        C = np.intersect1d(A.view(dtype), B.view(dtype))
-    except ValueError:
-        C = np.intersect1d(A.copy().view(dtype), B.copy().view(dtype))
-    # This last bit is optional if you're okay with "C" being a structured array...
-    C = C.view(A.dtype).reshape(-1, ncols)
-    return C
-
-
-def intersect2d(A, B):
-    Cset  =  set(tuple(x) for x in A).intersection(set(tuple(x) for x in B))
-    Ax = np.array([x for x, item in enumerate(A) if tuple(item) in Cset], dtype=int)
-    Bx = np.array([x for x, item in enumerate(B) if tuple(item) in Cset], dtype=int)
-    C = np.array(tuple(Cset))
-    return C, Ax, Bx
-
-
-def unique_keep_order(arr):
-    'pandas.unique preseves order and seems to be faster due to index overhead'
-    import pandas as pd
-    return pd.unique(arr)
-    #_, idx = np.unique(arr, return_index=True)
-    #return arr[np.sort(idx)]
-
-
-# --- Info Strings ---
-
-def pstats(*args, **kwargs):
-    # wrapper for printable_mystats
-    return printable_mystats(*args, **kwargs)
-
-
-def printable_mystats(_list, newlines=False):
-    stat_dict = mystats(_list)
-    stat_strs = ['%r: %s' % (key, val) for key, val in stat_dict.items()]
-    if newlines:
-        indent = '    '
-        head = '{\n' + indent
-        sep  = ',\n' + indent
-        tail = '\n}'
-    else:
-        head = '{'
-        sep = ', '
-        tail = '}'
-    ret = head + sep.join(stat_strs) + tail
-    return ret
-#def mystats2_latex(mystats):
-    #statdict_ = eval(mystats)
-
-
-def mystats(_list):
-    if len(_list) == 0:
-        return {'empty_list': True}
-    nparr = np.array(_list)
-    min_val = nparr.min()
-    max_val = nparr.max()
-    nMin = np.sum(nparr == min_val)  # number of entries with min val
-    nMax = np.sum(nparr == max_val)  # number of entries with min val
-    return OrderedDict([('max',   np.float32(max_val)),
-                        ('min',   np.float32(min_val)),
-                        ('mean',  np.float32(nparr.mean())),
-                        ('std',   np.float32(nparr.std())),
-                        ('nMin',  np.int32(nMin)),
-                        ('nMax',  np.int32(nMax)),
-                        ('shape', repr(nparr.shape))])
 
 
 def myprint(input=None, prefix='', indent='', lbl=''):
@@ -334,18 +174,18 @@ def myprint(input=None, prefix='', indent='', lbl=''):
         prefix = lbl
     if len(prefix) > 0:
         prefix += ' '
-    print_(indent + prefix + str(type(input)) + ' ')
+    logger.debug("%s", indent + prefix + str(type(input)) + ' ')
     if isinstance(input, list):
-        print(indent + '[')
+        logger.debug("%s", indent + '[')
         for item in iter(input):
             myprint(item, indent=indent + '  ')
-        print(indent + ']')
+        logger.debug("%s", indent + ']')
     elif isinstance(input, str):
-        print(input)
+        logger.debug("%s", input)
     elif isinstance(input, dict):
-        print(printableVal(input))
+        logger.debug("%s", printableVal(input))
     else:
-        print(indent + '{')
+        logger.debug("%s", indent + '{')
         attribute_list = dir(input)
         for attr in attribute_list:
             if attr.find('__') == 0:
@@ -355,8 +195,8 @@ def myprint(input=None, prefix='', indent='', lbl=''):
             # Format methods nicer
             #if val.find('built-in method'):
                 #val = '<built-in method>'
-            print(indent + '  ' + attr + ' : ' + val)
-        print(indent + '}')
+            logger.debug("%s  %s : %s", indent, attr, val)
+        logger.debug("%s", indent + '}')
 
 
 def info(var, lbl):
@@ -385,44 +225,6 @@ def listinfo(list_, lbl='ndarr'):
 
 #expected_type = np.float32
 #expected_dims = 5
-def numpy_list_num_bits(nparr_list, expected_type, expected_dims):
-    num_bits = 0
-    num_items = 0
-    num_elemt = 0
-    bit_per_item = {
-        np.float32: 32,
-        np.uint8: 8
-    }[expected_type]
-    for nparr in iter(nparr_list):
-        arr_len, arr_dims = nparr.shape
-        if not nparr.dtype.type is expected_type:
-            msg = 'Expected Type: ' + repr(expected_type)
-            msg += 'Got Type: ' + repr(nparr.dtype)
-            raise Exception(msg)
-        if arr_dims != expected_dims:
-            msg = 'Expected Dims: ' + repr(expected_dims)
-            msg += 'Got Dims: ' + repr(arr_dims)
-            raise Exception(msg)
-        num_bits += len(nparr) * expected_dims * bit_per_item
-        num_elemt += len(nparr) * expected_dims
-        num_items += len(nparr)
-    return num_bits,  num_items, num_elemt
-
-
-# --- Util ---
-def alloc_lists(num_alloc):
-    'allocates space for a numpy array of lists'
-    return [[] for _ in range(num_alloc)]
-
-
-def ensure_list_size(list_, size_):
-    'extend list to max_cx'
-    lendiff = (size_) - len(list_)
-    if lendiff > 0:
-        extension = [None for _ in range(lendiff)]
-        list_.extend(extension)
-
-
 def get_timestamp(format_='filename', use_second=False):
     now = datetime.datetime.now()
     if use_second:
@@ -437,116 +239,6 @@ def get_timestamp(format_='filename', use_second=False):
             'comment': '# (yyyy-mm-dd hh:mm) %04d-%02d-%02d %02d:%02d'}
     stamp = time_formats[format_] % time_tup
     return stamp
-
-VALID_PROGRESS_TYPES = ['none', 'dots', 'fmtstr', 'simple']
-
-
-def simple_progres_func(verbosity, msg, progchar='.'):
-    def mark_progress0(*args):
-        pass
-
-    def mark_progress1(*args):
-        logger.debug("%s", progchar)
-
-    def mark_progress2(*args):
-        logger.debug(msg, *args)
-
-    if verbosity == 0:
-        mark_progress = mark_progress0
-    elif verbosity == 1:
-        mark_progress = mark_progress1
-    elif verbosity == 2:
-        mark_progress = mark_progress2
-    return mark_progress
-
-
-# TODO: Return start_prog, make_prog, end_prog
-def progress_func(max_val=0, lbl='Progress: ', mark_after=-1,
-                  flush_after=4, spacing=0, line_len=80,
-                  progress_type='fmtstr'):
-    '''Returns a function that marks progress taking the iteration count as a
-    parameter. Progress is logged at DEBUG level so normal GUI runs stay quiet.'''
-
-    def log_progress(message):
-        logger.debug("%s", message)
-
-    # Tell the user we are about to make progress
-    if progress_type in ['simple', 'fmtstr'] and max_val < mark_after:
-        return lambda count: None, lambda: None
-    # none: nothing
-    if progress_type == 'none':
-        mark_progress =  lambda count: None
-    # simple: one dot per progress. no flush.
-    if progress_type == 'simple':
-        mark_progress = lambda count: log_progress(f"{lbl}{count + 1}/{max_val}" if max_val else lbl)
-    # dots: spaced dots
-    if progress_type == 'dots':
-        if spacing > 0:
-            # With spacing
-            newline_len = spacing * line_len // spacing
-
-            def mark_progress_sdot(count):
-                count_ = count + 1
-                if (count_) % spacing == 0 or (count_) == max_val:
-                    log_progress(f"{lbl}{count_}/{max_val}")
-            mark_progress = mark_progress_sdot
-        else:
-            def mark_progress_dot(count):
-                count_ = count + 1
-                if (count_) % flush_after == 0 or (count_) == max_val:
-                    log_progress(f"{lbl}{count_}/{max_val}")
-            mark_progress = mark_progress_dot
-    # fmtstr: formated string progress
-    if progress_type == 'fmtstr':
-        def mark_progress_fmtstr(count):
-            count_ = count + 1
-            if count_ == 1 or count_ == max_val or count_ % flush_after == 0:
-                log_progress(f"{lbl}{count_}/{max_val}")
-        mark_progress = mark_progress_fmtstr
-    # FIXME idk why argparse2.ARGS_ is none here.
-    if '--aggroflush' in sys.argv:
-        base_mark_progress = mark_progress
-
-        def mark_progress_agressive(count):
-            base_mark_progress(count)
-        mark_progress = mark_progress_agressive
-
-    def end_progress():
-        if max_val:
-            log_progress(f"{lbl}done {max_val}/{max_val}")
-    mark_progress(0)
-    return mark_progress, end_progress
-    raise Exception('unkown progress type = %r' % progress_type)
-
-
-def progress_str(max_val, lbl='Progress: '):
-    r'makes format string that prints progress: %Xd/MAX_VAL with backspaces'
-    max_str = str(max_val)
-    dnumstr = str(len(max_str))
-    fmt_str = lbl + '%' + dnumstr + 'd/' + max_str
-    fmt_str = '\b' * (len(fmt_str) - len(dnumstr) + len(max_str)) + fmt_str
-    return fmt_str
-
-
-def normalize(array, dim=0):
-    return norm_zero_one(array, dim)
-
-
-def norm_zero_one(array, dim=0):
-    'normalizes a numpy array from 0 to 1'
-    array_max  = array.max(dim)
-    array_min  = array.min(dim)
-    array_exnt = np.subtract(array_max, array_min)
-    return np.divide(np.subtract(array, array_min), array_exnt)
-
-
-def find_std_inliers(data, m=2):
-    return abs(data - np.mean(data)) < m * np.std(data)
-
-
-def my_computer_names():
-    return ['Ooo', 'Hyrule', 'BakerStreet']
-
 
 def get_computer_name():
     return platform.node()
@@ -570,9 +262,13 @@ def win_shortcut(source, link_name):
 
 def symlink(source, link_name, noraise=False):
     if os.path.islink(link_name):
-        print('[helpers] symlink %r exists' % (link_name))
+        logger.debug('[helpers] symlink %r exists', link_name)
         return
-    print('[helpers] Creating symlink: source=%r link_name=%r' % (source, link_name))
+    logger.debug(
+        '[helpers] Creating symlink: source=%r link_name=%r',
+        source,
+        link_name,
+    )
     try:
         os_symlink = getattr(os, "symlink", None)
         if callable(os_symlink):
@@ -593,40 +289,22 @@ def vd(dname=None):
     cross_platform.view_directory(dname)
 
 
-def str2(obj):
-    if isinstance(obj, dict):
-        return str(obj).replace(', ', '\n')[1:-1]
-    if isinstance(obj, type):
-        return str(obj).replace('<type \'', '').replace('\'>', '')
-    else:
-        return str(obj)
-
-
-def tiled_range(range, cols):
-    return np.tile(np.arange(range), (cols, 1)).T
-    #np.tile(np.arange(num_qf).reshape(num_qf, 1), (1, k_vsmany))
-
-
-def random_indexes(max_index, subset_size):
-    subst_ = np.arange(0, max_index)
-    np.random.shuffle(subst_)
-    subst = subst_[0:min(subset_size, max_index)]
-    return subst
-
-
 #def gvim(fname):
     #'its the only editor that matters'
     #import subprocess
     #proc = subprocess.Popen(['gvim',fname])
 
 
+@DEPRECATED
 def cmd(command):
+    """Deprecated unsafe shell helper; use ``subprocess.run`` explicitly."""
     os.system(command)
 
 
 # --- Path ---
-#@DEPRECATED
+@DEPRECATED
 def filecheck(fpath):
+    """Deprecated compatibility alias for ``os.path.exists``."""
     return exists(fpath)
 
 
@@ -636,7 +314,7 @@ def dircheck(dpath, makedir=True):
         if not makedir:
             #print('Nonexistant directory: %r ' % dpath)
             return False
-        print('Making directory: %r' % dpath)
+        logger.debug('Making directory: %r', dpath)
         os.makedirs(dpath)
     return True
 
@@ -645,38 +323,48 @@ def remove_file(fpath, verbose=True, dryrun=False, **kwargs):
     try:
         if dryrun:
             if verbose:
-                print('[helpers] Dryrem %r' % fpath)
+                logger.debug('[helpers] Dryrem %r', fpath)
         else:
             if verbose:
-                print('[helpers] Removing %r' % fpath)
+                logger.debug('[helpers] Removing %r', fpath)
             os.remove(fpath)
     except OSError as e:
-        printWARN('OSError: %s,\n Could not delete %s' % (str(e), fpath))
+        logger.warning('OSError: %s; could not delete %s', e, fpath)
         return False
     return True
 
 
 def remove_dirs(dpath, dryrun=False, **kwargs):
-    print('[helpers] Removing directory: %r' % dpath)
+    if dryrun:
+        logger.debug(
+            '[helpers] Dry run: would remove directory: %r',
+            dpath,
+        )
+        return True
+    logger.debug('[helpers] Removing directory: %r', dpath)
     try:
-        shutil.rmtree(dpath)
+        if islink(dpath):
+            os.unlink(dpath)
+        else:
+            shutil.rmtree(dpath)
     except OSError as e:
-        printWARN('OSError: %s,\n Could not delete %s' % (str(e), dpath))
+        logger.warning('OSError: %s; could not delete %s', e, dpath)
         return False
     return True
 
 
 def remove_files_in_dir(dpath, fname_pattern='*', recursive=False, verbose=True,
                         dryrun=False, **kwargs):
-    print('[helpers] Removing files:')
-    print('  * in dpath = %r ' % dpath)
-    print('  * matching pattern = %r' % fname_pattern)
-    print('  * recursive = %r' % recursive)
+    logger.debug(
+        '[helpers] Removing files in %r matching %r (recursive=%r)',
+        dpath,
+        fname_pattern,
+        recursive,
+    )
     num_removed, num_matched = (0, 0)
     if not exists(dpath):
         msg = ('!!! dir = %r does not exist!' % dpath)
-        print(msg)
-        warnings.warn(msg, category=UserWarning)
+        logger.warning("%s", msg)
     for root, dname_list, fname_list in os.walk(dpath):
         for fname in fnmatch.filter(fname_list, fname_pattern):
             num_matched += 1
@@ -684,16 +372,16 @@ def remove_files_in_dir(dpath, fname_pattern='*', recursive=False, verbose=True,
                                        dryrun=dryrun, **kwargs)
         if not recursive:
             break
-    print('[helpers] ... Removed %d/%d files' % (num_removed, num_matched))
+    logger.debug('[helpers] Removed %d/%d files', num_removed, num_matched)
     return True
 
 
 def delete(path, dryrun=False, recursive=True, verbose=True, **kwargs):
-    print('[helpers] Deleting path=%r' % path)
+    logger.debug('[helpers] Deleting path=%r', path)
     rmargs = dict(dryrun=dryrun, recursive=recursive, verbose=verbose, **kwargs)
     if not exists(path):
         msg = ('..does not exist!')
-        print(msg)
+        logger.debug("%s", msg)
         return False
     if isdir(path):
         flag = remove_files_in_dir(path, **rmargs)
@@ -710,7 +398,7 @@ def longest_existing_path(_path):
             _path = _path_new
             break
         if _path_new == _path:
-            print('!!! This is a very illformated path indeed.')
+            logger.warning('Malformed path has no existing parent: %r', _path)
             _path = ''
             break
         _path = _path_new
@@ -743,7 +431,7 @@ def checkpath(path_, verbose=PRINT_CHECKS):
     if verbose:
         pretty_path = path_ndir_split(path_, 2)
         caller_name = get_caller_name()
-        print_('[%s] checkpath(%r)' % (caller_name, pretty_path))
+        logger.debug('[%s] checkpath(%r)', caller_name, pretty_path)
         if exists(path_):
             path_type = ''
             if isfile(path_):
@@ -755,13 +443,16 @@ def checkpath(path_, verbose=PRINT_CHECKS):
             if ismount(path_):
                 path_type += 'mount'
             path_type = 'file' if isfile(path_) else 'directory'
-            print_('...(%s) exists\n' % (path_type,))
+            logger.debug('(%s) exists', path_type)
         else:
-            print_('... does not exist\n')
+            logger.debug('Path does not exist')
             if __CHECKPATH_VERBOSE__:
-                print_('[helpers] \n  ! Does not exist\n')
+                logger.debug('[helpers] Path does not exist')
                 _longest_path = longest_existing_path(path_)
-                print_('[helpers] ... The longest existing path is: %r\n' % _longest_path)
+                logger.debug(
+                    '[helpers] Longest existing path: %r',
+                    _longest_path,
+                )
             return False
         return True
     else:
@@ -774,7 +465,7 @@ def check_path(path_):
 
 def ensurepath(path_):
     if not checkpath(path_):
-        print('[helpers] mkdir(%r)' % path_)
+        logger.debug('[helpers] mkdir(%r)', path_)
         os.makedirs(path_)
     return True
 
@@ -800,7 +491,7 @@ def join_mkdir(*args):
     'join and creates if not exists'
     output_dir = join(*args)
     if not exists(output_dir):
-        print('Making dir: ' + output_dir)
+        logger.debug('Making dir: %s', output_dir)
         os.mkdir(output_dir)
     return output_dir
 
@@ -815,52 +506,52 @@ def copy_task(cp_list, test=False, nooverwrite=False, print_tasks=True):
     num_overwrite = 0
     _cp_tasks = []  # Build this list with the actual tasks
     if nooverwrite:
-        print('[helpers] Removed: copy task ')
+        logger.debug('[helpers] Removed copy task')
     else:
-        print('[helpers] Begining copy + overwrite task.')
+        logger.debug('[helpers] Beginning copy and overwrite task')
     for (src, dst) in iter(cp_list):
         if exists(dst):
             num_overwrite += 1
             if print_tasks:
-                print('[helpers] !!! Overwriting ')
+                logger.debug('[helpers] Overwriting %r', dst)
             if not nooverwrite:
                 _cp_tasks.append((src, dst))
         else:
             if print_tasks:
-                print('[helpers] ... Copying ')
+                logger.debug('[helpers] Copying %r', src)
                 _cp_tasks.append((src, dst))
         if print_tasks:
-            print('[helpers]    ' + src + ' -> \n    ' + dst)
-    print('[helpers] About to copy %d files' % len(cp_list))
+            logger.debug('[helpers] %s -> %s', src, dst)
+    logger.debug('[helpers] About to copy %d files', len(cp_list))
     if nooverwrite:
-        print('[helpers] Skipping %d tasks which would have overwriten files' % num_overwrite)
+        logger.debug('[helpers] Skipping %d overwrite tasks', num_overwrite)
     else:
-        print('[helpers] There will be %d overwrites' % num_overwrite)
+        logger.debug('[helpers] There will be %d overwrites', num_overwrite)
     if not test:
-        print('[helpers]... Copying')
+        logger.debug('[helpers] Copying')
         for (src, dst) in iter(_cp_tasks):
             shutil.copy(src, dst)
-        print('[helpers]... Finished copying')
+        logger.debug('[helpers] Finished copying')
     else:
-        print('[helpers]... In test mode. Nothing was copied.')
+        logger.debug('[helpers] Test mode; nothing was copied')
 
 
 def copy(src, dst):
     if exists(src):
         if exists(dst):
             prefix = 'C+O'
-            print('[helpers] [Copying + Overwrite]:')
+            logger.debug('[helpers] Copying and overwriting')
         else:
             prefix = 'C'
-            print('[helpers] [Copying]: ')
-        print('[%s] | %s' % (prefix, src))
-        print('[%s] ->%s' % (prefix, dst))
+            logger.debug('[helpers] Copying')
+        logger.debug('[%s] %s -> %s', prefix, src, dst)
         shutil.copy(src, dst)
     else:
-        prefix = 'Miss'
-        print('[helpers] [Cannot Copy]: ')
-        print('[%s] src=%s does not exist!' % (prefix, src))
-        print('[%s] dst=%s' % (prefix, dst))
+        logger.warning(
+            '[helpers] Cannot copy missing source %s to %s',
+            src,
+            dst,
+        )
 
 
 def copy_all(src_dir, dest_dir, glob_str_list, recursive=False):
@@ -868,18 +559,26 @@ def copy_all(src_dir, dest_dir, glob_str_list, recursive=False):
     if not isinstance(glob_str_list, list):
         glob_str_list = [glob_str_list]
     for root, dirs, files in os.walk(src_dir):
+        relative_root = relpath(root, src_dir)
+        dest_root = (
+            dest_dir
+            if relative_root == os.curdir
+            else join(dest_dir, relative_root)
+        )
         for dname_ in dirs:
             for glob_str in glob_str_list:
                 if fnmatch.fnmatch(dname_, glob_str):
-                    src = normpath(join(src_dir, dname_))
-                    dst = normpath(join(dest_dir, dname_))
+                    dst = normpath(join(dest_root, dname_))
                     ensuredir(dst)
+                    break
         for fname_ in files:
             for glob_str in glob_str_list:
                 if fnmatch.fnmatch(fname_, glob_str):
-                    src = normpath(join(src_dir, fname_))
-                    dst = normpath(join(dest_dir, fname_))
+                    src = normpath(join(root, fname_))
+                    dst = normpath(join(dest_root, fname_))
+                    ensuredir(split(dst)[0])
                     copy(src, dst)
+                    break
         if not recursive:
             break
 
@@ -922,18 +621,10 @@ def grep(string, pattern):
         string = repr(string)
     matching_lines = []  # Find all matching lines
     for line in string.split('\n'):
-        if not fnmatch.fnmatch(string, pattern):
+        if not fnmatch.fnmatch(line, pattern):
             continue
         matching_lines.append(line)
     return matching_lines
-
-
-def correct_zeros(M):
-    index_gen = iprod(*[range(_) for _ in M.shape])
-    for index in index_gen:
-        if M[index] < 1E-18:
-            M[index] = 0
-    return M
 
 
 def glob(dirname, pattern, recursive=False):
@@ -950,139 +641,42 @@ def glob(dirname, pattern, recursive=False):
 
 def print_grep(*args, **kwargs):
     matching_lines = grep(*args, **kwargs)
-    print('Matching Lines:')  # Print matching lines
-    print('\n    '.join(matching_lines))
+    logger.debug("Matching Lines:\n    %s", '\n    '.join(matching_lines))
 
 
 def print_glob(*args, **kwargs):
     matching_fnames = glob(*args, **kwargs)
-    print('Matching Fnames:')  # Print matching fnames
-    print('\n    '.join(matching_fnames))
+    logger.debug("Matching Fnames:\n    %s", '\n    '.join(matching_fnames))
 
 
 #---------------
 # save / load / cache functions
-def sanatize_fname2(fname):
-    fname = fname.replace(' ', '_')
-    return fname
-
-
-def sanatize_fname(fname):
-    ext = '.pkl'
-    if fname.rfind(ext) != max(len(fname) - len(ext), 0):
-        fname += ext
-    return fname
-
-
 def eval_from(fpath, err_onread=True):
-    'evaluate a line from a test file'
-    print('[helpers] Evaling: fpath=%r' % fpath)
-    text = read_from(fpath)
-    if text is None:
-        if err_onread:
-            raise Exception('Error reading: fpath=%r' % fpath)
-        print('[helpers] * could not eval: %r ' % fpath)
-        return None
-    return eval(text)
+    """Compatibility wrapper for :func:`hscom.serialization.eval_from`."""
+    _serialization.VERY_VERBOSE = VERY_VERBOSE
+    return _serialization.eval_from(fpath, err_onread=err_onread)
 
 
 def read_from(fpath):
-    if not checkpath(fpath):
-        print('[helpers] * FILE DOES NOT EXIST!')
-        return None
-    print('[helpers] * Reading text file: %r ' % split(fpath)[1])
-    try:
-        text = read_text(fpath)
-    except Exception:
-        print('[helpers] * Error reading fpath=%r' % fpath)
-        raise
-    if VERY_VERBOSE:
-        print('[helpers] * Read %d characters' % len(text))
-    return text
-
-
-def read_text(fpath, encodings=('utf-8-sig', 'mbcs', 'cp950')):
-    last_ex = None
-    for encoding in encodings:
-        try:
-            with open(fpath, 'r', encoding=encoding, errors='strict') as file:
-                return file.read()
-        except UnicodeDecodeError as ex:
-            last_ex = ex
-            continue
-    if last_ex is not None:
-        raise last_ex
-    with open(fpath, 'r', encoding='utf-8-sig', errors='surrogateescape') as file:
-        return file.read()
+    """Compatibility wrapper for :func:`hscom.serialization.read_from`."""
+    _serialization.VERY_VERBOSE = VERY_VERBOSE
+    return _serialization.read_from(fpath)
 
 
 def write_to(fpath, to_write):
-    if __PRINT_WRITES__:
-        print('[helpers] * Writing to text file: %r ' % fpath)
-    with open(fpath, 'w', encoding='utf-8') as file:
-        file.write(to_write)
+    """Compatibility wrapper for :func:`hscom.serialization.write_to`."""
+    _serialization.PRINT_WRITES = __PRINT_WRITES__
+    return _serialization.write_to(fpath, to_write)
 
 
-def save_pkl(fpath, data):
-    with open(fpath, 'wb') as file:
-        pickle.dump(data, file)
-
-
-def load_pkl(fpath):
-    with open(fpath, 'rb') as file:
-        return pickle.load(file)
-
-
-def save_npz(fpath, *args, **kwargs):
-    print_(' * save_npz: %r ' % fpath)
-    sys.stdout.flush()
-    np.savez(fpath, *args, **kwargs)
-    print('... success')
-
-
-def load_npz(fpath):
-    print('[helpers] load_npz: %r ' % split(fpath)[1])
-    print('[helpers] filesize is: ' + file_megabytes_str(fpath))
-    npz = np.load(fpath, mmap_mode='r + ', allow_pickle=True)
-    data = tuple(npz[key] for key in sorted(npz.keys()))
-    #print(' * npz.keys() = %r ' + str(npz.keys()))
-    npz.close()
-    return data
-
-
+@DEPRECATED
 def dict_union2(dict1, dict2):
+    """Deprecated two-dictionary compatibility wrapper."""
     return dict(list(dict1.items()) + list(dict2.items()))
 
 
 def dict_union(*args):
     return dict([item for dict_ in iter(args) for item in dict_.items()])
-
-
-def hashstr_arr(arr, lbl='arr', **kwargs):
-    if isinstance(arr, list):
-        arr = tuple(arr)
-    if isinstance(arr, tuple):
-        arr_shape = '(' + str(len(arr)) + ')'
-    else:
-        arr_shape = str(arr.shape).replace(' ', '')
-    arr_hash = hashstr(arr, **kwargs)
-    arr_uid = ''.join((lbl, '(', arr_shape, arr_hash, ')'))
-    return arr_uid
-
-
-def hashstr(data, trunc_pos=8):
-    import ubelt as ub
-    hashstr = ub.hash_data(data, base='abc')[:trunc_pos]
-    return hashstr
-    if isinstance(data, tuple):
-        data = repr(data)
-    # Get a 128 character hex string
-    hashstr = hashlib.sha512(data).hexdigest()
-    # Convert to base 57
-    hashstr2 = hex2_base57(hashstr)
-    # Truncate
-    hashstr = hashstr2[:trunc_pos]
-    return hashstr
 
 
 class ModulePrintLock():
@@ -1120,131 +714,6 @@ class ModulePrintLock():
             #'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', ';', '=', '@',
             #'[', ']', '^', '_', '`', '{', '}', '~', '!', '#', '$', '%', '&',
             #'(', ')', '+', ',', '-']
-ALPHABET = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9',  'a', 'b', 'c',
-            'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p',
-            'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', ';', '=', '@',
-            '[', ']', '^', '_', '`', '{', '}', '~', '!', '#', '$', '%', '&',
-            '+', ',']
-
-BIGBASE = len(ALPHABET)
-
-
-def hex2_base57(hexstr):
-    x = int(hexstr, 16)
-    if x == 0:
-        return '0'
-    sign = 1 if x > 0 else -1
-    x *= sign
-    digits = []
-    while x:
-        digits.append(ALPHABET[x % BIGBASE])
-        x //= BIGBASE
-    if sign < 0:
-        digits.append('-')
-        digits.reverse()
-    newbase_str = ''.join(digits)
-    return newbase_str
-
-
-def hashstr_md5(data):
-    hashstr = hashlib.md5(data).hexdigest()
-    #bin(int(my_hexdata, scale))
-    return hashstr
-
-
-def load_cache_npz(input_data, uid='', cache_dir='.', is_sparse=False):
-    data_fpath = __cache_data_fpath(input_data, uid, cache_dir)
-    cachefile_exists = checkpath(data_fpath)
-    if cachefile_exists:
-        try:
-            print('helpers.load_cache> Trying to load cached data: %r' % split(data_fpath)[1])
-            print('helpers.load_cache> Cache filesize: ' + file_megabytes_str(data_fpath))
-            sys.stdout.flush()
-            if is_sparse:
-                with open(data_fpath, 'rb') as file_:
-                    data = pickle.load(file_)
-            else:
-                npz = np.load(data_fpath, allow_pickle=True)
-                data = npz['arr_0']
-                npz.close()
-            print('...success')
-            return data
-        except Exception as ex:
-            print('...failure')
-            print('helpers.load_cache> %r ' % ex)
-            print('helpers.load_cache>...cannot load data_fpath=%r ' % data_fpath)
-            raise CacheException(repr(ex))
-    else:
-        raise CacheException('nonexistant file: %r' % data_fpath)
-    raise CacheException('other failure')
-
-
-def save_cache_npz(input_data, data, uid='', cache_dir='.', is_sparse=False):
-    data_fpath = __cache_data_fpath(input_data, uid, cache_dir)
-    print('[helpers] caching data: %r' % split(data_fpath)[1])
-    sys.stdout.flush()
-    if is_sparse:
-        with open(data_fpath, 'wb') as outfile:
-            pickle.dump(data, outfile, pickle.HIGHEST_PROTOCOL)
-    else:
-        np.savez(data_fpath, data)
-    print('...success')
-
-
-#def cache_npz_decorator(npz_func):
-    #def __func_wrapper(input_data, *args, **kwargs):
-        #ret = npz_func(*args, **kwargs)
-
-
-class CacheException(Exception):
-    pass
-
-
-def __cache_data_fpath(input_data, uid, cache_dir):
-    hashstr_   = hashstr(input_data)
-    shape_lbl  = str(input_data.shape).replace(' ', '')
-    data_fname = uid + '_' + shape_lbl + '_' + hashstr_ + '.npz'
-    data_fpath = join(cache_dir, data_fname)
-    return data_fpath
-
-
-def file_bytes(fpath):
-    return os.stat(fpath).st_size
-
-
-def byte_str2(nBytes):
-    if nBytes < 2.0 ** 10:
-        return byte_str(nBytes, 'KB')
-    if nBytes < 2.0 ** 20:
-        return byte_str(nBytes, 'KB')
-    if nBytes < 2.0 ** 30:
-        return byte_str(nBytes, 'MB')
-    else:
-        return byte_str(nBytes, 'GB')
-
-
-def byte_str(nBytes, unit='bytes'):
-    if unit.lower().startswith('b'):
-        nUnit = nBytes
-    elif unit.lower().startswith('k'):
-        nUnit =  nBytes / (2.0 ** 10)
-    elif unit.lower().startswith('m'):
-        nUnit =  nBytes / (2.0 ** 20)
-    elif unit.lower().startswith('g'):
-        nUnit = nBytes / (2.0 ** 30)
-    else:
-        raise NotImplementedError('unknown nBytes=%r unit=%r' % (nBytes, unit))
-    return '%.2f %s' % (nUnit, unit)
-
-
-def file_megabytes(fpath):
-    return os.stat(fpath).st_size / (2.0 ** 20)
-
-
-def file_megabytes_str(fpath):
-    return ('%.2f MB' % file_megabytes(fpath))
-
-
 # --- Timing ---
 def tic(msg=None):
     return (msg, time.time())
@@ -1286,7 +755,7 @@ class RedirectStdout(object):
         self.start()
 
     def dump(self):
-        print(indent(self.record, self.lbl))
+        logger.debug("%s", indent(self.record, self.lbl))
 
     def __enter__(self):
         self.start()
@@ -1345,11 +814,6 @@ def indent_decor(lbl):
     return indent_decor2
 
 
-def choose(n, k):
-    import scipy.misc
-    return scipy.misc.comb(n, k, True)
-
-
 class Timer(object):
     ''' Used to time statments with a with statment
     e.g with Timer() as t: some_function()'''
@@ -1362,18 +826,15 @@ class Timer(object):
 
     def tic(self):
         if self.verbose:
-            sys.stdout.flush()
-            print_('\ntic(%r)' % self.msg)
+            logger.debug("tic(%r)", self.msg)
             if self.newline:
-                print_('\n')
-            sys.stdout.flush()
+                logger.debug("")
         self.tstart = time.time()
 
     def toc(self):
         ellapsed = (time.time() - self.tstart)
         if self.verbose:
-            print_('...toc(%r)=%.4fs\n' % (self.msg, ellapsed))
-            sys.stdout.flush()
+            logger.debug("...toc(%r)=%.4fs", self.msg, ellapsed)
         return ellapsed
 
     def __enter__(self):
@@ -1433,24 +894,7 @@ def ipython_execstr():
     ''')
 
 
-def execstr_parent_locals():
-    parent_locals = get_parent_locals()
-    return execstr_dict(parent_locals, 'parent_locals')
-
-
-def execstr_attr_list(obj_name, attr_list=None):
-    #if attr_list is None:
-        #exec(execstr_parent_locals())
-        #exec('attr_list = dir('+obj_name+')')
-    execstr_list = [obj_name + '.' + attr for attr in attr_list]
-    return execstr_list
-
-
 def execstr_dict(dict_, local_name, exclude_list=None):
-    #if local_name is None:
-        #local_name = dict_
-        #exec(execstr_parent_locals())
-        #exec('dict_ = local_name')
     if exclude_list is None:
         execstr = '\n'.join((key + ' = ' + local_name + '[' + repr(key) + ']'
                             for (key, val) in dict_.items()))
@@ -1465,7 +909,7 @@ def execstr_dict(dict_, local_name, exclude_list=None):
     return execstr
 
 
-def execstr_timeitsetup(dict_, exclude_list=[]):
+def execstr_timeitsetup(dict_, exclude_list=None):
     '''
     Example:
     import timeit
@@ -1475,6 +919,8 @@ def execstr_timeitsetup(dict_, exclude_list=[]):
     setup = helpers.execstr_timeitsetup(local_dict, exclude_list)
     timeit.timeit('somefunc', setup)
     '''
+    if exclude_list is None:
+        exclude_list = []
     old_thresh =  np.get_printoptions()['threshold']
     np.set_printoptions(threshold=1000000000)
     matches = fnmatch.fnmatch
@@ -1507,7 +953,7 @@ def dict_execstr(dict_, local_name=None):
 
 
 def execstr_func(func):
-    print(' ! Getting executable source for: ' + func.__name__)
+    logger.debug("Getting executable source for: %s", func.__name__)
     _src = inspect.getsource(func)
     execstr = textwrap.dedent(_src[_src.find(':') + 1:])
     # Remove return statments
@@ -1518,9 +964,8 @@ def execstr_func(func):
         # The characters which might make a return not have its own line
         stmt_endx = len(execstr) - 1
         for stmt_break in '\n;':
-            print(execstr)
-            print('')
-            print(stmtx)
+            logger.debug("Executable source candidate:\n%s", execstr)
+            logger.debug("Return statement offset: %d", stmtx)
             stmt_endx_new = execstr[stmtx:].find(stmt_break)
             if -1 < stmt_endx_new < stmt_endx:
                 stmt_endx = stmt_endx_new
@@ -1531,7 +976,9 @@ def execstr_func(func):
     return execstr
 
 
+@DEPRECATED
 def execstr_src(func):
+    """Deprecated executable-source helper; use ``inspect.getsource``."""
     return execstr_func(func)
 
 
@@ -1545,28 +992,29 @@ def unit_test(test_func):
     test_name = test_func.__name__
 
     def __unit_test_wraper():
-        print('Testing: ' + test_name)
+        logger.debug("Testing: %s", test_name)
         try:
             ret = test_func()
-        except Exception as ex:
-            print(repr(ex))
-            print('Tested: ' + test_name + ' ...FAILURE')
+        except Exception:
+            logger.debug("Tested: %s ...FAILURE", test_name, exc_info=True)
             raise
-        print('Tested: ' + test_name + ' ...SUCCESS')
+        logger.debug("Tested: %s ...SUCCESS", test_name)
         return ret
     return __unit_test_wraper
 
 
+@DEPRECATED
 def runprofile(cmd, globals_=globals(), locals_=locals()):
+    """Deprecated developer profiler that executes a command string."""
     # Meliae # from meliae import loader # om = loader.load('filename.json') # s = om.summarize();
     import cProfile
     import sys
     import os
-    print('[helpers] Profiling Command: ' + cmd)
+    logger.debug("Profiling command: %s", cmd)
     cProfOut_fpath = 'OpenGLContext.profile'
     cProfile.runctx( cmd, globals_, locals_, filename=cProfOut_fpath)
     # RUN SNAKE
-    print('[helpers] Profiled Output: ' + cProfOut_fpath)
+    logger.debug("Profiled output: %s", cProfOut_fpath)
     if sys.platform == 'win32':
         rsr_fpath = os.path.join(os.path.dirname(sys.executable),
                                  'Scripts', 'runsnake.exe')
@@ -1594,12 +1042,12 @@ def memory_profile():
     #http://stackoverflow.com/questions/2629680/deciding-between-subprocess-multiprocessing-and-thread-in-python
     import guppy
     import gc
-    print('Collecting garbage')
+    logger.debug("Collecting garbage")
     gc.collect()
     hp = guppy.hpy()
-    print('Waiting for heap output...')
+    logger.debug("Waiting for heap output")
     heap_output = hp.heap()
-    print(heap_output)
+    logger.debug("Heap output:\n%s", heap_output)
     # Graphical Browser
     #hp.pb()
 
@@ -1616,7 +1064,7 @@ def garbage_collect():
 #---------------
 
 __STDOUT__ = sys.stdout
-__STDERR__ = sys.stdout
+__STDERR__ = sys.stderr
 
 
 def reset_streams():
@@ -1626,14 +1074,14 @@ def reset_streams():
     sys.stderr = __STDERR__
     sys.stdout.flush()
     sys.stderr.flush()
-    print('helprs> Reset stdout and stderr')
+    logger.debug("Reset stdout and stderr")
 
 
 def print_list(list):
     if list is None:
         return 'None'
     msg = '\n'.join([repr(item) for item in list])
-    print(msg)
+    logger.debug("%s", msg)
     return msg
 
 
@@ -1673,9 +1121,13 @@ def print_list(list):
 
 
 def printWARN(warn_msg, category=UserWarning):
+    """Compatibility warning helper using logging as its sole channel.
+
+    ``category`` remains accepted for callers of the historical API, but no
+    Python warning is emitted.  This avoids reporting every event twice.
+    """
     warn_msg = 'Probably not a big issue, but you should know...: ' + warn_msg
     logger.warning("%s", warn_msg)
-    warnings.warn(warn_msg, category=category)
     return warn_msg
 
 
@@ -1723,56 +1175,12 @@ def listfind(list_, tofind):
         return None
 
 
-def num_fmt(num, max_digits=1):
-    if tools.is_float(num):
-        return ('%.' + str(max_digits) + 'f') % num
-    elif tools.is_int(num):
-        return int_comma_str(num)
-    else:
-        return '%r'
-
-
-def int_comma_str(num):
-    int_str = ''
-    reversed_digits = decimal.Decimal(num).as_tuple()[1][::-1]
-    for i, digit in enumerate(reversed_digits):
-        if (i) % 3 == 0 and i != 0:
-            int_str += ','
-        int_str += str(digit)
-    return int_str[::-1]
-
-
-def fewest_digits_float_str(num, n=8):
-    int_part = int(num)
-    dec_part = num - int_part
-    x = decimal.Decimal(dec_part, decimal.Context(prec=8))
-    decimal_list = x.as_tuple()[1]
-    nonzero_pos = 0
-    for i in range(0, min(len(decimal_list), n)):
-        if decimal_list[i] != 0:
-            nonzero_pos = i
-    sig_dec = int(dec_part * 10 ** (nonzero_pos + 1))
-    float_str = int_comma_str(int_part) + '.' + str(sig_dec)
-    return float_str
-    #x.as_tuple()[n]
-
-
-def commas(num, n=8):
-    if tools.is_float(num):
-        #ret = sigfig_str(num, n=2)
-        ret = '%.3f' % num
-        return ret
-        #return fewest_digits_float_str(num, n)
-    return '%d' % num
-    #return int_comma_str(num)
-
-
 def printshape(arr_name, locals_):
     arr = locals_[arr_name]
-    if type(arr) is np.ndarray:
-        print(arr_name + '.shape = ' + str(arr.shape))
+    if isinstance(arr, np.ndarray):
+        logger.debug("%s.shape = %s", arr_name, arr.shape)
     else:
-        print('len(%s) = %r' % (arr_name, len(arr)))
+        logger.debug("len(%s) = %r", arr_name, len(arr))
 
 
 def printvar2(varstr, attr=''):
@@ -1807,164 +1215,34 @@ def printvar(locals_, varname, attr='.shape'):
     typestr = tools.get_type(var)
     if isinstance(var, np.ndarray):
         varstr = eval('str(var' + attr + ')')
-        print('[var] %s %s = %s' % (typestr, varname + attr, varstr))
+        logger.debug("[var] %s %s = %s", typestr, varname + attr, varstr)
     elif isinstance(var, list):
         if attr == '.shape':
             func = 'len'
         else:
             func = ''
         varstr = eval('str(' + func + '(var))')
-        print('[var] %s len(%s) = %s' % (typestr, varname, varstr))
+        logger.debug("[var] %s len(%s) = %s", typestr, varname, varstr)
     else:
-        print('[var] %s %s = %r' % (typestr, varname, var))
+        logger.debug("[var] %s %s = %r", typestr, varname, var)
     np.set_printoptions(**npprintopts)
 
 
-def format(num, n=8):
-    '''makes numbers pretty e.g.
-    nums = [9001, 9.053]
-    print([format(num) for num in nums])
-    '''
-    if num is None:
-        return 'None'
-    if tools.is_float(num):
-        ret = ('%.' + str(n) + 'E') % num
-        exp_pos  = ret.find('E')
-        exp_part = ret[(exp_pos + 1):]
-        exp_part = exp_part.replace('+', '')
-        if exp_part.find('-') == 0:
-            exp_part = '-' + exp_part[1:].strip('0')
-        exp_part = exp_part.strip('0')
-        if len(exp_part) > 0:
-            exp_part = 'E' + exp_part
-        flt_part = ret[:exp_pos].strip('0').strip('.')
-        ret = flt_part + exp_part
-        return ret
-    return '%d' % num
-
-
-def cartesian(arrays, out=None):
-    '''
-    Generate a cartesian product of input arrays.
-
-    Parameters
-    ----------
-    arrays : list of array-like
-        1-D arrays to form the cartesian product of.
-    out : ndarray
-        Array to place the cartesian product in.
-    Returns
-    -------
-    out : ndarray
-        2-D array of shape (M, len(arrays)) containing cartesian products
-        formed of input arrays.
-    Examples
-    --------
-    >>> cartesian(([1, 2, 3], [4, 5], [6, 7]))
-    array([[1, 4, 6], [1, 4, 7], [1, 5, 6], [1, 5, 7],
-           [2, 4, 6], [2, 4, 7], [2, 5, 6], [2, 5, 7],
-           [3, 4, 6], [3, 4, 7], [3, 5, 6], [3, 5, 7]])
-    '''
-    arrays = [np.asarray(x) for x in arrays]
-    dtype = arrays[0].dtype
-
-    n = np.prod([x.size for x in arrays])
-    if out is None:
-        out = np.zeros([n, len(arrays)], dtype=dtype)
-    m = n // arrays[0].size
-    out[:, 0] = np.repeat(arrays[0], m)
-    if arrays[1:]:
-        cartesian(arrays[1:], out=out[0:m, 1:])
-        for j in range(1, arrays[0].size):
-            out[j * m:(j + 1) * m, 1:] = out[0:m, 1:]
-    return out
-
-
-def float_to_decimal(f):
-    # http://docs.python.org/library/decimal.html#decimal-faq
-    "Convert a floating point number to a Decimal with no loss of information"
-    n, d = f.as_integer_ratio()
-    numerator, denominator = decimal.Decimal(n), decimal.Decimal(d)
-    ctx = decimal.Context(prec=60)
-    result = ctx.divide(numerator, denominator)
-    while ctx.flags[decimal.Inexact]:
-        ctx.flags[decimal.Inexact] = False
-        ctx.prec *= 2
-        result = ctx.divide(numerator, denominator)
-    return result
-
-
-#http://stackoverflow.com/questions/2663612/nicely-representing-a-floating-point-number-in-python
-def sigfig_str(number, sigfig):
-    # http://stackoverflow.com/questions/2663612/nicely-representing-a-floating-point-number-in-python/2663623#2663623
-    assert(sigfig > 0)
-    try:
-        d = decimal.Decimal(number)
-    except TypeError:
-        d = float_to_decimal(float(number))
-    sign, digits, exponent = d.as_tuple()
-    if len(digits) < sigfig:
-        digits = list(digits)
-        digits.extend([0] * (sigfig - len(digits)))
-    shift = d.adjusted()
-    result = int(''.join(map(str, digits[:sigfig])))
-    # Round the result
-    if len(digits) > sigfig and digits[sigfig] >= 5:
-        result += 1
-    result = list(str(result))
-    # Rounding can change the length of result
-    # If so, adjust shift
-    shift += len(result) - sigfig
-    # reset len of result to sigfig
-    result = result[:sigfig]
-    if shift >= sigfig - 1:
-        # Tack more zeros on the end
-        result += ['0'] * (shift - sigfig + 1)
-    elif 0 <= shift:
-        # Place the decimal point in between digits
-        result.insert(shift + 1, '.')
-    else:
-        # Tack zeros on the front
-        assert(shift < 0)
-        result = ['0.'] + ['0'] * (-shift - 1) + result
-    if sign:
-        result.insert(0, '-')
-    return ''.join(result)
-
-
-def ensure_iterable(obj):
-    if np.iterable(obj):
-        return obj
-    else:
-        return [obj]
-
-
-def npfind(arr):
-    found = np.where(arr)[0]
-    pos = -1 if len(found) == 0 else found[0]
-    return pos
-
-
-def all_dict_combinations(varied_dict):
-    viter = iter(varied_dict.items())
-    tups_list = [[(key, val) for val in val_list] for (key, val_list) in viter]
-    dict_list = [{key: val for (key, val) in tups} for tups in iprod(*tups_list)]
-    return dict_list
-
-
 def save_testdata(*args, **kwargs):
+    """Store trusted developer test data in a local pickle-backed shelf."""
     import shelve
     uid = kwargs.get('uid', '')
     shelf_fname = 'test_data_%s.shelf' % uid
-    shelf = shelve.open(shelf_fname)
+    shelf = shelve.open(shelf_fname, protocol=pickle.HIGHEST_PROTOCOL)
     locals_ = get_parent_locals()
     for key in args:
-        print('Stashing key=%r' % key)
+        logger.debug("Stashing test-data key=%r", key)
         shelf[key] = locals_[key]
     shelf.close()
 
 
 def load_testdata(*args, **kwargs):
+    """Load trusted developer test data; never open an untrusted shelf."""
     import shelve
     uid = kwargs.get('uid', '')
     shelf_fname = 'test_data_%s.shelf' % uid
@@ -1976,11 +1254,14 @@ def load_testdata(*args, **kwargs):
     return ret
 
 
+@DEPRECATED
 def import_testdata():
+    """Import trusted developer shelf data into an interactive namespace."""
     from hscom import helpers as util
     import shelve
     shelf = shelve.open('test_data.shelf')
-    print('importing\n * ' + '\n * '.join(list(shelf.keys())))
+    logger.debug("Importing test-data keys:\n * %s",
+                 '\n * '.join(list(shelf.keys())))
     shelf_exec = util.execstr_dict(shelf, 'shelf')
     exec(shelf_exec)
     shelf.close()
@@ -1995,8 +1276,7 @@ def embed(parent_locals=None):
     if parent_locals is None:
         parent_locals = get_parent_locals()
     exec(execstr_dict(parent_locals, 'parent_locals'))
-    print('')
-    print('[helpers] embedding')
+    logger.debug("Embedding IPython shell")
     import IPython
     IPython.embed()
 
@@ -2007,9 +1287,9 @@ def quitflag(num=None, embed_=False, parent_locals=None):
             parent_locals = get_parent_locals()
         exec(execstr_dict(parent_locals, 'parent_locals'))
         if embed_:
-            print('Triggered --quit' + str(num))
+            logger.debug("Triggered --quit%s", num)
             embed(parent_locals=parent_locals)
-        print('Triggered --quit' + str(num))
+        logger.debug("Triggered --quit%s", num)
         sys.exit(1)
 
 
@@ -2030,23 +1310,18 @@ def flatten(list_):
     return list(iflatten(list_))
 
 
-def joins(string, list_, with_head=True, with_tail=False, tostrip='\n'):
-    head = string if with_head else ''
-    tail = string if with_tail else ''
-    to_return = head + string.join(map(str, list_)) + tail
-    to_return = to_return.strip(tostrip)
-    return to_return
-
-
 def interleave(args):
-    arg_iters = list(map(iter, args))
-    cycle_iter = cycle(arg_iters)
-    for iter_ in cycle_iter:
-        yield next(iter_)
-
-
-def indent_list(indent, list_):
-    return map(lambda item: indent + str(item), list_)
+    """Yield round-robin values until every input iterator is exhausted."""
+    iterators = [iter(arg) for arg in args]
+    while iterators:
+        active_iterators = []
+        for iterator in iterators:
+            try:
+                yield next(iterator)
+            except StopIteration:
+                continue
+            active_iterators.append(iterator)
+        iterators = active_iterators
 
 
 # --- Context ---
@@ -2063,7 +1338,7 @@ def haveIPython():
     try:
         import IPython  # NOQA
         return True
-    except NameError:
+    except (ImportError, ModuleNotFoundError):
         return False
 
 
@@ -2071,27 +1346,27 @@ def print_frame(frame):
     frame = frame if 'frame' in vars() else inspect.currentframe()
     attr_list = ['f_code.co_name', 'f_back', 'f_lineno',
                  'f_code.co_names', 'f_code.co_filename']
-    obj_name = 'frame'
-    execstr_print_list = ['print("%r=%%r" %% (%s,))' % (_execstr, _execstr)
-                          for _execstr in execstr_attr_list(obj_name, attr_list)]
-    execstr = '\n'.join(execstr_print_list)
-    exec(execstr)
+    for attr_path in attr_list:
+        value = frame
+        for attr in attr_path.split('.'):
+            value = getattr(value, attr)
+        logger.debug("frame.%s=%r", attr_path, value)
     local_varnames = pack_into('; '.join(list(frame.f_locals.keys())))
-    print(local_varnames)
-    print('--- End Frame ---')
+    logger.debug("%s", local_varnames)
+    logger.debug("--- End Frame ---")
 
 
 def search_stack_for_localvar(varname):
     curr_frame = inspect.currentframe()
-    print(' * Searching parent frames for: ' + str(varname))
+    logger.debug("Searching parent frames for: %s", varname)
     frame_no = 0
     while not curr_frame.f_back is None:
         if varname in list(curr_frame.f_locals.keys()):
-            print(' * Found in frame: ' + str(frame_no))
+            logger.debug("Found in frame: %d", frame_no)
             return curr_frame.f_locals[varname]
         frame_no += 1
         curr_frame = curr_frame.f_back
-    print('... Found nothing in all ' + str(frame_no) + ' frames.')
+    logger.debug("Found nothing in all %d frames", frame_no)
     return None
 
 
@@ -2145,9 +1420,8 @@ def explore_stack():
     tup = stack[0]
     for ix, tup in reversed(list(enumerate(stack))):
         frame = tup[0]
-        print('--- Frame %2d: ---' % (ix))
+        logger.debug("--- Frame %2d: ---", ix)
         print_frame(frame)
-        print('\n')
         #next_frame = curr_frame.f_back
 
 
@@ -2158,8 +1432,9 @@ def explore_module(module_, seen=None, maxdepth=2, nonmodules=False):
                 continue
             try:
                 yield module.__dict__[aname], aname
-            except KeyError as ex:
-                print(repr(ex))
+            except KeyError:
+                logger.debug("Module attribute disappeared: %s", aname,
+                             exc_info=True)
                 pass
 
     def __explore_module(module, indent, seen, depth, maxdepth, nonmodules):
@@ -2169,8 +1444,7 @@ def explore_module(module_, seen=None, maxdepth=2, nonmodules=False):
         #modname = repr(module)
         for child, aname in __childiter(module):
             try:
-                childtype = type(child)
-                if not isinstance(childtype, types.ModuleType):
+                if not isinstance(child, types.ModuleType):
                     if nonmodules:
                         #print_(depth)
                         fullstr = indent + '    ' + str(aname) + ' = ' + repr(child)
@@ -2186,8 +1460,9 @@ def explore_module(module_, seen=None, maxdepth=2, nonmodules=False):
                 if childname.find('_') == 0:
                     continue
                 valid_children.append(child)
-            except Exception as ex:
-                print(repr(ex))
+            except Exception:
+                logger.debug("Could not inspect module child %s", aname,
+                             exc_info=True)
                 pass
         # Print
         # print_(depth)
@@ -2206,23 +1481,22 @@ def explore_module(module_, seen=None, maxdepth=2, nonmodules=False):
     #print('#module = ' + str(module_))
     ret = __explore_module(module_, '     ', seen, 0, maxdepth, nonmodules)
     #print(ret)
-    sys.stdout.flush()
     return ret
 
 
 def debug_npstack(stacktup):
-    print('Debugging numpy [hv]stack:')
-    print('len(stacktup) = %r' % len(stacktup))
+    logger.debug("Debugging numpy [hv]stack")
+    logger.debug("len(stacktup) = %r", len(stacktup))
     for count, item in enumerate(stacktup):
         if isinstance(item, np.ndarray):
-            print(' * item[%d].shape = %r' % (count, item.shape))
+            logger.debug("item[%d].shape = %r", count, item.shape)
         elif isinstance(item, list) or isinstance(item, tuple):
-            print(' * len(item[%d]) = %d' % (count, len(item)))
-            print(' * DEBUG LIST')
+            logger.debug("len(item[%d]) = %d", count, len(item))
+            logger.debug("DEBUG LIST")
             with Indenter2(' * '):
                 debug_list(item)
         else:
-            print(' *  type(item[%d]) = %r' % (count, type(item)))
+            logger.debug("type(item[%d]) = %r", count, type(item))
 
 
 def debug_list(list_):
@@ -2244,7 +1518,7 @@ def debug_list(list_):
             append(' * uniform types=%r' % all_types[0])
         else:
             append(' * nonuniform types: %r' % np.unique(all_types).tolist())
-    print('\n'.join(dbgmessage))
+    logger.debug("%s", '\n'.join(dbgmessage))
     return dim2
 
 
@@ -2255,8 +1529,8 @@ def is_listlike(obj):
 def debug_hstack(stacktup):
     try:
         return np.hstack(stacktup)
-    except ValueError as ex:
-        print('ValueError in debug_hstack: ' + str(ex))
+    except ValueError:
+        logger.debug("ValueError in debug_hstack", exc_info=True)
         debug_npstack(stacktup)
         raise
 
@@ -2264,7 +1538,7 @@ def debug_hstack(stacktup):
 def debug_vstack(stacktup):
     try:
         return np.vstack(stacktup)
-    except ValueError as ex:
-        print('ValueError in debug_vstack: ' + str(ex))
+    except ValueError:
+        logger.debug("ValueError in debug_vstack", exc_info=True)
         debug_npstack(stacktup)
         raise

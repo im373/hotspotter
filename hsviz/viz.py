@@ -21,6 +21,7 @@ from . import extract_patch
 from hscom import params
 from hscom import fileio as io
 from hscom import helpers as util
+from hscom import formatting
 from hsdev import dev_consistency
 from hotspotter import QueryResult as qr
 
@@ -489,7 +490,7 @@ def annotate_chipres(hs, res, cx, showTF=True, showScore=True, showRank=True, ti
         rank_str = ' rank=' + str(res.get_cx_ranks([cx])[0] + 1)
         title += rank_str
     if showScore:
-        score_str = (' score=' + util.num_fmt(score)) % (score)
+        score_str = ' score=' + formatting.num_fmt(score)
         title += score_str
 
     title = title_pref + str(title) + title_suff
@@ -1010,8 +1011,8 @@ def viz_spatial_verification(hs, cx1, figtitle='Spatial Verification View', **kw
         #print('[viz] homog_args = %r' % (homog_args))
         #print('[viz] ex = %r' % (ex,))
         raise
-    logger.info("%s", util.horiz_string(['H = ', str(H)]))
-    logger.info("%s", util.horiz_string(['Aff = ', str(Aff)]))
+    logger.info("%s", formatting.horiz_string(['H = ', str(H)]))
+    logger.info("%s", formatting.horiz_string(['Aff = ', str(Aff)]))
 
     # Transform the chips
     logger.info("warp homog")

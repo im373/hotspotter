@@ -20,6 +20,8 @@ from PIL.ExifTags import TAGS
 # Hotspotter
 from .dev_utils import make_reloader
 from . import helpers
+from . import progress
+from . import serialization
 from .profiling import profile
 
 logger = logging.getLogger(__name__)
@@ -45,18 +47,20 @@ def save_npz(fpath, data):
 
 
 def save_cPkl(fpath, data):
+    """Write a trusted application cache using the highest pickle protocol."""
     with open(fpath, 'wb') as file:
         pickle.dump(data, file, pickle.HIGHEST_PROTOCOL)
 
 
 def save_pkl(fpath, data):
+    """Write a trusted application cache using the highest pickle protocol."""
     with open(fpath, 'wb') as file:
         pickle.dump(data, file, pickle.HIGHEST_PROTOCOL)
 
 
 # --- Loading ---
 def _pickle_load_py2_compatible(file):
-    """Load pickle data, falling back to Python 2 byte-string encoding."""
+    """Load trusted HotSpotter pickle data, including Python 2 caches."""
     try:
         return pickle.load(file)
     except UnicodeDecodeError:
@@ -64,42 +68,47 @@ def _pickle_load_py2_compatible(file):
         return pickle.load(file, encoding='latin1')
 
 
-def _np_load_py2_compatible(file, **kwargs):
-    """Load NumPy data that may contain pickled Python 2 object arrays."""
-    kwargs.setdefault('allow_pickle', True)
-    kwargs.setdefault('encoding', 'latin1')
-    return np.load(file, **kwargs)
+def load_trusted_legacy_npy(fpath):
+    """Load a trusted HotSpotter NPY that may contain pickled object arrays.
+
+    Feature big-caches deliberately store variable-length arrays as object
+    arrays. Never use this loader for files from untrusted sources.
+    """
+    with open(fpath, 'rb') as file:
+        data = np.load(file, allow_pickle=True, encoding='latin1')
+    if not isinstance(data, np.ndarray):
+        raise ValueError('Legacy NPY %r did not contain an ndarray' % fpath)
+    return data
 
 
 def load_npz_memmap(fpath):
-    with open(fpath, 'rb') as file:
-        npz = _np_load_py2_compatible(file, mmap_mode='r')
-        data = npz['arr_0']
-        npz.close()
-    return data
+    """Compatibility wrapper; compressed NPZ archives cannot be memory-mapped."""
+    return load_npz(fpath)
 
 
 def load_npz(fpath):
-    with open(fpath, 'rb') as file:
-        npz = _np_load_py2_compatible(file, mmap_mode=None)
-        data = npz['arr_0']
-        npz.close()
-    return data
+    """Safely load the single numeric array stored by :func:`save_npz`."""
+    archive = serialization.load_npz_archive(
+        fpath,
+        expected_keys=('arr_0',),
+    )
+    return archive['arr_0']
 
 
 def load_npy(fpath):
-    with open(fpath, 'rb') as file:
-        data = _np_load_py2_compatible(file)
-    return data
+    """Load trusted HotSpotter NPY caches, including legacy object arrays."""
+    return load_trusted_legacy_npy(fpath)
 
 
 def load_cPkl(fpath):
+    """Load a trusted application-generated pickle cache."""
     with open(fpath, 'rb') as file:
         data = _pickle_load_py2_compatible(file)
     return data
 
 
 def load_pkl(fpath):
+    """Load a trusted application-generated pickle cache."""
     with open(fpath, 'rb') as file:
         data = _pickle_load_py2_compatible(file)
     return data
@@ -135,7 +144,7 @@ def __args2_fpath(dpath, fname, uid, ext):
         raise Exception('Fatal Error: Please be explicit and use a dot in ext')
     fname_uid = fname + uid
     if len(fname_uid) > 128:
-        fname_uid = fname + '_' + helpers.hashstr(fname_uid, 8)
+        fname_uid = fname + '_' + serialization.hashstr(fname_uid, 8)
     fpath = join(dpath, fname_uid + ext)
     fpath = normpath(fpath)
     return fpath
@@ -292,7 +301,7 @@ def sanatize_fpath(fpath, ext=None):  # UNUSED!
 @profile
 def filesize_str(fpath):
     _, fname = os.path.split(fpath)
-    mb_str = helpers.file_megabytes_str(fpath)
+    mb_str = serialization.file_megabytes_str(fpath)
     return 'filesize(%r)=%s' % (fname, mb_str)
 
 
@@ -402,7 +411,7 @@ def read_exif_list(fpath_list, **kwargs):
         # Exif generator
         nGname = len(fpath_list)
         lbl = '[io] Load Image EXIF'
-        mark_progress, end_progress = helpers.progress_func(nGname, lbl, 16)
+        mark_progress, end_progress = progress.progress_func(nGname, lbl, 16)
         for count, fpath in enumerate(fpath_list):
             mark_progress(count)
             yield read_exif(fpath, **kwargs)
@@ -454,11 +463,11 @@ def detect_duplicate_images(imgpath_list):
     nImg = len(imgpath_list)
     lbl = 'checking duplicate'
     duplicates = {}
-    mark_progress, end_progress = helpers.progress_func(nImg, lbl=lbl)
+    mark_progress, end_progress = progress.progress_func(nImg, lbl=lbl)
     for count, gpath in enumerate(imgpath_list):
         mark_progress(count)
         img = imread(gpath)
-        img_hash = helpers.hashstr(img, DUPLICATE_HASH_PRECISION)
+        img_hash = serialization.hashstr(img, DUPLICATE_HASH_PRECISION)
         if not img_hash in duplicates:
             duplicates[img_hash] = []
         duplicates[img_hash].append(gpath)
@@ -504,12 +513,12 @@ helpers.ensuredir(GLOBAL_CACHE_DIR)
 
 def global_cache_read(cache_id, default='.'):
     cache_fname = join(GLOBAL_CACHE_DIR, 'cached_dir_%s.txt' % cache_id)
-    return helpers.read_from(cache_fname) if exists(cache_fname) else default
+    return serialization.read_from(cache_fname) if exists(cache_fname) else default
 
 
 def global_cache_write(cache_id, newdir):
     cache_fname = join(GLOBAL_CACHE_DIR, 'cached_dir_%s.txt' % cache_id)
-    helpers.write_to(cache_fname, newdir)
+    serialization.write_to(cache_fname, newdir)
 
 
 def delete_global_cache():

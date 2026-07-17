@@ -16,7 +16,8 @@ from PIL import Image
 # Hotspotter
 from . import load_data2 as ld2
 from hscom import helpers
-from hscom import helpers as util
+from hscom import array_utils
+from hscom import path_utils
 
 
 def dir_size(path):
@@ -162,7 +163,9 @@ def print_database_stats(db_stats):
         db_stats.print_name_info()
     elif 'images' in db_stats.version:
         logger.info("%s", db_stats.db_dir)
-        logger.info('num images: %d', helpers.num_images_in_dir(db_stats.db_dir))
+        logger.info(
+            'num images: %d', path_utils.num_images_in_dir(db_stats.db_dir)
+        )
 
 
 #--------------------
@@ -186,7 +189,7 @@ def is_imgdir(path):
     num_dirs = 0
     for name in files:
         subpath = join(path, name)
-        if helpers.matches_image(subpath):
+        if path_utils.matches_image(subpath):
             num_imgs += 1
             return True
         elif isdir(subpath):
@@ -305,7 +308,7 @@ def db_info(hs):
     gx2_gname  = hs.tables.gx2_gname
     cx2_gx = hs.tables.cx2_gx
     num_images = len(gx2_gname)
-    img_list = helpers.list_images(hs.dirs.img_dir, fullpath=True)
+    img_list = path_utils.list_images(hs.dirs.img_dir, fullpath=True)
 
     def wh_print_stats(wh_list):
         if len(wh_list) == 0:
@@ -338,7 +341,7 @@ def db_info(hs):
     img_size_list  = np.array(get_img_size_list(img_list))
     img_size_stats  = wh_print_stats(img_size_list)
     chip_size_stats = wh_print_stats(chip_size_list)
-    multiton_stats  = helpers.printable_mystats(multiton_nx2_nchips)
+    multiton_stats = array_utils.printable_mystats(multiton_nx2_nchips)
 
     num_names = len(valid_nxs)
     # print

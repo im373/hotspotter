@@ -10,6 +10,7 @@ import numpy as np
 # HotSpotter
 from hscom import params
 from hscom import helpers as util
+from hscom import serialization
 from . import DataStructures as ds
 from . import chip_properties
 from . import matching_functions as mf
@@ -97,7 +98,7 @@ def pre_exec_checks(hs, qreq):
     # Get qreq config information
     dcxs = qreq.get_internal_dcxs()
     feat_uid = qreq.cfg._feat_cfg.get_uid()
-    dcxs_uid = util.hashstr_arr(dcxs, 'dcxs')
+    dcxs_uid = serialization.hashstr_arr(dcxs, 'dcxs')
     # Ensure the index / inverted index exist for this config
     dftup_uid = dcxs_uid + feat_uid
     if not dftup_uid in qreq._dftup2_index:

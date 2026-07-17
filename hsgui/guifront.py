@@ -148,7 +148,9 @@ def add_gui_logging_handler(handler):
         '%(asctime)s %(levelname)-8s %(name)s: %(message)s',
         '%H:%M:%S',
     )
-    handler.setLevel(logging.DEBUG)
+    # The GUI pane is user-facing. Detailed diagnostics remain available in
+    # the configured debug log without flooding normal interactive sessions.
+    handler.setLevel(logging.INFO)
     handler.setFormatter(formatter)
     logging.getLogger().addHandler(handler)
 

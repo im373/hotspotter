@@ -28,6 +28,8 @@ from . import DataStructures as ds
 from . import chip_properties
 from hscom import helpers
 from hscom import helpers as util
+from hscom import path_utils
+from hscom import serialization
 from hscom import tools
 
 # GLOBALS
@@ -65,7 +67,7 @@ def load_chip_property_metadata(internal_dir, prop_dict):
     saved_definitions = {}
     if exists(metadata_fpath):
         try:
-            payload = json.loads(helpers.read_text(metadata_fpath))
+            payload = json.loads(serialization.read_text(metadata_fpath))
             if not isinstance(payload, dict):
                 raise ValueError('metadata root must be a JSON object')
             saved_definitions = payload.get('properties', {})
@@ -128,7 +130,7 @@ def write_chip_property_metadata(hs):
         CHIP_PROPERTY_METADATA_FNAME,
     )
     helpers.ensurepath(hs.dirs.internal_dir)
-    helpers.write_to(
+    serialization.write_to(
         metadata_fpath,
         json.dumps(payload, indent=2, sort_keys=True) + '\n',
     )
@@ -285,7 +287,9 @@ def load_csv_tables(db_dir, allow_new_dir=True):
         if name_table is None:
             raise IOError('name_table will be given in chip table.')
         logger.debug('[ld2] Loading name table: %r', name_table)
-        for line_num, csv_line in enumerate(helpers.read_text(name_table).splitlines(True)):
+        for line_num, csv_line in enumerate(
+            serialization.read_text(name_table).splitlines(True)
+        ):
             csv_line = csv_line.strip('\n\r\t ')
             if len(csv_line) == 0 or csv_line.find('#') == 0:
                 continue
@@ -330,7 +334,7 @@ def load_csv_tables(db_dir, allow_new_dir=True):
             raise IOError('image_table will be given in chip table')
         if VERBOSE_LOAD_DATA:
             logger.debug('[ld2] * Loading image table: %r', image_table)
-        gid_lines = helpers.read_text(image_table).splitlines(True)
+        gid_lines = serialization.read_text(image_table).splitlines(True)
         for line_num, csv_line in enumerate(gid_lines):
             csv_line = csv_line.strip('\n\r\t ')
             if len(csv_line) == 0 or csv_line.find('#') == 0:
@@ -389,7 +393,7 @@ def load_csv_tables(db_dir, allow_new_dir=True):
         # ------------------
         logger.debug('[ld2] Loading chip table: %r', chip_table)
         # Load Chip Table Header
-        cid_lines = helpers.read_text(chip_table).splitlines(True)
+        cid_lines = serialization.read_text(chip_table).splitlines(True)
         num_data   = -1
         # Parse Chip Table Header
         for line_num, csv_line in enumerate(cid_lines):
@@ -550,7 +554,7 @@ def load_csv_tables(db_dir, allow_new_dir=True):
                         # This is so hacky. The gpath in hospotter-v2 doesnt have
                         # extensions
                         name, ext = splitext(gname)
-                        if ext not in helpers.IMG_EXTENSIONS:
+                        if ext not in path_utils.IMG_EXTENSIONS:
                             if 'img_extension' in prop_dict:
                                 gname = gname + '.' + prop_dict['img_extension'][-1]
                 # /LEGACY HACK
@@ -806,11 +810,11 @@ def write_csv_tables(hs):
     image_table_fpath = join(internal_dir, IMAGE_TABLE_FNAME)
     # write csv files
     logger.info('[ld2] Writing chip table')
-    helpers.write_to(chip_table_fpath, chip_table)
+    serialization.write_to(chip_table_fpath, chip_table)
     logger.info('[ld2] Writing name table')
-    helpers.write_to(name_table_fpath, name_table)
+    serialization.write_to(name_table_fpath, name_table)
     logger.info('[ld2] Writing image table')
-    helpers.write_to(image_table_fpath, image_table)
+    serialization.write_to(image_table_fpath, image_table)
     logger.info('[ld2] Writing chip property metadata')
     write_chip_property_metadata(hs)
 
@@ -823,7 +827,7 @@ def write_flat_table(hs):
     flat_table_fpath  = join(dbdir, 'flat_table.csv')
     # Write flat table
     logger.info('[ld2] Writing flat table')
-    helpers.write_to(flat_table_fpath, flat_table)
+    serialization.write_to(flat_table_fpath, flat_table)
 
 
 def backup_csv_tables(hs, force_backup=False):

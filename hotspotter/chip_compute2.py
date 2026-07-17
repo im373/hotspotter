@@ -19,6 +19,7 @@ from PIL import Image
 # Hotspotter
 from . import algos
 from hscom import helpers as util
+from hscom import array_utils
 from hscom import fileio as io
 from hscom import params
 from hscom.Parallelize import parallel_compute
@@ -100,7 +101,8 @@ def ensure_rgb(img):
     except Exception as ex:
         msg = ('[cc2] Caught Exception:\n   ex=%s\n' % str(ex) +
                '[cc2] img.shape=%r, img.dtype=%r\n' % (img.shape, img.dtype) +
-               '[cc2] stats(img) = %s' % (util.printable_mystats(img)))
+               '[cc2] stats(img) = %s' %
+               array_utils.printable_mystats(img))
         logger.exception("%s", msg)
         raise Exception(msg)
 
@@ -490,8 +492,8 @@ def load_chips(hs, cx_list=None, force_compute=False, **kwargs):
     # Extend the datastructure if needed
     list_size = max(cx_list) + 1
     #util.ensure_list_size(hs.cpaths.cx2_chip_path, list_size)
-    util.ensure_list_size(hs.cpaths.cx2_rchip_path, list_size)
-    util.ensure_list_size(hs.cpaths.cx2_rchip_size, list_size)
+    array_utils.ensure_list_size(hs.cpaths.cx2_rchip_path, list_size)
+    array_utils.ensure_list_size(hs.cpaths.cx2_rchip_size, list_size)
     # Copy the values into the ChipPaths object
     #for lx, cx in enumerate(cx_list):
         #hs.cpaths.cx2_chip_path[cx] = cfpath_list[lx]

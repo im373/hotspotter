@@ -1,6 +1,7 @@
 
 import cv2
-from hotspotter import helpers
+from hscom import formatting
+from hscom import helpers
 import textwrap
 import numpy as np
 import subprocess
@@ -9,7 +10,7 @@ import numpy as np
 import os, sys
 from numpy import uint8, float32, diag, sqrt, abs
 from numpy.linalg import det
-hstr = helpers.horiz_string
+hstr = formatting.horiz_string
 hprint = helpers.horiz_print
 np.set_printoptions(precision=8)
 

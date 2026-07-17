@@ -43,6 +43,8 @@ import scipy.stats
 import cv2
 # HotSpotter
 from hscom import helpers as util
+from hscom import array_utils
+from hscom import path_utils
 from hscom import tools
 from hscom.dev_utils import make_reloader
 from hscom.Printable import DynStruct
@@ -622,7 +624,7 @@ def sanatize_img_fname(fname, defaultext='.jpg'):
     fname_noext, ext = splitext(fname_clean)
     fname_clean = fname_noext + ext.lower()
     # Check for correct extensions
-    if not ext.lower() in util.IMG_EXTENSIONS:
+    if not ext.lower() in path_utils.IMG_EXTENSIONS:
         fname_clean += defaultext
     return fname_clean
 
@@ -721,7 +723,7 @@ def get_good_logyscale_kwargs(y_data):
     dy = np.diff(logy)
     dy_sortx = dy.argsort()
     # Get mean and standard deviation
-    dy_stats = util.mystats(dy)
+    dy_stats = array_utils.mystats(dy)
     dy_sorted = dy[dy_sortx]
     # Find the number of standard deveations past the mean each datapoint is
     nStdDevs = np.abs(dy_sorted - dy_stats['mean']) / dy_stats['std']

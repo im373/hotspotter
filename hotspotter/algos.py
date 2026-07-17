@@ -32,7 +32,8 @@ import scipy.sparse as spsparse
 # Hotspotter
 from hscom import fileio as io
 from hscom import helpers
-from hscom import helpers as util
+from hscom import formatting
+from hscom import serialization
 
 
 DIST_LIST = ['L1', 'L2']
@@ -199,7 +200,7 @@ def tune_flann(data, **kwargs):
     tuned_params = flann.build_index(data, **flann_atkwargs)
     helpers.myprint(tuned_params)
     out_file = 'flann_tuned' + suffix
-    helpers.write_to(out_file, repr(tuned_params))
+    serialization.write_to(out_file, repr(tuned_params))
     flann.delete_index()
     return tuned_params
 
@@ -384,7 +385,9 @@ def force_quit_akmeans(signal, frame):
         #data            = target_frame.f_locals['data']
         clusters        = target_frame.f_locals['clusters']
         datax2_clusterx = target_frame.f_locals['datax2_clusterx']
-        helpers.save_npz(fpath + '.earlystop', datax2_clusterx, clusters)
+        serialization.save_npz(
+            fpath + '.earlystop', datax2_clusterx, clusters
+        )
     except Exception as ex:
         logger.exception('Failed to save early-stop akmeans state')
         exec(helpers.IPYTHON_EMBED_STR)
@@ -506,7 +509,7 @@ def precompute_akmeans(data, num_clusters, max_iters=100,
         flann_params = {}
     logger.debug('[algos] pre_akmeans()')
     if same_data:
-        data_uid = helpers.hashstr_arr(data, 'dID')
+        data_uid = serialization.hashstr_arr(data, 'dID')
         uid += data_uid
     clusters_fname = 'akmeans_clusters'
     datax2cl_fname = 'akmeans_datax2cl'
@@ -540,7 +543,7 @@ def precompute_akmeans(data, num_clusters, max_iters=100,
         logger.debug('[algos] pre_akmeans(): ... loaded akmeans.')
     except Exception as ex:
         logger.debug('[algos] pre_akmeans(): ... could not load akmeans.')
-        errstr = helpers.indent(repr(ex), '[algos]    ')
+        errstr = formatting.indent(repr(ex), '[algos]    ')
         logger.debug('[algos] pre_akmeans(): ... caught ex:\n %s ', errstr)
         logger.debug('[algos] pre_akmeans(): printing debug_smart_load')
         logger.debug('---- <DEBUG SMART LOAD>---')
@@ -572,8 +575,12 @@ def precompute_flann(data, cache_dir=None, uid='', flann_params=None,
     logger.debug('[algos] precompute_flann(%r): ', uid)
     cache_dir = '.' if cache_dir is None else cache_dir
     # Generate a unique filename for data and flann parameters
-    fparams_uid = helpers.remove_chars(str(list(flann_params.values())), ', \'[]')
-    data_uid = helpers.hashstr_arr(data, 'dID')  # flann is dependent on the data
+    fparams_uid = formatting.remove_chars(
+        str(list(flann_params.values())), ', \'[]'
+    )
+    data_uid = serialization.hashstr_arr(
+        data, 'dID'
+    )  # flann is dependent on the data
     flann_suffix = '_' + fparams_uid + '_' + data_uid + '.flann'
     # Append any user labels
     flann_fname = 'flann_index_' + uid + flann_suffix

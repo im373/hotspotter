@@ -5,7 +5,8 @@
 # Python
 import logging
 import re
-from . import helpers
+from . import array_utils
+from . import formatting
 import textwrap
 # Science
 import numpy as np
@@ -40,10 +41,10 @@ def latex_multirow(data, nrow=2):
 
 
 def latex_mystats(lbl, data):
-    stats_ = helpers.mystats(data)
+    stats_ = array_utils.mystats(data)
     min_, max_, mean, std, nMin, nMax, shape = list(stats_.values())
     fmttup1 = (int(min_), int(max_), float(mean), float(std))
-    fmttup = tuple(map(helpers.num_fmt, fmttup1))
+    fmttup = tuple(map(formatting.num_fmt, fmttup1))
     lll = ' ' * len(lbl)
     #fmtstr = r'''
     #'''+lbl+r''' stats &{ max:%d, min:%d\\
@@ -56,7 +57,7 @@ def latex_mystats(lbl, data):
 
 
 def latex_scalar(lbl, data):
-    return (r'%s & %s\\' % (lbl, helpers.num_fmt(data))) + '\n'
+    return (r'%s & %s\\' % (lbl, formatting.num_fmt(data))) + '\n'
 
 
 def make_stats_tabular():

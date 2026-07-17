@@ -328,7 +328,7 @@ class Pref(PrefNode):
         return pref_dict
 
     def save(self):
-        'Saves prefs to disk in dict format'
+        """Save trusted local application preferences in pickle format."""
         if self._intern.fpath in ['', None]:
             if self._tree.parent is not None:
                 pref_trace("Delegating save for %s to its parent", self.full_name())
@@ -338,11 +338,11 @@ class Pref(PrefNode):
         with open(self._intern.fpath, 'wb') as f:
             logger.info("Saving preferences to %s", self._intern.fpath)
             pref_dict = self.to_dict()
-            pickle.dump(pref_dict, f)
+            pickle.dump(pref_dict, f, pickle.HIGHEST_PROTOCOL)
         return True
 
     def load(self):
-        'Read pref dict stored on disk. Overwriting current values.'
+        """Load trusted local preferences, including Python 2-era files."""
         if not os.path.exists(self._intern.fpath):
             msg = '[pref] fpath=%r does not exist' % (self._intern.fpath)
             pref_trace("%s", msg)
@@ -350,7 +350,11 @@ class Pref(PrefNode):
         with open(self._intern.fpath, 'rb') as f:
             try:
                 logger.debug("Loading preferences from %r", self._intern.fpath)
-                pref_dict = pickle.load(f)
+                try:
+                    pref_dict = pickle.load(f)
+                except UnicodeDecodeError:
+                    f.seek(0)
+                    pref_dict = pickle.load(f, encoding='latin1')
             except EOFError as ex:
                 msg = 'Preference file %r did not load correctly: %r' % (
                     self._intern.fpath,

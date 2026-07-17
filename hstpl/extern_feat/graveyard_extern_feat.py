@@ -382,14 +382,16 @@ def test_deintegrate_scale(invET):
 
 
     invET 
-    import helpers
+    from hscom import array_utils
+    from hscom import formatting
+    from hscom import helpers
     import textwrap
     helpers.rrr()
     invE_list = expand_invET(invET)
     # Decompose using singular value decomposition
     invE = invE_list[0]
 
-    hstr = helpers.horiz_string
+    hstr = formatting.horiz_string
     np.set_printoptions(precision=8)
     import cv2
     def print_2x2_svd(M, name=''):
@@ -504,7 +506,7 @@ def test_deintegrate_scale(invET):
         print((hstr([U, ' * ', scaled_Sm, ' * ', V])))
         print('=')
         scaled_M = U.dot(scaled_Sm).dot(V)
-        scaled_M = helpers.correct_zeros(scaled_M)
+        scaled_M = array_utils.correct_zeros(scaled_M)
         print(scaled_M)
         print('---------------------\n')
         return scaled_M

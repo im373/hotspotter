@@ -90,6 +90,7 @@ def make_argparse2(description, *args, **kwargs):
         argparse.ArgumentParser(prog='HotSpotter',
                                 description=description,
                                 prefix_chars='+-',
+                                allow_abbrev=False,
                                 formatter_class=formatter_classes[2], *args,
                                 **kwargs))
 
@@ -167,6 +168,9 @@ def behavior_argparse(parser2):
     parser2.add_flag('--withexif', help='Reads EXIF data')
     parser2.add_flag('--verbose-cache')
     parser2.add_flag('--verbose-load')
+    parser2.add_flag(
+        '--verbose', help='Enable verbose cache and loading diagnostics'
+    )
     parser2.add_flag('--aggroflush', help='Agressively flushes')
     parser2.add_flag(('--nomemory', '--nomem'), help='runs tests without' +
                      'keeping results in memory')
@@ -226,6 +230,9 @@ def args_postprocess(args):
     # Postprocess args
     if args.serial:
         args.num_procs = 1
+    if args.verbose:
+        args.verbose_cache = True
+        args.verbose_load = True
     if args.darken:
         import draw_func2 as df2
         df2.DARKEN = .5

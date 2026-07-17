@@ -5,7 +5,7 @@ from hscom.dev_utils import make_reloader
 logger = logging.getLogger(__name__)
 rrr = make_reloader(__name__, '[Config]')
 from hscom.Preferences import Pref
-from hscom import helpers as util
+from hscom import formatting
 
 ConfigBase = Pref
 #ConfigBase = DynStruct
@@ -168,7 +168,7 @@ class SpatialVerifyConfig(ConfigBase):
         sv_uid += [str(sv_cfg.nShortlist)]
         sv_uid += [',' + str(sv_cfg.xy_thresh)]
         scale_thresh = (sv_cfg.scale_thresh_low, sv_cfg.scale_thresh_high)
-        scale_str = util.remove_chars(str(scale_thresh), ' ()')
+        scale_str = formatting.remove_chars(str(scale_thresh), ' ()')
         sv_uid += [',' + scale_str.replace(',', '_')]
         sv_uid += [',cdl' * sv_cfg.use_chip_extent]  # chip diag len
         sv_uid += [',aff' * sv_cfg.just_affine]  # chip diag len

@@ -18,6 +18,7 @@ import os
 import numpy as np
 # HotSpotter
 from hscom import helpers as util
+from hscom import serialization
 from hscom import params
 from hscom.Printable import DynStruct
 from . import chip_properties
@@ -38,7 +39,7 @@ HASH_LEN = 16
 def remove_corrupted_queries(hs, res, dryrun=True):
     # This res must be corrupted!
     uid = res.uid
-    hash_id = util.hashstr(uid, HASH_LEN)
+    hash_id = serialization.hashstr(uid, HASH_LEN)
     qres_dir  = hs.dirs.qres_dir
     testres_dir = join(hs.dirs.cache_dir, 'experiment_harness_results')
     util.remove_files_in_dir(testres_dir, dryrun=dryrun)
@@ -51,7 +52,7 @@ def query_result_fpath(hs, qcx, uid):
     qcid  = hs.tables.cx2_cid[qcx]
     fname = 'res_%s_qcid=%d.npz' % (uid, qcid)
     if len(fname) > 64:
-        hash_id = util.hashstr(uid, HASH_LEN)
+        hash_id = serialization.hashstr(uid, HASH_LEN)
         fname = 'res_%s_qcid=%d.npz' % (hash_id, qcid)
     fpath = join(qres_dir, fname)
     return fpath
@@ -94,15 +95,32 @@ class QueryResult(DynStruct):
 
     @profile
     def load(res, hs):
-        'Loads the result from the given database'
+        """Load a trusted, application-generated query-result cache."""
         fpath = res.get_fpath(hs)
         qcx_good = res.qcx
         try:
-            with open(fpath, 'rb') as file_:
-                npz = np.load(file_, allow_pickle=True)
-                for _key in npz.files:
-                    res.__dict__[_key] = npz[_key]
-                npz.close()
+            payload = serialization.load_trusted_legacy_npz(
+                fpath,
+                required_keys=(
+                    'qcx',
+                    'uid',
+                    'cx2_fm',
+                    'cx2_fs',
+                    'cx2_fk',
+                    'cx2_score',
+                ),
+            )
+            for key, value in payload.items():
+                if not isinstance(value, np.ndarray):
+                    raise ValueError(
+                        'Query result key %r is not an ndarray' % key
+                    )
+            if payload['qcx'].size != 1 or payload['uid'].size != 1:
+                raise ValueError('Query result qcx and uid must be scalar')
+            if payload['cx2_score'].ndim != 1:
+                raise ValueError('Query result cx2_score must be one-dimensional')
+            for _key, value in payload.items():
+                res.__dict__[_key] = value
             logger.debug('[qr] res.load() fpath=%r', split(fpath)[1])
             # These are nonarray items even if they are not lists
             # tolist seems to convert them back to their original
@@ -145,7 +163,7 @@ class QueryResult(DynStruct):
 
     def cache_bytes(res, hs):
         fpath = res.get_fpath(hs)
-        return util.file_bytes(fpath)
+        return serialization.file_bytes(fpath)
 
     def get_gt_ranks(res, gt_cxs=None, hs=None):
         'returns the 0 indexed ranking of each groundtruth chip'

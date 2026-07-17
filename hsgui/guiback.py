@@ -18,6 +18,8 @@ import numpy as np
 from .guitools import drawing, slot_
 from .guitools import backblocking as blocking
 from hscom import helpers as util
+from hscom import path_utils
+from hscom import progress
 from hscom import fileio as io
 from hscom.logging_utils import DEPRECATED
 from hscom import params
@@ -625,7 +627,7 @@ class MainWindowBackend(QtCore.QObject):
             logger.info("No image directory selected for import")
             return
         logger.info("Selected image directory %r", img_dpath)
-        fpath_list = util.list_images(img_dpath, fullpath=True)
+        fpath_list = path_utils.list_images(img_dpath, fullpath=True)
         back.hs.add_images(fpath_list)
         back.populate_image_table()
 
@@ -874,7 +876,9 @@ class MainWindowBackend(QtCore.QObject):
             #mc3.print_off()
             #ds.print_off()
             #mf.print_off()
-        fmtstr = util.progress_str(len(valid_cx), '[back*] Query qcx=%r: ')
+        fmtstr = progress.progress_str(
+            len(valid_cx), '[back*] Query qcx=%r: '
+        )
         for count, qcx in enumerate(valid_cx):
             sys.stdout.write(fmtstr % (qcx, count))
             back.hs.query(qcx, dochecks=False)

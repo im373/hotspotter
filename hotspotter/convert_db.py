@@ -17,7 +17,8 @@ from PIL import Image
 import numpy as np
 # Hotspotter
 from hscom import helpers
-from hscom import helpers as util
+from hscom import path_utils
+from hscom import serialization
 from . import load_data2 as ld2
 from . import db_info
 
@@ -69,9 +70,12 @@ def convert_if_needed(db_dir):
 
 # Port of Philbin07 code to python
 def compute_ap(groundtruth_query, ranked_list):
-    good_set = set(helpers.read_text(groundtruth_query + '_good.txt').splitlines(True))
-    ok_set   = set(helpers.read_text(groundtruth_query + '_ok.txt').splitlines(True))
-    junk_set = set(helpers.read_text(groundtruth_query + '_junk.txt').splitlines(True))
+    good_set = set(serialization.read_text(
+        groundtruth_query + '_good.txt').splitlines(True))
+    ok_set = set(serialization.read_text(
+        groundtruth_query + '_ok.txt').splitlines(True))
+    junk_set = set(serialization.read_text(
+        groundtruth_query + '_junk.txt').splitlines(True))
     pos_set  = set.union(good_set, ok_set)
     ap = compute_ap2(pos_set, junk_set, ranked_list)
     return ap
@@ -119,7 +123,7 @@ def __oxgtfile2_oxsty_gttup(gt_fname):
 def __read_oxsty_gtfile(gt_fpath, name, quality, img_dpath, corrupted_gname_set):
     oxsty_chip_info_list = []
     # read the individual ground truth file
-    line_list = helpers.read_text(gt_fpath).splitlines()
+    line_list = serialization.read_text(gt_fpath).splitlines()
     for line in line_list:
         if line == '':
             continue
@@ -150,7 +154,9 @@ def convert_from_oxford_style(db_dir):
     corrupted_file_fpath = join(oxford_gt_dpath, 'corrupted_files.txt')
     corrupted_gname_set = set([])
     if helpers.checkpath(corrupted_file_fpath):
-        corrupted_gname_list = helpers.read_text(corrupted_file_fpath).splitlines()
+        corrupted_gname_list = serialization.read_text(
+            corrupted_file_fpath
+        ).splitlines()
         corrupted_gname_set = set(corrupted_gname_list)
 
     # Recursively get relative path of all files in img_dpath
@@ -161,7 +167,8 @@ def convert_from_oxford_style(db_dir):
                    for (root, dlist, flist) in os.walk(img_dpath)
                    for fname in iter(flist)]
     gname_list = [gname for gname in iter(gname_list_)
-                  if not gname in corrupted_gname_set and helpers.matches_image(gname)]
+                  if not gname in corrupted_gname_set and
+                  path_utils.matches_image(gname)]
     logger.info(' * num_images = %d ', len(gname_list))
 
     # Read the Oxford Style Groundtruth files
@@ -286,7 +293,7 @@ def convert_named_chips(db_dir, img_dpath=None):
     logger.info('Converting db_dir=%r and img_dpath=%r', db_dir, img_dpath)
     # --- Build Image Table ---
     logger.info('Building name table: ')
-    gx2_gname = helpers.list_images(img_dpath)
+    gx2_gname = path_utils.list_images(img_dpath)
     gx2_gid   = list(range(1, len(gx2_gname) + 1))
     logger.info('There are %d images', len(gx2_gname))
     # ---- Build Name Table ---
@@ -407,7 +414,7 @@ def read_csv_file(csv_fpath):
         csv_line_ = csv_line.strip('\n\r\t ')
         csv_fields = [_.strip(' ') for _ in csv_line_.strip('\n\r ').split(', ')]
         return csv_fields
-    csv_lines = helpers.read_text(csv_fpath).splitlines(True)
+    csv_lines = serialization.read_text(csv_fpath).splitlines(True)
     csv_iter = iter(csv_lines)
     # Read first line (header)
     csv_line = next(csv_iter)
@@ -653,7 +660,7 @@ def roi_from_imgsize(img_fpath, silent=False):
 
 
 def imagetables_from_img_dpath(img_dpath=None):
-    gx2_gname = helpers.list_images(img_dpath)
+    gx2_gname = path_utils.list_images(img_dpath)
     gx2_gid   = list(range(1, len(gx2_gname) + 1))
     logger.info('There are %d images', len(gx2_gname))
     return gx2_gid, gx2_gname
@@ -718,12 +725,12 @@ def write_to_wrapper(csv_fpath, csv_string):
                 #print(diff_str)
                 #print('--------')
     else:
-        helpers.write_to(csv_fpath, csv_string)
+        serialization.write_to(csv_fpath, csv_string)
 
 
 def write_chip_table(internal_dir, cx2_cid, cx2_gid, cx2_nid,
                      cx2_roi, cx2_theta, prop_dict=None):
-    helpers.__PRINT_WRITES__ = True
+    serialization.PRINT_WRITES = True
     logger.info('Writing Chip Table')
     # Make chip_table.csv
     header = '# chip table'
@@ -742,7 +749,7 @@ def write_chip_table(internal_dir, cx2_cid, cx2_gid, cx2_nid,
 
 
 def write_name_table(internal_dir, nx2_nid, nx2_name):
-    helpers.__PRINT_WRITES__ = True
+    serialization.PRINT_WRITES = True
     # Make name_table.csv
     column_labels = ['nid', 'name']
     column_list = [nx2_nid[2:], nx2_name[2:]]  # dont write ____ for backcomp
@@ -753,7 +760,7 @@ def write_name_table(internal_dir, nx2_nid, nx2_name):
 
 
 def write_image_table(internal_dir, gx2_gid, gx2_gname):
-    helpers.__PRINT_WRITES__ = True
+    serialization.PRINT_WRITES = True
     # Make image_table.csv
     column_labels = ['gid', 'gname', 'aif']  # do aif for backwards compatibility
     gx2_aif = np.ones(len(gx2_gid), dtype=np.uint32)

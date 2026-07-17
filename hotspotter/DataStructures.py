@@ -16,6 +16,7 @@ import numpy as np
 from . import algos
 from hscom import params
 from hscom import helpers as util
+from hscom import serialization
 from hscom.Printable import DynStruct
 
 ID_DTYPE = np.int32  # id datatype
@@ -59,7 +60,7 @@ class QueryRequest(DynStruct):
             if len(qreq._dcxs) == 0:
                 raise Exception('QueryRequest has not been populated. len(dcxs)=0')
             # In case you don't search the entire dataset
-            dcxs_uid = util.hashstr_arr(qreq._dcxs, '_dcxs')
+            dcxs_uid = serialization.hashstr_arr(qreq._dcxs, '_dcxs')
             uid_list += [dcxs_uid]
         if qreq.permanent_metadata_uid:
             uid_list += [qreq.permanent_metadata_uid]
@@ -71,7 +72,7 @@ class QueryRequest(DynStruct):
     def get_query_uid(qreq, hs, qcxs):
         query_uid = qreq.get_uid()
         hs_uid    = hs.get_db_name()
-        qcxs_uid  = util.hashstr_arr(qcxs, lbl='_qcxs')
+        qcxs_uid = serialization.hashstr_arr(qcxs, lbl='_qcxs')
         test_uid  = hs_uid + query_uid + qcxs_uid
         return test_uid
 
@@ -92,7 +93,7 @@ class NNIndex(object):
         assert max(cx_list) < len(cx2_desc)
         # Make unique id for indexed descriptors
         feat_uid   = hs.prefs.feat_cfg.get_uid()
-        sample_uid = util.hashstr_arr(cx_list, 'dcxs')
+        sample_uid = serialization.hashstr_arr(cx_list, 'dcxs')
         uid = '_' + sample_uid + feat_uid
         # Number of features per sample chip
         nFeat_iter1 = map(lambda cx: len(cx2_desc[cx]), iter(cx_list))

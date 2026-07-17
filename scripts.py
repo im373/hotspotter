@@ -14,6 +14,9 @@ from scipy.cluster.hierarchy import fclusterdata
 # HotSpotter
 from hscom import fileio as io
 from hscom import helpers as util
+from hscom import array_utils
+from hscom import progress
+from hscom import serialization
 from hotspotter import load_data2 as ld2
 
 #from dbgimport import *  # NOQA
@@ -47,7 +50,9 @@ def export_subdatabase(hs, gx_list, new_dbdir):
 
     copy_list = [(src, dst) for (src, dst) in zip(src_gname_list, dst_gname_list)]
 
-    mark_progress, end_prog = util.progress_func(len(copy_list), lbl='Copy Images')
+    mark_progress, end_prog = progress.progress_func(
+        len(copy_list), lbl='Copy Images'
+    )
     for count, (src, dst) in enumerate(copy_list):
         shutil.copy(src, dst)
         mark_progress(count)
@@ -64,9 +69,9 @@ def export_subdatabase(hs, gx_list, new_dbdir):
     name_table_fpath  = join(new_internal, ld2.NAME_TABLE_FNAME)
     image_table_fpath = join(new_internal, ld2.IMAGE_TABLE_FNAME)
     # write csv files
-    util.write_to(chip_table_fpath, chip_table)
-    util.write_to(name_table_fpath, name_table)
-    util.write_to(image_table_fpath, image_table)
+    serialization.write_to(chip_table_fpath, chip_table)
+    serialization.write_to(name_table_fpath, name_table)
+    serialization.write_to(image_table_fpath, image_table)
     return locals()
 
 
@@ -278,7 +283,9 @@ def delete_suffixed_images(hs, back):
     util.ensuredir(trash_dir)
 
     move_list = zip(src_list, dst_list)
-    mark_progress, end_prog = util.progress_func(len(move_list), lbl='Trashing Image')
+    mark_progress, end_prog = progress.progress_func(
+        len(move_list), lbl='Trashing Image'
+    )
     for count, (src, dst) in enumerate(move_list):
         shutil.move(src, dst)
         mark_progress(count)
@@ -324,7 +331,10 @@ def compute_encounters(hs, back, seconds_thresh=15):
         clusterx2_gxs[clusterx - 1].append(gx)  # IDS are 1 based
 
     clusterx2_nGxs = np.array(map(len, clusterx2_gxs))
-    print('cluster size stats: %s' % util.printable_mystats(clusterx2_nGxs))
+    print(
+        'cluster size stats: %s' %
+        array_utils.printable_mystats(clusterx2_nGxs)
+    )
 
     # Change IDs such that higher number = more gxs
     gx2_ex = [None] * len(gx2_clusterid)

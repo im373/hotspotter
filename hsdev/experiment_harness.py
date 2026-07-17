@@ -22,6 +22,9 @@ from hotspotter import match_chips3 as mc3
 from hotspotter import matching_functions as mf
 from hscom import fileio as io
 from hscom import helpers as util
+from hscom import array_utils
+from hscom import formatting
+from hscom import progress
 from hscom import latex_formater
 from hscom import params
 from hsviz import draw_func2 as df2
@@ -39,7 +42,7 @@ from hsviz import draw_func2 as df2
 def get_valid_testcfg_names():
     testcfg_keys = list(vars(experiment_configs).keys())
     testcfg_locals = [key for key in testcfg_keys if key.find('_') != 0]
-    valid_cfg_names = util.indent('\n'.join(testcfg_locals), '  * ')
+    valid_cfg_names = formatting.indent('\n'.join(testcfg_locals), '  * ')
     return valid_cfg_names
 
 
@@ -133,9 +136,9 @@ def wrap_uid(uid):
 
 
 def format_uid_list(uid_list):
-    indented_list = util.indent_list('    ', uid_list)
+    indented_list = formatting.indent_list('    ', uid_list)
     wrapped_list = map(wrap_uid, indented_list)
-    return util.joins('\n', wrapped_list)
+    return formatting.joins('\n', wrapped_list)
 
 
 #---------------
@@ -225,7 +228,9 @@ def get_test_results2(hs, qcxs, qreq, cfgx=0, nCfg=1, nocache_testres=False,
         ---------------------
         [harn] TEST %d/%d
         ---------------------''')
-        mark_progress = util.simple_progres_func(test_results_verbosity, msg, '.')
+        mark_progress = progress.simple_progres_func(
+            test_results_verbosity, msg, '.'
+        )
         total = nQuery * nCfg
         nPrevQ = nQuery * cfgx
         mc3.pre_cache_checks(hs, qreq)
@@ -267,7 +272,7 @@ def get_test_results2(hs, qcxs, qreq, cfgx=0, nCfg=1, nocache_testres=False,
 
 def get_varied_params_list(test_cfg_name_list):
     vary_dicts = get_vary_dicts(test_cfg_name_list)
-    get_all_dict_comb = util.all_dict_combinations
+    get_all_dict_comb = array_utils.all_dict_combinations
     dict_comb_list = [get_all_dict_comb(_dict) for _dict in vary_dicts]
     varied_params_list = [comb for dict_comb in dict_comb_list for comb in dict_comb]
     #map(lambda x: print('\n' + str(x)), varied_params_list)
@@ -341,7 +346,9 @@ def test_configurations(hs, qcx_list, test_cfg_name_list, fnum=1):
     ---------------------
     [harn] TEST_CFG %d/%d: ''' + testnameid + '''
     ---------------------''')
-    mark_progress = util.simple_progres_func(test_cfg_verbosity, msg, '+')
+    mark_progress = progress.simple_progres_func(
+        test_cfg_verbosity, msg, '+'
+    )
 
     nomemory = params.args.nomemory
 
@@ -394,7 +401,7 @@ def test_configurations(hs, qcx_list, test_cfg_name_list, fnum=1):
         cfgx2_lbl.append(cfg_label)
     cfgx2_lbl = np.array(cfgx2_lbl)
     #------------
-    indent = util.indent
+    indent = formatting.indent
 
     @ArgGaurdFalse
     def print_rowlbl():
@@ -599,7 +606,7 @@ def test_configurations(hs, qcx_list, test_cfg_name_list, fnum=1):
     sumstrs.append('||===========================')
     sumstrs.append('|| [cfg*] SUMMARY: %s' % testnameid)
     sumstrs.append('||---------------------------')
-    sumstrs.append(util.joins('\n|| ', best_rankscore_summary))
+    sumstrs.append(formatting.joins('\n|| ', best_rankscore_summary))
     sumstrs.append('||===========================')
     print('\n' + '\n'.join(sumstrs) + '\n')
     #print('--- /SUMMARY ---')

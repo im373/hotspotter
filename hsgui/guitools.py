@@ -17,8 +17,9 @@ from PyQt5 import QtWidgets
 
 # HotSpotter
 from hscom import fileio as io
-from hscom import helpers
 from hscom import helpers as util
+from hscom import path_utils
+from hscom import serialization
 from hsviz import draw_func2 as df2
 
 logger = logging.getLogger(__name__)
@@ -449,7 +450,7 @@ def _user_option(parent, msg, title='options', options=['No', 'Yes'], use_cache=
     logger.debug("User option prompt title=%r msg=%r", title, msg)
     # Recall decision
     logger.debug("Asking user: %r %r", msg, title)
-    cache_id = helpers.hashstr(title + msg)
+    cache_id = serialization.hashstr(title + msg)
     if use_cache:
         reply = io.global_cache_read(cache_id, default=None)
         if reply is not None:
@@ -484,7 +485,7 @@ def user_question(msg):
 
 
 def getQtImageNameFilter():
-    imgNamePat = ' '.join(['*' + ext for ext in helpers.IMG_EXTENSIONS])
+    imgNamePat = ' '.join(['*' + ext for ext in path_utils.IMG_EXTENSIONS])
     imgNameFilter = 'Images (%s)' % (imgNamePat)
     return imgNameFilter
 

@@ -79,6 +79,11 @@ def main(defaultdb='cache', preload=False, app=None):
     try:
         load_all = preload
         hs.load(load_all=load_all)
+        if app is not None and load_all:
+            # connect_api() populates tables before eager feature loading.
+            # Refresh only the dependent chip table so #Kpts reflects the
+            # newly loaded feature data without resetting unrelated tables.
+            back.populate_chip_table()
         db_dir = hs.dirs.db_dir
         io.global_cache_write('db_dir', db_dir)
     except ValueError as ex:
@@ -136,7 +141,7 @@ def get_qcx_list(hs):
     ''' Function for getting the list of queries to test '''
     import numpy as np
     from hscom import params
-    from hscom import helpers as util
+    from hscom import array_utils
     logger.debug("get_qcx_list()")
 
     valid_cxs = hs.get_valid_cxs()
@@ -175,12 +180,12 @@ def get_qcx_list(hs):
         qcx_all = get_cases(hs, with_hard=True, with_gt=False, with_nogt=False)
     else:
         logger.debug("Chosen qcid=%r", params.args.qcid)
-        qcx_all =  util.ensure_iterable(hs.cid2_cx(params.args.qcid))
+        qcx_all = array_utils.ensure_iterable(hs.cid2_cx(params.args.qcid))
     # Filter only the ones you want from the large pool
     if histids is None:
         qcx_list = qcx_all
     else:
-        histids = util.ensure_iterable(histids)
+        histids = array_utils.ensure_iterable(histids)
         logger.debug("Chosen histids=%r", histids)
         qcx_list = [qcx_list[id_] for id_ in histids]
 
@@ -193,7 +198,7 @@ def get_qcx_list(hs):
         logger.debug("valid_cxs=%r", valid_cxs)
         qcx_list = valid_cxs[0:1]
     logger.debug("len(qcx_list) = %s", len(qcx_list))
-    qcx_list = util.unique_keep_order(qcx_list)
+    qcx_list = array_utils.unique_keep_order(qcx_list)
     logger.debug("qcx_list = %r", qcx_list)
     return qcx_list
 
