@@ -422,6 +422,7 @@ class MainWindowBackend(QtCore.QObject):
         if cx is None:
             return None
         return {
+            'cid': int(back.hs.cx2_cid(cx)),
             'cx': cx,
             'gx': back.hs.tables.cx2_gx[cx],
             'roi': back.hs.tables.cx2_roi[cx],
@@ -782,10 +783,9 @@ class MainWindowBackend(QtCore.QObject):
     @slot_()
     @blocking
     @profile
-    def delete_chip(back):
+    def delete_chip(back, cid=None):
         # Action -> Delete Chip
-        # RCOS TODO: Are you sure?
-        cx = back.get_selected_cx()
+        cx = back.get_selected_cx(cid)
         if cx is None:
             back.informationSignal.emit(
                 'Delete Chip', 'Cannot delete chip. No chip selected')
@@ -924,13 +924,11 @@ class MainWindowBackend(QtCore.QObject):
 
     @slot_()
     def delete_global_prefs(back):
-        # RCOS TODO: Are you sure?
         df2.close_all_figures()
         back.hs.delete_global_prefs()
 
     @slot_()
     def delete_queryresults_dir(back):
-        # RCOS TODO: Are you sure?
         df2.close_all_figures()
         back.invalidate_result()
         back.hs.delete_queryresults_dir()

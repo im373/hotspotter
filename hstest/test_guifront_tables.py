@@ -7,11 +7,14 @@ from PyQt5 import QtCore
 from PyQt5 import QtWidgets
 
 from hscom import params
+from hsgui import menu_strings
 from hsgui.guiback import MainWindowBackend
 from hsgui.guifront import (
     GUILoggingHandler,
     MainWindowFrontend,
     add_gui_logging_handler,
+    menu_action_specs,
+    translate,
 )
 
 
@@ -38,6 +41,23 @@ class GuiFrontTableTest(unittest.TestCase):
             [row[0] for row in rows],
             rows,
         )
+
+    def test_translate_preserves_none(self):
+        with mock.patch.object(
+            QtWidgets.QApplication,
+            'translate',
+            return_value='translated',
+        ) as qt_translate:
+            self.assertIsNone(translate('TestContext', None))
+            qt_translate.assert_not_called()
+            self.assertEqual(
+                translate('TestContext', 'source text'),
+                'translated',
+            )
+            qt_translate.assert_called_once_with(
+                'TestContext',
+                'source text',
+            )
 
     def test_views_use_persistent_models_and_sorted_stable_ids(self):
         self.populate_images([
@@ -272,6 +292,138 @@ class GuiFrontTableTest(unittest.TestCase):
                     expected = ['close_chip', 'show_image', 'select']
                     expected.append('apply_edit' if accepted else 'restore_chip')
                     self.assertEqual(events, expected)
+
+    def test_destructive_actions_require_explicit_confirmation(self):
+        workflows = (
+            ('delete_cache', 'Delete Computed Directory'),
+            ('delete_global_prefs', 'Delete Global Preferences'),
+            ('delete_queryresults_dir', 'Delete Cached Query Results'),
+        )
+        for method_name, expected_title in workflows:
+            with self.subTest(action=method_name):
+                backend_method = mock.Mock()
+                setattr(self.backend, method_name, backend_method)
+                with mock.patch(
+                    'hsgui.guifront.guitools.confirm_action',
+                    return_value=False,
+                ) as confirm:
+                    self.assertFalse(getattr(self.front, method_name)())
+                backend_method.assert_not_called()
+                self.assertEqual(confirm.call_args.args[1], expected_title)
+
+                with mock.patch(
+                    'hsgui.guifront.guitools.confirm_action',
+                    return_value=True,
+                ):
+                    self.assertTrue(getattr(self.front, method_name)())
+                backend_method.assert_called_once_with()
+
+    def test_destructive_menu_actions_route_through_frontend(self):
+        specs = {
+            spec['name']: spec
+            for menu_specs in menu_action_specs(self.front).values()
+            for spec in menu_specs
+            if spec is not None
+        }
+        expected = {
+            'actionDelete_Chip': self.front.delete_chip,
+            'actionDelete_Image': self.front.delete_image,
+            'actionDelete_Precomputed_Results': (
+                self.front.delete_queryresults_dir
+            ),
+            'actionDelete_global_preferences': self.front.delete_global_prefs,
+            'actionDelete_computed_directory': self.front.delete_cache,
+        }
+
+        for action_name, frontend_slot in expected.items():
+            with self.subTest(action=action_name):
+                self.assertEqual(specs[action_name]['slot_fn'], frontend_slot)
+
+    def test_delete_chip_confirmation_is_bound_to_captured_chip_id(self):
+        self.backend.get_selected_chip_context = lambda: {
+            'cid': 17,
+            'cx': 4,
+            'gx': 2,
+            'roi': [1, 2, 30, 40],
+            'theta': 0.25,
+        }
+        self.backend.delete_chip = mock.Mock()
+
+        with mock.patch(
+            'hsgui.guifront.guitools.confirm_action',
+            return_value=False,
+        ) as confirm:
+            self.assertFalse(self.front.delete_chip())
+        self.backend.delete_chip.assert_not_called()
+        self.assertIn('chip ID 17', confirm.call_args.args[2])
+
+        with mock.patch(
+            'hsgui.guifront.guitools.confirm_action',
+            return_value=True,
+        ):
+            self.assertTrue(self.front.delete_chip())
+        self.backend.delete_chip.assert_called_once_with(cid=17)
+
+    def test_delete_image_confirmation_is_bound_to_captured_image(self):
+        self.backend.get_selected_gx = lambda: 9
+        self.backend.delete_image = mock.Mock()
+
+        with mock.patch(
+            'hsgui.guifront.guitools.confirm_action',
+            return_value=False,
+        ) as confirm:
+            self.assertFalse(self.front.delete_image())
+        self.backend.delete_image.assert_not_called()
+        self.assertIn('image index 9', confirm.call_args.args[2])
+
+        with mock.patch(
+            'hsgui.guifront.guitools.confirm_action',
+            return_value=True,
+        ):
+            self.assertTrue(self.front.delete_image())
+        self.backend.delete_image.assert_called_once_with(gx=9)
+
+    def test_destructive_confirmation_messages_are_centralized(self):
+        expected_keys = {
+            'delete_chip',
+            'delete_image',
+            'delete_computed_directory',
+            'delete_global_preferences',
+            'delete_precomputed_results',
+        }
+
+        self.assertEqual(set(menu_strings.CONFIRMATION_TITLE), expected_keys)
+        self.assertEqual(set(menu_strings.CONFIRMATION_MESSAGE), expected_keys)
+        self.assertIn(
+            '%(cid)d', menu_strings.CONFIRMATION_MESSAGE['delete_chip']
+        )
+        self.assertIn(
+            '%(gx)d', menu_strings.CONFIRMATION_MESSAGE['delete_image']
+        )
+
+    def test_delete_chip_without_selection_does_not_prompt(self):
+        self.backend.get_selected_chip_context = lambda: None
+        self.backend.delete_chip = mock.Mock()
+
+        with mock.patch(
+            'hsgui.guifront.guitools.confirm_action'
+        ) as confirm:
+            self.assertFalse(self.front.delete_chip())
+
+        confirm.assert_not_called()
+        self.backend.delete_chip.assert_called_once_with()
+
+    def test_delete_image_without_selection_does_not_prompt(self):
+        self.backend.get_selected_gx = lambda: None
+        self.backend.delete_image = mock.Mock()
+
+        with mock.patch(
+            'hsgui.guifront.guitools.confirm_action'
+        ) as confirm:
+            self.assertFalse(self.front.delete_image())
+
+        confirm.assert_not_called()
+        self.backend.delete_image.assert_called_once_with()
 
 
 if __name__ == '__main__':

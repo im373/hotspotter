@@ -5,6 +5,7 @@
 # Loaded menu action source strings from hsgui.menu_strings for Qt translation.
 # Replaced hscom.__common__ logging hooks with module-level logging.
 
+import functools
 import logging
 from os.path import exists, join
 import sys
@@ -30,17 +31,11 @@ from hotspotter import chip_properties
 logger = logging.getLogger(__name__)
 
 
-def _translate(context, text):
+def translate(context, text):
+    """Translate user-facing text while preserving an absent value."""
+    if text is None:
+        return None
     return QtWidgets.QApplication.translate(context, text)
-
-
-def translate_menu_text(key):
-    return _translate(menu_strings.MENU_CONTEXT, menu_strings.text(key))
-
-
-def translate_menu_tooltip(key):
-    tooltip = menu_strings.tooltip(key)
-    return None if tooltip is None else _translate(menu_strings.MENU_CONTEXT, tooltip)
 
 #=================
 # Globals
@@ -90,6 +85,66 @@ except AttributeError:
 
 def csv_sanatize(str_):
     return str(str_).replace(',', ';;')
+
+
+def _selected_chip_confirmation_context(front, *args, **kwargs):
+    """Capture a stable chip ID before opening a modal confirmation."""
+    cid = kwargs.get('cid')
+    if cid is None:
+        context = front.backend.get_selected_chip_context()
+        if context is None:
+            return None
+        cid = context['cid']
+    return {'cid': int(cid)}
+
+
+def _selected_image_confirmation_context(front, *args, **kwargs):
+    """Capture a stable image index before opening a modal confirmation."""
+    gx = kwargs.get('gx')
+    if gx is None:
+        gx = front.backend.get_selected_gx()
+    return None if gx is None else {'gx': int(gx)}
+
+
+def confirm_action(confirmation_key, context_provider=None,
+                   confirmation_callback=None):
+    """Decorate an action with a translated confirmation and optional context.
+
+    A context provider returns keyword values used both to format the message
+    and to invoke the wrapped action. Returning ``None`` bypasses confirmation
+    so the action can preserve its existing missing-context handling. A custom
+    confirmation callback may replace the standard Yes/No dialog.
+    """
+    def decorator(action):
+        @functools.wraps(action)
+        def confirmed_action(front, *args, **kwargs):
+            context = {}
+            if context_provider is not None:
+                context = context_provider(front, *args, **kwargs)
+                if context is None:
+                    return action(front, *args, **kwargs)
+            call_kwargs = dict(kwargs)
+            call_kwargs.update(context)
+            title = translate(
+                menu_strings.MENU_CONTEXT,
+                menu_strings.confirmation_title(confirmation_key),
+            )
+            message = translate(
+                menu_strings.MENU_CONTEXT,
+                menu_strings.confirmation_message(confirmation_key),
+            )
+            if context:
+                message = message % context
+            callback = confirmation_callback or guitools.confirm_action
+            if not callback(front, title, message):
+                logger.info(
+                    "Cancelled action requiring confirmation: %s",
+                    confirmation_key,
+                )
+                return False
+            return action(front, *args, **call_kwargs)
+        return confirmed_action
+    return decorator
 
 
 def display_table_header(header):
@@ -288,8 +343,8 @@ def menu_action_specs(front):
             action_spec('actionPrevious_Unannotated', 'previous_unannotated', back.select_previous_unannotated, 'Shift+B'),
             action_spec('actionNext_Unannotated', 'next_unannotated', back.select_next_unannotated, 'Shift+N'),
             None,
-            action_spec('actionDelete_Chip', 'delete_chip', back.delete_chip, 'Ctrl+Del'),
-            action_spec('actionDelete_Image', 'delete_image', back.delete_image, 'Ctrl+Shift+Del'),
+            action_spec('actionDelete_Chip', 'delete_chip', front.delete_chip, 'Ctrl+Del'),
+            action_spec('actionDelete_Image', 'delete_image', front.delete_image, 'Ctrl+Shift+Del'),
             action_spec('actionClean_Name_Table', 'clean_name_table', front.clean_name_table),
         ],
         'menuBatch': [
@@ -313,9 +368,9 @@ def menu_action_specs(front):
             None,
             action_spec('actionWriteLogs', 'write_logs', None, enabled=False),
             None,
-            action_spec('actionDelete_Precomputed_Results', 'delete_precomputed_results', back.delete_queryresults_dir),
+            action_spec('actionDelete_Precomputed_Results', 'delete_precomputed_results', front.delete_queryresults_dir),
             action_spec('actionDelete_computed_directory', 'delete_computed_directory', front.delete_cache),
-            action_spec('actionDelete_global_preferences', 'delete_global_preferences', back.delete_global_prefs),
+            action_spec('actionDelete_global_preferences', 'delete_global_preferences', front.delete_global_prefs),
             None,
             action_spec('actionDev_Mode_IPython', 'dev_mode_ipython', front.dev_mode, 'Ctrl+Alt+Shift+D'),
             action_spec('actionDeveloper_Reload', 'developer_reload', front.dev_reload, 'Ctrl+Shift+R'),
@@ -365,9 +420,15 @@ def create_menu_actions(front):
                 continue
             i18n_key = spec['i18n_key']
             new_menu_action(front, menu_name, spec['name'],
-                            text=translate_menu_text(i18n_key),
+                            text=translate(
+                                menu_strings.MENU_CONTEXT,
+                                menu_strings.text(i18n_key),
+                            ),
                             shortcut=spec.get('shortcut'),
-                            tooltip=translate_menu_tooltip(i18n_key),
+                            tooltip=translate(
+                                menu_strings.MENU_CONTEXT,
+                                menu_strings.tooltip(i18n_key),
+                            ),
                             slot_fn=spec.get('slot_fn'),
                             enabled=spec.get('enabled', True))
 
@@ -511,9 +572,9 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
         if not bool(getattr(getattr(params, 'args', None), 'nogui', False)):
             front.layout_figures()
 
-    @slot_()
-    def quit_application(front):
-        guitools.exit_application()
+    #========================
+    # menu files
+    #========================
 
     @slot_()
     @blocking
@@ -598,6 +659,104 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
             front.backend.import_images_from_dir(img_dpath)
 
     @slot_()
+    def quit_application(front):
+        guitools.exit_application()
+
+    #========================
+    # view menu
+    #========================
+
+    @slot_()
+    @blocking
+    def layout_figures(front):
+        from hsviz import draw_func2 as df2
+
+        logger.debug("Layout figures")
+        app = QtWidgets.QApplication.instance()
+        if app is None:
+            logger.warning("Cannot detect screen geometry")
+            diagonal = 1618
+        else:
+            screen_rect = app.desktop().screenGeometry()
+            width = screen_rect.width()
+            height = screen_rect.height()
+            diagonal = (width ** 2 + height ** 2) ** 0.5 / 1.618
+        df2.present(num_rc=(2, 3), wh=diagonal, wh_off=(0, 60))
+
+    @slot_()
+    def filter_table(front):
+        tblname, _ = front.current_table()
+        model = front.table_models[tblname]
+        proxy = front.table_proxies[tblname]
+        columns = [
+            (definition['key'], definition['header'])
+            for definition in model.column_definitions()
+        ]
+        if not columns:
+            logger.warning(
+                "[filter] There is no columns to filter in table %s.",
+                tblname,
+            )
+            QtWidgets.QMessageBox.information(
+                front,
+                translate('TableFilterDialog', 'Filter Table'),
+                translate(
+                    'TableFilterDialog',
+                    'The current table has no columns to filter.',
+                ),
+            )
+            return
+
+        conditions = proxy.filters()
+        while True:
+            dialog = TableFilterDialog(columns, conditions, front)
+            if dialog.exec_() != QtWidgets.QDialog.Accepted:
+                return
+            conditions = dialog.conditions()
+            try:
+                proxy.set_filters(conditions)
+            except ValueError as ex:
+                QtWidgets.QMessageBox.warning(
+                    front,
+                    translate('TableFilterDialog', 'Invalid Table Filter'),
+                    str(ex),
+                )
+                continue
+            front.prev_table_click = None
+            front.update_table_tab_count(tblname)
+            return
+
+    @slot_()
+    def clear_table_filters(front):
+        """Clear all frontend proxy filters and refresh visible table rows."""
+        for tblname, proxy in front.table_proxies.items():
+            proxy.clear_filters()
+            front.table_views[tblname].viewport().update()
+            front.update_table_tab_count(tblname)
+        front.prev_table_click = None
+        logger.info("Cleared filters from all tables")
+
+    #========================
+    # actions menu
+    #========================
+
+    @slot_()
+    @blocking
+    def add_chip(front):
+        gx = front.backend.get_selected_gx()
+        if gx is None:
+            front.show_information(
+                'Add Chip', 'Select an image before adding a chip')
+            return
+        front.backend.show_image(
+            gx,
+            figtitle='Image View - Select ROI (click two points)',
+        )
+        roi = guitools.select_roi()
+        if roi is not None:
+            front.backend.add_chip(gx, roi)
+
+    @slot_()
     @blocking
     def new_prop(front):
         definition = None
@@ -616,22 +775,6 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
                 )
                 continue
             return
-
-    @slot_()
-    @blocking
-    def add_chip(front):
-        gx = front.backend.get_selected_gx()
-        if gx is None:
-            front.show_information(
-                'Add Chip', 'Select an image before adding a chip')
-            return
-        front.backend.show_image(
-            gx,
-            figtitle='Image View - Select ROI (click two points)',
-        )
-        roi = guitools.select_roi()
-        if roi is not None:
-            front.backend.add_chip(gx, roi)
 
     @slot_()
     @blocking
@@ -687,6 +830,52 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
                 front.backend.show_chip(context['cx'])
 
     @slot_()
+    @blocking
+    @confirm_action(
+        'delete_chip',
+        context_provider=_selected_chip_confirmation_context,
+    )
+    def delete_chip(front, cid=None):
+        if cid is None:
+            front.backend.delete_chip()
+            return False
+        front.backend.delete_chip(cid=cid)
+        return True
+
+    @slot_()
+    @blocking
+    @confirm_action(
+        'delete_image',
+        context_provider=_selected_image_confirmation_context,
+    )
+    def delete_image(front, gx=None):
+        if gx is None:
+            front.backend.delete_image()
+            return False
+        front.backend.delete_image(gx=gx)
+        return True
+
+    @slot_()
+    def clean_name_table(front):
+        unused_name_rows = front.backend.get_unused_name_rows()
+        if not unused_name_rows:
+            front.show_information(
+                translate('CleanNameTableDialog', 'Clean Name Table'),
+                translate(
+                    'CleanNameTableDialog',
+                    'The name table has no zero-chip names to remove.',
+                ),
+            )
+            return
+        dialog = CleanNameTableDialog(unused_name_rows, front)
+        if dialog.exec_() == QtWidgets.QDialog.Accepted:
+            front.backend.clean_name_table()
+
+    #========================
+    # options menu
+    #========================
+
+    @slot_()
     def edit_preferences(front):
         preferences = front.backend.get_preferences()
         front.edit_prefs = front.show_preferences(
@@ -696,15 +885,27 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
         query_uid = ''.join(preferences.query_cfg.get_uid())
         logger.debug("query_uid = %s", query_uid)
 
+    #========================
+    # help menu
+    #========================
+
     @slot_()
+    @confirm_action('delete_precomputed_results')
+    def delete_queryresults_dir(front):
+        front.backend.delete_queryresults_dir()
+        return True
+
+    @slot_()
+    @confirm_action('delete_computed_directory')
     def delete_cache(front):
-        answer = guitools._user_option(
-            front,
-            'Are you sure you want to delete cache?',
-            options=['No', 'Yes'],
-        )
-        if answer == 'Yes':
-            front.backend.delete_cache()
+        front.backend.delete_cache()
+        return True
+
+    @slot_()
+    @confirm_action('delete_global_preferences')
+    def delete_global_prefs(front):
+        front.backend.delete_global_prefs()
+        return True
 
     @slot_()
     @blocking
@@ -735,28 +936,14 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
         df2.register_qt_win(front)
         front.backend.populate_tables()
 
+    #========================
+    # dialog helpers
+    #========================
+
     def show_preferences(front, preferences, default_callback):
         widget = preferences.createQWidget()
         widget.ui.defaultPrefsBUT.clicked.connect(default_callback)
         return widget
-
-    @slot_()
-    @blocking
-    def layout_figures(front):
-        from hsviz import draw_func2 as df2
-
-        logger.debug("Layout figures")
-        app = QtWidgets.QApplication.instance()
-        if app is None:
-            logger.warning("Cannot detect screen geometry")
-            diagonal = 1618
-        else:
-            screen_rect = app.desktop().screenGeometry()
-            width = screen_rect.width()
-            height = screen_rect.height()
-            diagonal = (width ** 2 + height ** 2) ** 0.5 / 1.618
-        df2.present(num_rc=(2, 3), wh=diagonal, wh_off=(0, 60))
-
 
     @slot_()
     def closeEvent(front, event):
@@ -921,7 +1108,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
         ui = front.ui
         tab_widget = table_tabs[tblname]
         tab_index = ui.tablesTabWidget.indexOf(tab_widget)
-        tab_text = _translate(
+        tab_text = translate(
             "mainSkel",
             "%s (%d)" % (
                 TABLE_TAB_LABELS[tblname],
@@ -942,72 +1129,6 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
             if current_widget is widget:
                 return tblname, table
         raise RuntimeError('The selected tab does not contain a known table')
-
-    @slot_()
-    def filter_table(front):
-        tblname, _ = front.current_table()
-        model = front.table_models[tblname]
-        proxy = front.table_proxies[tblname]
-        columns = [
-            (definition['key'], definition['header'])
-            for definition in model.column_definitions()
-        ]
-        if not columns:
-            logger.warning("[filter] There is no columns to filter in table %s.", tblname)
-            QtWidgets.QMessageBox.information(
-                front,
-                _translate('TableFilterDialog', 'Filter Table'),
-                _translate(
-                    'TableFilterDialog',
-                    'The current table has no columns to filter.',
-                ),
-            )
-            return
-
-        conditions = proxy.filters()
-        while True:
-            dialog = TableFilterDialog(columns, conditions, front)
-            if dialog.exec_() != QtWidgets.QDialog.Accepted:
-                return
-            conditions = dialog.conditions()
-            try:
-                proxy.set_filters(conditions)
-            except ValueError as ex:
-                QtWidgets.QMessageBox.warning(
-                    front,
-                    _translate('TableFilterDialog', 'Invalid Table Filter'),
-                    str(ex),
-                )
-                continue
-            front.prev_table_click = None
-            front.update_table_tab_count(tblname)
-            return
-
-    @slot_()
-    def clear_table_filters(front):
-        """Clear all frontend proxy filters and refresh visible table rows."""
-        for tblname, proxy in front.table_proxies.items():
-            proxy.clear_filters()
-            front.table_views[tblname].viewport().update()
-            front.update_table_tab_count(tblname)
-        front.prev_table_click = None
-        logger.info("Cleared filters from all tables")
-
-    @slot_()
-    def clean_name_table(front):
-        unused_name_rows = front.backend.get_unused_name_rows()
-        if not unused_name_rows:
-            front.show_information(
-                _translate('CleanNameTableDialog', 'Clean Name Table'),
-                _translate(
-                    'CleanNameTableDialog',
-                    'The name table has no zero-chip names to remove.',
-                ),
-            )
-            return
-        dialog = CleanNameTableDialog(unused_name_rows, front)
-        if dialog.exec_() == QtWidgets.QDialog.Accepted:
-            front.backend.clean_name_table()
 
     #=======================
     # General Table Access

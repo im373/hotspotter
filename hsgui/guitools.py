@@ -20,6 +20,7 @@ from hscom import fileio as io
 from hscom import helpers as util
 from hscom import path_utils
 from hscom import serialization
+from hscom.logging_utils import DEPRECATED
 from hsviz import draw_func2 as df2
 
 logger = logging.getLogger(__name__)
@@ -36,7 +37,7 @@ try:
 except AttributeError:
     _fromUtf8 = lambda s: s
 
-
+@DEPRECATED
 def configure_matplotlib():
     import multiprocessing
     import matplotlib
@@ -442,6 +443,19 @@ def user_info(parent, msg, title='info'):
     msgBox.setModal(False)
     msgBox.open(msgBox.close)
     msgBox.show()
+
+
+def confirm_action(parent, title, message):
+    """Return true only when the user explicitly confirms a destructive action."""
+    buttons = QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
+    reply = QtWidgets.QMessageBox.warning(
+        parent,
+        title,
+        message,
+        buttons,
+        QtWidgets.QMessageBox.No,
+    )
+    return reply == QtWidgets.QMessageBox.Yes
 
 
 @profile

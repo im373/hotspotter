@@ -106,9 +106,66 @@ MENU_TOOLTIP = {
 }
 
 
+CONFIRMATION_TITLE = {
+    'delete_chip': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Delete Chip'),
+    'delete_image': QT_TRANSLATE_NOOP('HotSpotterMenus', 'Trash Image'),
+    'delete_computed_directory': QT_TRANSLATE_NOOP(
+        'HotSpotterMenus', 'Delete Computed Directory'
+    ),
+    'delete_global_preferences': QT_TRANSLATE_NOOP(
+        'HotSpotterMenus', 'Delete Global Preferences'
+    ),
+    'delete_precomputed_results': QT_TRANSLATE_NOOP(
+        'HotSpotterMenus', 'Delete Cached Query Results'
+    ),
+}
+
+
+CONFIRMATION_MESSAGE = {
+    'delete_chip': QT_TRANSLATE_NOOP(
+        'HotSpotterMenus',
+        'Are you sure you want to delete chip ID %(cid)d?\n\n'
+        'The annotation and its associated computed data will be removed.',
+    ),
+    'delete_image': QT_TRANSLATE_NOOP(
+        'HotSpotterMenus',
+        'Are you sure you want to trash image index %(gx)d?\n\n'
+        'Its chips and associated computed data will be removed from the '
+        'active database.',
+    ),
+    'delete_computed_directory': QT_TRANSLATE_NOOP(
+        'HotSpotterMenus',
+        'Are you sure you want to delete all computed data for the current '
+        'database?\n\nChips, features, indexes, and query results will be '
+        'recomputed when needed. Source images and annotations will not be '
+        'deleted.',
+    ),
+    'delete_global_preferences': QT_TRANSLATE_NOOP(
+        'HotSpotterMenus',
+        'Are you sure you want to delete all global preferences?\n\n'
+        'HotSpotter settings and remembered paths will be reset. Database '
+        'images and annotations will not be deleted.',
+    ),
+    'delete_precomputed_results': QT_TRANSLATE_NOOP(
+        'HotSpotterMenus',
+        'Are you sure you want to delete all cached query results for the '
+        'current database?\n\nResults will be recomputed when needed. Images, '
+        'annotations, chips, and features will not be deleted.',
+    ),
+}
+
+
 def text(key):
     return MENU_TEXT.get(key, key)
 
 
 def tooltip(key):
     return MENU_TOOLTIP.get(key)
+
+
+def confirmation_title(key):
+    return CONFIRMATION_TITLE.get(key)
+
+
+def confirmation_message(key):
+    return CONFIRMATION_MESSAGE.get(key)
