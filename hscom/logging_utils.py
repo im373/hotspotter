@@ -61,10 +61,6 @@ def DEPRECATED(func):
     return deprecated_wrapper
 
 
-# Compatibility alias for legacy misspelling. New code should use DEPRECATED.
-DEPRICATED = DEPRECATED
-
-
 def configure_logging(
     log_dir="logs",
     debug=False,

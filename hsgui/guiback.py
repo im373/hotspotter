@@ -16,12 +16,11 @@ from PyQt5 import QtCore
 import numpy as np
 # Hotspotter
 from .guitools import drawing, slot_
-from .guitools import backblocking as blocking
+from .guitools import blocking
 from hscom import helpers as util
 from hscom import path_utils
 from hscom import progress
 from hscom import fileio as io
-from hscom.logging_utils import DEPRECATED
 from hscom import params
 from hscom.profiling import profile
 from hsviz import draw_func2 as df2
@@ -59,24 +58,38 @@ def _close_chip_figure_if_open():
 def select_adjacent_image(back, direction=1, unannotated=False):
     """Select an image before or after the current image index."""
     if direction not in (-1, 1):
-        raise ValueError('direction must be -1 or 1')
+        logger.warning("Ignoring invalid selection direction %r", direction)
+        return 'Selection direction must be previous or next.'
+    if back.hs is None or getattr(back.hs, 'tables', None) is None:
+        return 'No database is open.'
     current_gx = back.get_selected_gx()
     current_gx = None if current_gx is None else int(current_gx)
-    valid_gxs = sorted(
-        (int(gx) for gx in back.hs.get_valid_gxs()),
-        reverse=direction < 0,
-    )
+    try:
+        valid_gxs = sorted(
+            (int(gx) for gx in back.hs.get_valid_gxs()),
+            reverse=direction < 0,
+        )
+    except (AttributeError, TypeError, ValueError):
+        logger.exception("Could not enumerate images for selection")
+        return 'The image list is unavailable.'
     for gx in valid_gxs:
         is_adjacent = (
             current_gx is None
             or (direction > 0 and gx > current_gx)
             or (direction < 0 and gx < current_gx)
         )
-        is_unannotated = back.hs.gx2_nChips(gx) == 0
+        try:
+            is_unannotated = back.hs.gx2_nChips(gx) == 0
+        except (AttributeError, IndexError, TypeError, ValueError):
+            logger.exception("Could not inspect image index %r", gx)
+            continue
         if is_adjacent and (not unannotated or is_unannotated):
-            _close_chip_figure_if_open()
-            back.select_gx(gx, show_chip_splash=False)
-            return None
+            try:
+                _close_chip_figure_if_open()
+            except Exception:
+                logger.exception("Could not close the previous chip figure")
+            if back.select_gx(gx, show_chip_splash=False):
+                return None
     if direction > 0:
         if unannotated:
             return 'All following images already have chips.'
@@ -114,6 +127,7 @@ class MainWindowBackend(QtCore.QObject):
     informationSignal = QtCore.pyqtSignal(str, str)
     operationFailedSignal = QtCore.pyqtSignal(str, str)
     apiConnectedSignal = QtCore.pyqtSignal()
+    layoutFiguresSignal = QtCore.pyqtSignal()
     chipCellUpdateSignal = QtCore.pyqtSignal(int, str, object)
 
     #------------------------
@@ -155,8 +169,10 @@ class MainWindowBackend(QtCore.QObject):
             df2.set_figtitle('%s View' % view)
 
     def _layout_figures_if(back, did_exist):
-        #back._layout_figures_if(did_exist)
-        pass
+        """Arrange registered windows when a visualization is first created."""
+        if not did_exist:
+            logger.debug("New visualization window created; arranging figures")
+            back.layoutFiguresSignal.emit()
 
     @drawing
     @profile
@@ -164,6 +180,7 @@ class MainWindowBackend(QtCore.QObject):
         fnum = FNUMS['image']
         did_exist = df2.plt.fignum_exists(fnum)
         kwargs.pop('nodraw', None)
+        kwargs.pop('fnum', None)
         df2.figure(fnum=fnum, docla=True, doclf=True)
         interact.interact_image(back.hs, gx, sel_cxs, back.select_cx,
                                 fnum=fnum, figtitle=figtitle, nodraw=True,
@@ -176,14 +193,16 @@ class MainWindowBackend(QtCore.QObject):
         fnum = FNUMS['chip']
         did_exist = df2.plt.fignum_exists(fnum)
         kwargs.pop('nodraw', None)
+        kwargs.pop('fnum', None)
+        figtitle = kwargs.pop('figtitle', 'Chip View')
         df2.figure(fnum=fnum, docla=True, doclf=True)
         INTERACTIVE_CHIPS = True  # This should always be True
         if INTERACTIVE_CHIPS:
             interact_fn = interact.interact_chip
-            interact_fn(back.hs, cx, fnum=fnum, figtitle='Chip View',
+            interact_fn(back.hs, cx, fnum=fnum, figtitle=figtitle,
                         nodraw=True, **kwargs)
         else:
-            viz.show_chip(back.hs, cx, fnum=fnum, figtitle='Chip View')
+            viz.show_chip(back.hs, cx, fnum=fnum, figtitle=figtitle)
         back._layout_figures_if(did_exist)
 
     def close_chip_figure(back):
@@ -196,6 +215,7 @@ class MainWindowBackend(QtCore.QObject):
     @profile
     def show_query_result(back, res, tx=None, **kwargs):
         kwargs.pop('nodraw', None)
+        kwargs.pop('fnum', None)
         if tx is not None:
             fnum = FNUMS['inspect']
             did_exist = df2.plt.fignum_exists(fnum)
@@ -219,6 +239,7 @@ class MainWindowBackend(QtCore.QObject):
         fnum = FNUMS['inspect']
         did_exist = df2.plt.fignum_exists(fnum)
         kwargs.pop('nodraw', None)
+        kwargs.pop('fnum', None)
         df2.figure(fnum=fnum, docla=True, doclf=True)
         interact.interact_chipres(back.hs, res, cx=cx, fnum=fnum,
                                   nodraw=True, **kwargs)
@@ -230,6 +251,7 @@ class MainWindowBackend(QtCore.QObject):
         # Define callback for show_analysis
         fnum = FNUMS['name']
         kwargs.pop('nodraw', None)
+        kwargs.pop('fnum', None)
         df2.figure(fnum=fnum, docla=True, doclf=True)
         interact.interact_name(back.hs, nx, sel_cxs, back.select_cx,
                                fnum=fnum, nodraw=True, **kwargs)
@@ -238,38 +260,108 @@ class MainWindowBackend(QtCore.QObject):
     # Work Functions
     #----------------------
 
+    def _validated_selection_index(back, kind, value, notify=True):
+        """Return a valid scalar selection index, or ``None`` safely."""
+        labels = {
+            'gx': 'image index',
+            'cx': 'chip index',
+            'cid': 'chip ID',
+            'nx': 'name index',
+        }
+        label = labels[kind]
+        try:
+            scalar_item = getattr(value, 'item', None)
+            if callable(scalar_item):
+                value = scalar_item()
+            if value is None or isinstance(value, (bool, np.bool_)):
+                raise ValueError
+            if isinstance(value, (float, np.floating)):
+                if not np.isfinite(value) or not float(value).is_integer():
+                    raise ValueError
+            index = int(value)
+        except Exception:
+            index = None
+
+        valid = False
+        if index is not None and back.hs is not None:
+            try:
+                tables = back.hs.tables
+                if kind == 'gx':
+                    valid_indexes = np.flatnonzero(
+                        np.asarray(tables.gx2_gname) != ''
+                    )
+                elif kind == 'cx':
+                    valid_indexes = np.flatnonzero(
+                        np.asarray(tables.cx2_cid) > 0
+                    )
+                elif kind == 'nx':
+                    names = np.asarray(tables.nx2_name)
+                    valid_indexes = np.flatnonzero(names != '')
+                    valid_indexes = valid_indexes[valid_indexes >= 2]
+                else:
+                    valid_indexes = np.asarray(tables.cx2_cid)
+                    valid_indexes = valid_indexes[valid_indexes > 0]
+                valid = index in {int(item) for item in valid_indexes}
+            except Exception:
+                logger.exception("Could not validate %s %r", label, value)
+
+        if valid:
+            return index
+        logger.warning("Ignoring invalid %s %r", label, value)
+        if notify:
+            back.informationSignal.emit(
+                'Invalid Selection',
+                'Cannot select %s %r because it is missing or invalid.' % (
+                    label,
+                    value,
+                ),
+            )
+        return None
+
     def get_selected_gx(back):
         'selected image index'
-        if back.selection is None:
+        if not isinstance(back.selection, dict):
             return None
-        type_ = back.selection['type_']
+        type_ = back.selection.get('type_')
         if type_ == 'gx':
-            gx = back.selection['index']
+            gx = back.selection.get('index')
         elif type_ == 'cx':
-            cx = back.selection['index']
-            gx = back.hs.tables.cx2_gx(cx)
+            cx = back._validated_selection_index(
+                'cx', back.selection.get('index'), notify=False)
+            if cx is None:
+                return None
+            try:
+                gx = back.hs.cx2_gx(cx)
+            except (AttributeError, IndexError, TypeError, ValueError):
+                return None
         else:
             return None
-        return gx
+        return back._validated_selection_index('gx', gx, notify=False)
 
     def get_selected_cx(back, cid=None):
         'selected chip index'
         if cid is not None:
+            cid = back._validated_selection_index('cid', cid)
+            if cid is None:
+                return None
             try:
                 cx = back.hs.cid2_cx(cid)
-                return cx
-            except IndexError as ex:
-                logger.exception("Invalid chip id %r", cid)
-                msg = 'Query qcid=%d does not exist / is invalid' % cid
-                raise AssertionError(msg)
-        if back.selection is None:
+            except (AttributeError, IndexError, TypeError, ValueError):
+                logger.exception("Could not resolve chip ID %r", cid)
+                return None
+            return back._validated_selection_index('cx', cx, notify=False)
+        if not isinstance(back.selection, dict):
             return None
-        type_ = back.selection['type_']
+        type_ = back.selection.get('type_')
         if type_ == 'cx':
-            cx = back.selection['index']
-        if type_ == 'gx':
-            cx = back.selection['sub']
-        return cx
+            cx = back.selection.get('index')
+        elif type_ == 'gx':
+            cx = back.selection.get('sub')
+        else:
+            return None
+        if cx is None:
+            return None
+        return back._validated_selection_index('cx', cx, notify=False)
 
     def update_window_title(back):
         if back.hs is None:
@@ -374,8 +466,7 @@ class MainWindowBackend(QtCore.QObject):
             return
         top_cxs = res.topN_cxs(back.hs, N='all')
         qcx = res.qcx
-        # The ! mark is used for ascii sorting. TODO: can we work arround this?
-        prefix_cols = [{'rank': '!Query',
+        prefix_cols = [{'rank': 'Query',
                         'score': '---',
                         'name': back.hs.cx2_name(qcx),
                         'cid': back.hs.cx2_cid(qcx), }]
@@ -421,13 +512,17 @@ class MainWindowBackend(QtCore.QObject):
         cx = back.get_selected_cx(cid)
         if cx is None:
             return None
-        return {
-            'cid': int(back.hs.cx2_cid(cx)),
-            'cx': cx,
-            'gx': back.hs.tables.cx2_gx[cx],
-            'roi': back.hs.tables.cx2_roi[cx],
-            'theta': back.hs.tables.cx2_theta[cx],
-        }
+        try:
+            return {
+                'cid': int(back.hs.cx2_cid(cx)),
+                'cx': cx,
+                'gx': int(back.hs.cx2_gx(cx)),
+                'roi': back.hs.tables.cx2_roi[cx],
+                'theta': back.hs.tables.cx2_theta[cx],
+            }
+        except (AttributeError, IndexError, TypeError, ValueError):
+            logger.exception("Selected chip index %r became invalid", cx)
+            return None
 
     #--------------------------------------------------------------------------
     # Selection Functions
@@ -438,55 +533,199 @@ class MainWindowBackend(QtCore.QObject):
     @profile
     def select_gx(back, gx, cx=None, show=True, **kwargs):
         # Table Click -> Image Table
+        gx = back._validated_selection_index('gx', gx)
+        if gx is None:
+            return False
+        if cx is not None:
+            cx = back._validated_selection_index('cx', cx)
+            if cx is None:
+                return False
+            try:
+                chip_gx = int(back.hs.cx2_gx(cx))
+            except (AttributeError, IndexError, TypeError, ValueError):
+                chip_gx = None
+            if chip_gx != gx:
+                logger.warning(
+                    "Ignoring mismatched selection gx=%r cx=%r chip_gx=%r",
+                    gx,
+                    cx,
+                    chip_gx,
+                )
+                back.informationSignal.emit(
+                    'Invalid Selection',
+                    'Cannot select chip index %r on image index %r.' % (
+                        cx,
+                        gx,
+                    ),
+                )
+                return False
         nodraw = kwargs.pop('nodraw', False)
-        kwargs.pop('dodraw', None) # TODO: temp fix query image select
+        # This method batches chip/image rendering and draws once at the end.
+        # Do not forward a caller's drawing-decorator control alongside the
+        # explicit ``dodraw=False`` arguments below.
+        kwargs.pop('dodraw', None)
         show_chip_splash = kwargs.pop('show_chip_splash', True)
         autoselect_chips = False
         if autoselect_chips and cx is None:
             cxs = back.hs.gx2_cxs(gx)
-            if len(cxs > 0):
+            if len(cxs) > 0:
                 cx = cxs[0]
         sel_cxs = [] if cx is None else [cx]
+        previous_selection = back.selection
         back.selection = {'type_': 'gx', 'index': gx, 'sub': cx}
-        if show:
-            if cx is None:
-                if show_chip_splash:
-                    back.show_splash(FNUMS['chip'], 'Chip', dodraw=False)
-            else:
-                back.show_chip(cx, dodraw=False, nodraw=True, **kwargs)
-            back.show_image(gx, sel_cxs, dodraw=False, nodraw=True, **kwargs)
-            if not nodraw:
-                df2.draw()
+        try:
+            if show:
+                if cx is None:
+                    if show_chip_splash:
+                        back.show_splash(FNUMS['chip'], 'Chip', dodraw=False)
+                else:
+                    chip_kwargs = dict(kwargs)
+                    chip_kwargs.pop('figtitle', None)
+                    chip_kwargs.pop('sel_cxs', None)
+                    back.show_chip(
+                        cx,
+                        dodraw=False,
+                        nodraw=True,
+                        **chip_kwargs
+                    )
+                image_kwargs = dict(kwargs)
+                image_kwargs.pop('sel_cxs', None)
+                back.show_image(
+                    gx,
+                    sel_cxs,
+                    dodraw=False,
+                    nodraw=True,
+                    **image_kwargs
+                )
+                if not nodraw:
+                    df2.draw()
+        except Exception as ex:
+            back.selection = previous_selection
+            _report_backend_exception(
+                back,
+                'Selection failed',
+                'The selected image or chip could not be displayed',
+                ex,
+            )
+            return False
+        return True
 
     @slot_(int)
     def select_cid(back, cid, **kwargs):
         # Table Click -> Chip Table
-        cx = back.hs.cid2_cx(cid)
-        gx = back.hs.cx2_gx(cx)
-        back.select_gx(gx, cx=cx, **kwargs)
+        cid = back._validated_selection_index('cid', cid)
+        if cid is None:
+            return False
+        try:
+            cx = back.hs.cid2_cx(cid)
+        except (AttributeError, IndexError, TypeError, ValueError):
+            logger.exception("Could not resolve chip ID %r", cid)
+            return False
+        selection_kwargs = dict(kwargs)
+        selection_kwargs.pop('cx', None)
+        selection_kwargs.pop('gx', None)
+        return back.select_cx(cx, **selection_kwargs)
 
     @slot_(int)
     def select_cx(back, cx, **kwargs):
-        gx = back.hs.cx2_gx(cx)
-        back.select_gx(gx, cx=cx, **kwargs)
+        cx = back._validated_selection_index('cx', cx)
+        if cx is None:
+            return False
+        try:
+            gx = back.hs.cx2_gx(cx)
+        except (AttributeError, IndexError, TypeError, ValueError):
+            logger.exception("Could not resolve image for chip index %r", cx)
+            return False
+        selection_kwargs = dict(kwargs)
+        selection_kwargs.pop('cx', None)
+        selection_kwargs.pop('gx', None)
+        return back.select_gx(gx, cx=cx, **selection_kwargs)
 
     @slot_(int)
     def select_nx(back, nx):
-        back.show_nx(nx)
+        nx = back._validated_selection_index('nx', nx)
+        if nx is None:
+            return False
+        try:
+            back.show_nx(nx)
+        except Exception as ex:
+            _report_backend_exception(
+                back,
+                'Selection failed',
+                'The selected name could not be displayed',
+                ex,
+            )
+            return False
+        return True
 
     @slot_(str)
     def select_name(back, name):
+        if name is None or back.hs is None:
+            back.informationSignal.emit(
+                'Invalid Selection', 'Cannot select an empty name.')
+            return False
         name = str(name)
-        nx = np.where(back.hs.tables.nx2_name == name)[0]
-        back.select_nx(nx)
+        try:
+            matches = np.flatnonzero(
+                np.asarray(back.hs.tables.nx2_name) == name
+            )
+        except (AttributeError, TypeError, ValueError):
+            logger.exception("Could not inspect names for %r", name)
+            matches = []
+        if len(matches) == 0:
+            back.informationSignal.emit(
+                'Invalid Selection',
+                'Cannot select name %r because it does not exist.' % name,
+            )
+            return False
+        return back.select_nx(int(matches[0]))
 
     @slot_(int)
     def select_res_cid(back, cid, **kwargs):
         # Table Click -> Chip Table
-        cx = back.hs.cid2_cx(cid)
-        gx = back.hs.cx2_gx(cx)
-        back.select_gx(gx, cx=cx, dodraw=False, nodraw=True, **kwargs)
-        back.show_single_query(back.current_res, cx, **kwargs)
+        if back.current_res is None:
+            back.informationSignal.emit(
+                'Invalid Selection',
+                'Cannot select a query result because no query is active.',
+            )
+            return False
+        cid = back._validated_selection_index('cid', cid)
+        if cid is None:
+            return False
+        try:
+            cx = back.hs.cid2_cx(cid)
+            gx = back.hs.cx2_gx(cx)
+        except (AttributeError, IndexError, TypeError, ValueError):
+            logger.exception("Could not resolve query-result chip ID %r", cid)
+            return False
+        selection_kwargs = dict(kwargs)
+        selection_kwargs.pop('dodraw', None)
+        selection_kwargs.pop('nodraw', None)
+        selection_kwargs.pop('cx', None)
+        selection_kwargs.pop('gx', None)
+        previous_selection = back.selection
+        if not back.select_gx(
+            gx,
+            cx=cx,
+            nodraw=True,
+            **selection_kwargs
+        ):
+            return False
+        result_kwargs = dict(kwargs)
+        result_kwargs.pop('cx', None)
+        result_kwargs.pop('gx', None)
+        try:
+            back.show_single_query(back.current_res, cx, **result_kwargs)
+        except Exception as ex:
+            back.selection = previous_selection
+            _report_backend_exception(
+                back,
+                'Selection failed',
+                'The selected query result could not be displayed',
+                ex,
+            )
+            return False
+        return True
 
     #--------------------------------------------------------------------------
     # Misc Slots
@@ -499,9 +738,19 @@ class MainWindowBackend(QtCore.QObject):
     @slot_()
     def clear_selection(back, **kwargs):
         back.selection = None
-        back.show_splash(FNUMS['image'], 'Image', dodraw=False)
-        back.show_splash(FNUMS['chip'], 'Chip', dodraw=False)
-        back.show_splash(FNUMS['res'], 'Results', **kwargs)
+        try:
+            back.show_splash(FNUMS['image'], 'Image', dodraw=False)
+            back.show_splash(FNUMS['chip'], 'Chip', dodraw=False)
+            back.show_splash(FNUMS['res'], 'Results', **kwargs)
+        except Exception as ex:
+            _report_backend_exception(
+                back,
+                'Selection failed',
+                'The selection was cleared, but its figures could not be reset',
+                ex,
+            )
+            return False
+        return True
 
     @slot_()
     @blocking

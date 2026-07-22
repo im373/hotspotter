@@ -25,7 +25,7 @@ from . import menu_strings
 from .guitablemodel import DataTableModel
 from .guitablemodel import DataTableProxyModel
 from .guitools import slot_
-from .guitools import frontblocking as blocking
+from .guitools import blocking
 from hotspotter import chip_properties
 
 logger = logging.getLogger(__name__)
@@ -974,6 +974,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
         back.informationSignal.connect(front.show_information)
         back.operationFailedSignal.connect(front.show_error)
         back.apiConnectedSignal.connect(front.handle_api_connected)
+        back.layoutFiguresSignal.connect(front.layout_figures)
         back.chipCellUpdateSignal.connect(front.update_chip_table_cell)
 
         # Gui Components
@@ -1059,6 +1060,7 @@ class MainWindowFrontend(QtWidgets.QMainWindow):
         )
         rows = list(zip(record_ids, datatup_list))
         model.set_table(columns, rows)
+        proxy.pin_first_row = tblname == 'res' and bool(rows)
         proxy.set_filters(proxy.filters())
         if columns:
             proxy.sort(sort_column, sort_order)

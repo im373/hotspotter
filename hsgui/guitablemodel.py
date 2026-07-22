@@ -260,6 +260,7 @@ class DataTableProxyModel(QtCore.QSortFilterProxyModel):
         super(DataTableProxyModel, self).__init__(parent)
         self._conditions = {}
         self._predicates = {}
+        self.pin_first_row = False
         self.setDynamicSortFilter(True)
         self.setSortRole(RAW_VALUE_ROLE)
 
@@ -308,6 +309,12 @@ class DataTableProxyModel(QtCore.QSortFilterProxyModel):
         )
 
     def lessThan(self, left, right):
+        left_pinned = self.pin_first_row and left.row() == 0
+        right_pinned = self.pin_first_row and right.row() == 0
+        if left_pinned != right_pinned:
+            if self.sortOrder() == QtCore.Qt.DescendingOrder:
+                return right_pinned
+            return left_pinned
         left_value = left.data(RAW_VALUE_ROLE)
         right_value = right.data(RAW_VALUE_ROLE)
         if left_value is None or right_value is None:

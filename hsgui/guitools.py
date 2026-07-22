@@ -5,6 +5,7 @@
 
 # Python
 import builtins
+import functools
 import logging
 import math
 from os.path import split
@@ -107,78 +108,58 @@ def slot_(*types, **kwargs_):  # This is called at wrap time to get args
 
 
 # BLOCKING DECORATOR
-# TODO: This decorator has to be specific to either front or back. Is there a
-# way to make it more general?
-def backblocking(func):
-    #printDBG('[@guitools] Wrapping %r with backblocking' % func.func_name)
+def _report_blocking_exception(owner, func, ex):
+    """Report an operation failure through the owner's presentation path."""
+    logger.exception("Blocking action %r failed", func.__name__)
+    logger.debug("action owner = %r", owner)
+    failure_signal = getattr(owner, 'operationFailedSignal', None)
+    if failure_signal is not None:
+        failure_signal.emit(
+            'Operation failed',
+            'Error while running %s:\n%s: %s' % (
+                func.__name__, type(ex).__name__, ex),
+        )
+    else:
+        user_info(owner, 'Error in blocking ex=%r' % ex)
 
-    def block_wrapper(back, *args, **kwargs):
-        busy_signal = getattr(back, 'busySignal', None)
+
+def blocking(func):
+    """Prevent conflicting GUI signals for the duration of an action.
+
+    Backend owners publish their busy lifecycle through ``busySignal``. Other
+    Qt owners, including the frontend, temporarily block their own signals.
+    Both paths restore their previous state in ``finally`` and therefore also
+    compose correctly when decorated actions call one another.
+    """
+    @functools.wraps(func)
+    def block_wrapper(owner, *args, **kwargs):
+        busy_signal = getattr(owner, 'busySignal', None)
+        previous_signal_state = None
         if busy_signal is not None:
             busy_signal.emit(True)
+        else:
+            previous_signal_state = owner.blockSignals(True)
         try:
-            result = func(back, *args, **kwargs)
+            return func(owner, *args, **kwargs)
         except Exception as ex:
-            logger.exception("Block wrapper caught exception in %r", func.__name__)
-            logger.debug("back = %r", back)
-            VERBOSE = False
-            if VERBOSE:
-                logger.debug("*args = %r", args)
-                logger.debug("**kwargs = %r", kwargs)
-            failure_signal = getattr(back, 'operationFailedSignal', None)
-            if failure_signal is not None:
-                failure_signal.emit(
-                    'Operation failed',
-                    'Error while running %s:\n%s: %s' % (
-                        func.__name__, type(ex).__name__, ex),
-                )
+            _report_blocking_exception(owner, func, ex)
             raise
         finally:
             if busy_signal is not None:
                 busy_signal.emit(False)
-        return result
-    block_wrapper.__name__ = func.__name__
-    return block_wrapper
-
-
-def frontblocking(func):
-    # HACK: blocking2 is specific to fron
-    #printDBG('[@guitools] Wrapping %r with frontblocking' % func.func_name)
-
-    def block_wrapper(front, *args, **kwargs):
-        #print('[guitools] BLOCKING')
-        #wasBlocked = self.blockSignals(True)
-        wasBlocked_ = front.blockSignals(True)
-        try:
-            result = func(front, *args, **kwargs)
-        except Exception as ex:
-            front.blockSignals(wasBlocked_)
-            logger.exception("Block wrapper caught exception in %r", func.__name__)
-            logger.debug("front = %r", front)
-            VERBOSE = False
-            if VERBOSE:
-                logger.debug("*args = %r", args)
-                logger.debug("**kwargs = %r", kwargs)
-            #print('ex = %r' % ex)
-            user_info(front, 'Error in blocking ex=%r' % ex)
-            raise
-        front.blockSignals(wasBlocked_)
-        #print('[guitools] UNBLOCKING')
-        return result
-    block_wrapper.__name__ = func.__name__
+            else:
+                owner.blockSignals(previous_signal_state)
     return block_wrapper
 
 
 # DRAWING DECORATOR
 def drawing(func):
     'Wraps a class function and draws windows on completion'
-    #printDBG('[@guitools] Wrapping %r with drawing' % func.func_name)
     @util.indent_decor('[drawing]')
     def drawing_wrapper(self, *args, **kwargs):
-        #print('[guitools] DRAWING')
+        dodraw = kwargs.pop('dodraw', True)
         result = func(self, *args, **kwargs)
-        #print('[guitools] DONE DRAWING')
-        if kwargs.get('dodraw', True) or DISABLE_NODRAW:
+        if dodraw or DISABLE_NODRAW:
             df2.draw()
         return result
     drawing_wrapper.__name__ = func.__name__
@@ -493,6 +474,7 @@ def _user_option(parent, msg, title='options', options=['No', 'Yes'], use_cache=
     return reply
 
 
+@DEPRECATED
 def user_question(msg):
     msgBox = QtWidgets.QMessageBox.question(None, '', 'lovely day?')
     return msgBox
@@ -552,10 +534,9 @@ def select_directory(caption='Select Directory', directory=None, parent=None):
     io.global_cache_write('select_directory', split(dpath)[0])
     return dpath
 
-
+@DEPRECATED
 @profile
 def show_open_db_dlg(parent=None):
-    # OLD
     from ._frontend import OpenDatabaseDialog
     if not '-nc' in sys.argv and not '--nocache' in sys.argv:
         db_dir = io.global_cache_read('db_dir')
@@ -617,6 +598,7 @@ def run_main_loop(app, is_root=True, window=None, **kwargs):
         logger.debug("Using root main loop")
 
 
+@DEPRECATED
 @profile
 def exec_core_event_loop(app):
     # This works but does not allow IPython injection
@@ -691,6 +673,7 @@ def popup_menu(widget, opt2_callback, parent=None):
     return popup_slot
 
 
+@DEPRECATED
 @profile
 def make_header_lists(tbl_headers, editable_list, prop_keys=[]):
     col_headers = tbl_headers[:] + prop_keys

@@ -1298,9 +1298,9 @@ class HotSpotter(DynStruct):
                 raise IndexError('cx=%r out of range for size=%r' % (cx, max_cx))
         ret = [cx2_var[cx] for cx in cx_input]
         # None is invalid in a cx2_var array
-        if any([val is None for val in ret]):
-            none_index = ret.index(None)
-            raise IndexError('ret[%r] == None' % none_index)
+        for index, value in enumerate(ret):
+            if value is None:
+                raise IndexError('ret[%r] == None' % index)
         return ret
 
     @profile
